@@ -1,0 +1,40 @@
+import type { NextAuthOptions } from 'next-auth'
+import GoogleProvider from 'next-auth/providers/google'
+import CredentialsProvider from 'next-auth/providers/credentials'
+
+export const authOptions: NextAuthOptions = {
+  providers: [
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
+    }),
+    CredentialsProvider({
+      name: '電子郵件',
+      credentials: {
+        email: { label: '電子郵件', type: 'email' },
+        name: { label: '姓名', type: 'text' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email) return null
+        return {
+          id: credentials.email,
+          email: credentials.email,
+          name: credentials.name ?? credentials.email.split('@')[0],
+        }
+      },
+    }),
+  ],
+  session: { strategy: 'jwt', maxAge: 7 * 24 * 60 * 60 },
+  pages: { signIn: '/auth/signin' },
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) token.id = user.id
+      return token
+    },
+    async session({ session, token }) {
+      if (session.user) session.user.id = token.id as string
+      return session
+    },
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+}

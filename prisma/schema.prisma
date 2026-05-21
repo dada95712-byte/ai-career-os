@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  image         String?
+  emailVerified DateTime?
+  plan          String    @default("free")
+  locale        String    @default("zh-TW")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts        Account[]
+  sessions        Session[]
+  resumes         Resume[]
+  skills          Skill[]
+  experiences     Experience[]
+  jobApplications JobApplication[]
+  interviewQAs    InterviewQA[]
+  learningGoals   LearningGoal[]
+  chatSessions    ChatSession[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Resume {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  contentJson Json?
+  rawText     String?  @db.Text
+  fileUrl     String?
+  aiScore     Int?
+  language    String   @default("zh-TW")
+  isPrimary   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Skill {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  category  String?
+  level     String   @default("intermediate")
+  source    String   @default("manual")
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Experience {
+  id           String    @id @default(cuid())
+  userId       String
+  company      String
+  title        String
+  startDate    DateTime?
+  endDate      DateTime?
+  description  String?   @db.Text
+  achievements Json?
+  starStories  Json?
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model JobApplication {
+  id           String    @id @default(cuid())
+  userId       String
+  jobTitle     String
+  company      String
+  jdText       String?   @db.Text
+  sourceUrl    String?
+  platform     String?
+  status       String    @default("saved")
+  matchScore   Int?
+  salaryMin    Int?
+  salaryMax    Int?
+  location     String?
+  appliedAt    DateTime?
+  notes        String?   @db.Text
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interviewQAs InterviewQA[]
+}
+
+model InterviewQA {
+  id             String         @id @default(cuid())
+  userId         String
+  jobAppId       String?
+  question       String         @db.Text
+  questionType   String         @default("behavioral")
+  userAnswer     String?        @db.Text
+  aiFeedback     String?        @db.Text
+  aiScore        Int?
+  createdAt      DateTime       @default(now())
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  jobApplication JobApplication? @relation(fields: [jobAppId], references: [id])
+}
+
+model LearningGoal {
+  id           String    @id @default(cuid())
+  userId       String
+  skillName    String
+  resourceUrl  String?
+  resourceName String?
+  status       String    @default("planned")
+  targetDate   DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  userId    String
+  context   String?
+  messages  Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
