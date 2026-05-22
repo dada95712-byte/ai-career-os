@@ -7,173 +7,123 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
-interface SkillGap {
-  skill: string
-  status: 'has' | 'partial' | 'missing'
-  importance: 'high' | 'medium' | 'low'
-  resources: { name: string; url?: string; time: string; difficulty: string }[]
-}
+interface SkillGap { skill: string; status: 'has' | 'partial' | 'missing'; importance: 'high' | 'medium' | 'low'; resources: { name: string; url?: string; time: string; difficulty: string }[] }
+interface ChatMessage { role: 'user' | 'assistant'; content: string }
 
-interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
-}
-
-const quickScenarios = [
-  '我想從傳統產業轉往科技業',
-  '我想在現有公司升職',
-  '我剛被裁員，下一步怎麼辦？',
-  '我是應屆生，不知道從哪裡找工作',
-]
+const QUICK_Q = ['我想從傳統產業轉往科技業', '我想在現有公司升職', '我剛被裁員，下一步怎麼辦？', '我是應屆生，不知道從哪裡找工作']
+const STATUS_ICON = { has: '✓', partial: '~', missing: '✗' }
+const STATUS_COLOR = { has: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', partial: 'text-amber-400 bg-amber-500/10 border-amber-500/20', missing: 'text-red-400 bg-red-500/10 border-red-500/20' }
+const IMP_COLOR: Record<string, 'danger' | 'warning' | 'default'> = { high: 'danger', medium: 'warning', low: 'default' }
 
 export default function CareerGrowthPage() {
   const [tab, setTab] = useState<'gap' | 'coach'>('gap')
   const [targetRole, setTargetRole] = useState('')
   const [currentSkills, setCurrentSkills] = useState('')
-  const [gapResult, setGapResult] = useState<SkillGap[]>([])
+  const [gaps, setGaps] = useState<SkillGap[]>([])
   const [analyzing, setAnalyzing] = useState(false)
-
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: '你好！我是你的 AI 職涯教練。你今天想聊什麼職涯話題？你可以問我關於轉職、升職、求職策略，或任何職涯困惑。' },
+    { role: 'assistant', content: '你好！我是你的 AI 職涯教練。\n\n今天想聊什麼職涯話題？無論是轉職、升職、求職策略，或任何職場困惑，我都在。' }
   ])
   const [input, setInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const endRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   async function analyzeGap() {
     if (!targetRole.trim()) return
-    setAnalyzing(true)
-    setGapResult([])
+    setAnalyzing(true); setGaps([])
     try {
-      const res = await fetch('/api/skills/gap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetRole, currentSkills }),
-      })
-      const data = await res.json()
-      setGapResult(data.gaps ?? [])
-    } catch {
-      setGapResult([])
-    } finally {
-      setAnalyzing(false)
-    }
+      const res = await fetch('/api/skills/gap', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ targetRole, currentSkills }) })
+      const data = await res.json(); setGaps(data.gaps ?? [])
+    } catch { setGaps([]) }
+    finally { setAnalyzing(false) }
   }
 
   async function sendMessage(text?: string) {
     const content = text ?? input.trim()
     if (!content || chatLoading) return
     setInput('')
-    const newMessages: ChatMessage[] = [...messages, { role: 'user', content }]
-    setMessages(newMessages)
-    setChatLoading(true)
+    const next: ChatMessage[] = [...messages, { role: 'user', content }]
+    setMessages(next); setChatLoading(true)
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages, context: 'career_coach' }),
-      })
+      const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: next, context: 'career_coach' }) })
       const data = await res.json()
-      setMessages((prev) => [...prev, { role: 'assistant', content: data.reply }])
+      setMessages((p) => [...p, { role: 'assistant', content: data.reply }])
     } catch {
-      setMessages((prev) => [...prev, { role: 'assistant', content: '抱歉，我目前無法回應，請稍後再試。' }])
-    } finally {
-      setChatLoading(false)
-    }
+      setMessages((p) => [...p, { role: 'assistant', content: '抱歉，目前無法回應，請稍後再試。' }])
+    } finally { setChatLoading(false) }
   }
 
-  const statusIcon = { has: '✅', partial: '🟡', missing: '❌' }
-  const statusLabel = { has: '已具備', partial: '部分具備', missing: '完全缺乏' }
-  const importanceColor = { high: 'danger', medium: 'warning', low: 'default' } as const
-
   return (
-    <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">🌱 職涯成長</h1>
-        <p className="mt-1 text-sm text-gray-600">技能落差分析、學習路徑規劃與 AI 職涯教練</p>
+    <div className="p-6 lg:p-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-50">◈ Skill Map</h1>
+        <p className="mt-1 text-sm text-zinc-500">技能落差分析 · 個人化學習路徑 · AI 職涯教練</p>
       </div>
 
-      <div className="mb-6 flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+      <div className="flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900/60 p-1 w-fit">
         {(['gap', 'coach'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-              tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            {t === 'gap' ? '技能落差分析' : 'AI 職涯教練'}
+          <button key={t} onClick={() => setTab(t)}
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${tab === t ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            {t === 'gap' ? '⚡ 技能落差分析' : '🤖 AI 職涯教練'}
           </button>
         ))}
       </div>
 
+      {/* ── Gap Analysis ─────────────────────────────────────── */}
       {tab === 'gap' && (
-        <div className="space-y-6">
+        <div className="space-y-5">
           <Card>
-            <CardHeader>
-              <CardTitle>分析技能落差</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>分析技能落差</CardTitle></CardHeader>
             <CardContent className="space-y-4">
-              <Input
-                label="目標職位"
-                placeholder="例如：資深前端工程師、產品經理、數據分析師"
-                value={targetRole}
-                onChange={(e) => setTargetRole(e.target.value)}
-              />
-              <Textarea
-                label="目前技能（選填）"
-                placeholder="例如：React、TypeScript、基本 SQL、3 年前端開發經驗"
-                value={currentSkills}
-                onChange={(e) => setCurrentSkills(e.target.value)}
-                rows={3}
-              />
-              <Button onClick={analyzeGap} loading={analyzing} disabled={!targetRole.trim()}>
+              <Input label="目標職位" placeholder="例如：資深前端工程師、產品經理" value={targetRole} onChange={(e) => setTargetRole(e.target.value)} />
+              <Textarea label="目前技能（選填）" placeholder="例如：React、3 年前端經驗、基本 SQL" rows={2} value={currentSkills} onChange={(e) => setCurrentSkills(e.target.value)} />
+              <Button variant="gradient" onClick={analyzeGap} loading={analyzing} disabled={!targetRole.trim()}>
                 🔍 分析技能落差
               </Button>
             </CardContent>
           </Card>
 
-          {gapResult.length > 0 && (
-            <div className="space-y-4">
-              <h2 className="text-base font-semibold text-gray-900">
+          {gaps.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-600">
                 分析結果 — {targetRole}
               </h2>
-              {gapResult.map((gap, i) => (
+              {gaps.map((gap, i) => (
                 <Card key={i}>
                   <CardContent className="pt-5">
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xl">{statusIcon[gap.status]}</span>
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-8 w-8 items-center justify-center rounded-xl border text-sm font-bold ${STATUS_COLOR[gap.status]}`}>
+                          {STATUS_ICON[gap.status]}
+                        </div>
                         <div>
-                          <p className="font-semibold text-gray-900">{gap.skill}</p>
-                          <p className="text-xs text-gray-500">{statusLabel[gap.status]}</p>
+                          <p className="font-semibold text-zinc-200">{gap.skill}</p>
+                          <p className="text-xs text-zinc-500">
+                            {gap.status === 'has' ? '已具備' : gap.status === 'partial' ? '部分具備' : '完全缺乏'}
+                          </p>
                         </div>
                       </div>
-                      <Badge variant={importanceColor[gap.importance]}>
-                        {gap.importance === 'high' ? '重要' : gap.importance === 'medium' ? '中等' : '次要'}
+                      <Badge variant={IMP_COLOR[gap.importance]}>
+                        {gap.importance === 'high' ? '高優先' : gap.importance === 'medium' ? '中等' : '次要'}
                       </Badge>
                     </div>
 
                     {gap.status !== 'has' && gap.resources.length > 0 && (
                       <div>
-                        <p className="text-xs font-medium text-gray-500 mb-2">推薦學習資源</p>
+                        <p className="text-xs text-zinc-600 mb-2">推薦學習資源</p>
                         <div className="space-y-2">
                           {gap.resources.map((r, j) => (
-                            <div key={j} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-                              <div>
-                                {r.url ? (
-                                  <a href={r.url} target="_blank" rel="noopener noreferrer"
-                                    className="text-sm font-medium text-blue-600 hover:text-blue-800">
-                                    {r.name}
-                                  </a>
-                                ) : (
-                                  <span className="text-sm font-medium text-gray-800">{r.name}</span>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2">
+                            <div key={j} className="flex items-center justify-between rounded-lg bg-zinc-800/60 px-3 py-2.5">
+                              {r.url ? (
+                                <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-400 hover:text-indigo-300 font-medium">
+                                  {r.name}
+                                </a>
+                              ) : (
+                                <span className="text-sm text-zinc-300 font-medium">{r.name}</span>
+                              )}
+                              <div className="flex gap-1.5">
                                 <Badge variant="outline">{r.time}</Badge>
                                 <Badge variant="outline">{r.difficulty}</Badge>
                               </div>
@@ -190,65 +140,59 @@ export default function CareerGrowthPage() {
         </div>
       )}
 
+      {/* ── AI Coach ─────────────────────────────────────────── */}
       {tab === 'coach' && (
-        <div className="flex h-[calc(100vh-220px)] flex-col">
-          <div className="mb-4 flex flex-wrap gap-2">
-            {quickScenarios.map((s) => (
-              <button
-                key={s}
-                onClick={() => sendMessage(s)}
-                className="rounded-full border border-gray-300 px-3 py-1 text-xs text-gray-700 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 transition-colors"
-              >
-                {s}
+        <div className="flex h-[calc(100vh-240px)] flex-col gap-3">
+          {/* Quick prompts */}
+          <div className="flex flex-wrap gap-2">
+            {QUICK_Q.map((q) => (
+              <button key={q} onClick={() => sendMessage(q)}
+                className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-400 hover:border-indigo-500/50 hover:bg-indigo-500/5 hover:text-indigo-400 transition-all">
+                {q}
               </button>
             ))}
           </div>
 
+          {/* Chat */}
           <Card className="flex flex-1 flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
                   {m.role === 'assistant' && (
-                    <div className="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm">
-                      🤖
-                    </div>
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-sm">🤖</div>
                   )}
-                  <div
-                    className={`max-w-xl rounded-2xl px-4 py-3 text-sm leading-relaxed ${
-                      m.role === 'user'
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-800'
-                    }`}
-                  >
+                  <div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-line ${
+                    m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-200'
+                  }`}>
                     {m.content}
                   </div>
                 </div>
               ))}
               {chatLoading && (
-                <div className="flex justify-start">
-                  <div className="mr-2 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm">🤖</div>
-                  <div className="rounded-2xl bg-gray-100 px-4 py-3">
+                <div className="flex gap-3">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-sm">🤖</div>
+                  <div className="rounded-2xl bg-zinc-800 px-4 py-3">
                     <div className="flex gap-1">
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '0ms' }} />
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '150ms' }} />
-                      <div className="h-2 w-2 animate-bounce rounded-full bg-gray-400" style={{ animationDelay: '300ms' }} />
+                      {[0,150,300].map((d) => (
+                        <div key={d} className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500" style={{ animationDelay: `${d}ms` }} />
+                      ))}
                     </div>
                   </div>
                 </div>
               )}
-              <div ref={messagesEndRef} />
+              <div ref={endRef} />
             </div>
-            <div className="border-t border-gray-100 p-3">
+            <div className="border-t border-zinc-800 p-3">
               <div className="flex gap-2">
                 <input
-                  className="flex-1 rounded-xl border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none"
+                  className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-500 focus:outline-none"
                   placeholder="輸入你的職涯問題..."
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
                   disabled={chatLoading}
                 />
-                <Button onClick={() => sendMessage()} loading={chatLoading} size="sm">
+                <Button variant="gradient" size="sm" onClick={() => sendMessage()} loading={chatLoading}>
                   送出
                 </Button>
               </div>

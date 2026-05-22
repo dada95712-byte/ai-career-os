@@ -7,220 +7,108 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
-interface Question {
-  id: string
-  question: string
-  type: 'behavioral' | 'technical' | 'situational' | 'general'
-  userAnswer?: string
-  aiFeedback?: string
-  aiScore?: number
+interface Question { id: string; question: string; type: 'behavioral' | 'technical' | 'situational' | 'general'; userAnswer?: string; aiFeedback?: string; aiScore?: number }
+
+const TYPE: Record<string, { label: string; color: 'info' | 'warning' | 'success' | 'default' }> = {
+  behavioral:  { label: '行為面試', color: 'info' },
+  technical:   { label: '技術面試', color: 'warning' },
+  situational: { label: '情境題',   color: 'success' },
+  general:     { label: '一般題',   color: 'default' },
 }
 
-const typeLabels = {
-  behavioral: '行為面試',
-  technical: '技術面試',
-  situational: '情境題',
-  general: '一般題',
-}
-
-const typeColors = {
-  behavioral: 'info',
-  technical: 'warning',
-  situational: 'success',
-  general: 'default',
-} as const
-
-const builtInQA: { category: string; questions: string[] }[] = [
-  {
-    category: '工程師',
-    questions: [
-      '請描述一個你解決過的技術難題，你是如何找到解決方案的？',
-      '請說明你最熟悉的系統架構設計原則，並舉例說明。',
-      '你如何確保程式碼品質？有使用哪些工具或流程？',
-      '描述一次你在 deadline 壓力下完成專案的經驗。',
-    ],
-  },
-  {
-    category: '產品經理',
-    questions: [
-      '你如何決定產品功能的優先順序？請舉一個實際例子。',
-      '描述一個你主導過的功能從想法到上線的完整過程。',
-      '當工程師認為功能無法如期完成，你如何處理？',
-      '如果指標下滑，你的排查流程是什麼？',
-    ],
-  },
-  {
-    category: '行銷',
-    questions: [
-      '請描述一個你執行過效果最好的行銷活動。',
-      '你如何設定和追蹤行銷 KPI？',
-      '如果預算縮減 50%，你如何調整行銷策略？',
-      '描述一次你用數據改變行銷方向的經驗。',
-    ],
-  },
-  {
-    category: '通用',
-    questions: [
-      '請簡單介紹你自己，以及你為什麼想應徵這個職位。',
-      '你最大的優點和缺點各是什麼？',
-      '五年後你希望在職業上達到什麼目標？',
-      '描述一次你與同事意見不合的經驗，你是如何解決的？',
-    ],
-  },
+const QA_BANK = [
+  { category: '工程師', questions: ['請描述一個你解決過的技術難題，你是如何找到解決方案的？','你如何確保程式碼品質？','描述一次你在 deadline 壓力下完成專案的經驗。','說說你最熟悉的系統架構設計原則。'] },
+  { category: '產品經理', questions: ['你如何決定產品功能的優先順序？','描述一個你主導的功能從想法到上線的過程。','當工程師認為功能無法如期完成，你如何處理？','指標下滑時你的排查流程是什麼？'] },
+  { category: '行銷', questions: ['請描述一個效果最好的行銷活動。','你如何設定和追蹤行銷 KPI？','預算縮減 50% 你如何調整策略？','說說你用數據改變行銷方向的經驗。'] },
+  { category: '通用', questions: ['請簡單介紹你自己，以及你為什麼想應徵這個職位。','你最大的優點和缺點各是什麼？','五年後你希望在職業上達到什麼目標？','描述一次你與同事意見不合的處理方式。'] },
 ]
 
 export default function InterviewPrepPage() {
   const [tab, setTab] = useState<'mock' | 'qa'>('mock')
-  const [role, setRole] = useState('')
-  const [company, setCompany] = useState('')
+  const [role, setRole] = useState(''); const [company, setCompany] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [generating, setGenerating] = useState(false)
   const [selectedQ, setSelectedQ] = useState<Question | null>(null)
-  const [answer, setAnswer] = useState('')
-  const [evaluating, setEvaluating] = useState(false)
-  const [selectedCategory, setSelectedCategory] = useState(builtInQA[3].category)
+  const [answer, setAnswer] = useState(''); const [evaluating, setEvaluating] = useState(false)
+  const [selectedCat, setSelectedCat] = useState('通用')
   const [practiceQ, setPracticeQ] = useState<string | null>(null)
-  const [practiceAnswer, setPracticeAnswer] = useState('')
-  const [practiceFeedback, setPracticeFeedback] = useState('')
-  const [practicingEval, setPracticingEval] = useState(false)
+  const [practiceAnswer, setPracticeAnswer] = useState(''); const [practiceFeedback, setPracticeFeedback] = useState(''); const [practiceEval, setPracticeEval] = useState(false)
 
   async function generateQuestions() {
     if (!role.trim()) return
-    setGenerating(true)
-    setQuestions([])
-    setSelectedQ(null)
+    setGenerating(true); setQuestions([]); setSelectedQ(null)
     try {
-      const res = await fetch('/api/interview/questions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, company }),
-      })
-      const data = await res.json()
-      setQuestions(data.questions ?? [])
-    } catch {
-      setQuestions([])
-    } finally {
-      setGenerating(false)
-    }
+      const res = await fetch('/api/interview/questions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, company }) })
+      const data = await res.json(); setQuestions(data.questions ?? [])
+    } catch { /* silent */ }
+    finally { setGenerating(false) }
   }
 
-  async function evaluateAnswer() {
-    if (!selectedQ || !answer.trim()) return
-    setEvaluating(true)
+  async function evaluate(forPractice = false) {
+    const q = forPractice ? practiceQ : selectedQ?.question
+    const a = forPractice ? practiceAnswer : answer
+    if (!q || !a?.trim()) return
+    if (forPractice) setPracticeEval(true); else setEvaluating(true)
     try {
-      const res = await fetch('/api/interview/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: selectedQ.question, answer }),
-      })
+      const res = await fetch('/api/interview/evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, answer: a }) })
       const data = await res.json()
-      setQuestions((prev) =>
-        prev.map((q) =>
-          q.id === selectedQ.id
-            ? { ...q, userAnswer: answer, aiFeedback: data.feedback, aiScore: data.score }
-            : q
-        )
-      )
-      setSelectedQ((prev) => prev && { ...prev, userAnswer: answer, aiFeedback: data.feedback, aiScore: data.score })
-    } catch {
-      // silent fail
-    } finally {
-      setEvaluating(false)
-    }
+      if (forPractice) {
+        setPracticeFeedback(`評分：${data.score}/10\n\n${data.feedback}`)
+      } else {
+        setQuestions((p) => p.map((qu) => qu.id === selectedQ?.id ? { ...qu, userAnswer: a, aiFeedback: data.feedback, aiScore: data.score } : qu))
+        setSelectedQ((p) => p && { ...p, userAnswer: a, aiFeedback: data.feedback, aiScore: data.score })
+      }
+    } catch { if (forPractice) setPracticeFeedback('評分失敗') }
+    finally { if (forPractice) setPracticeEval(false); else setEvaluating(false) }
   }
 
-  async function evaluatePractice() {
-    if (!practiceQ || !practiceAnswer.trim()) return
-    setPracticingEval(true)
-    setPracticeFeedback('')
-    try {
-      const res = await fetch('/api/interview/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: practiceQ, answer: practiceAnswer }),
-      })
-      const data = await res.json()
-      setPracticeFeedback(`評分：${data.score}/10\n\n${data.feedback}`)
-    } catch {
-      setPracticeFeedback('評分失敗，請再試一次')
-    } finally {
-      setPracticingEval(false)
-    }
-  }
-
-  const scoreColor = (s: number) =>
-    s >= 8 ? 'text-green-600' : s >= 6 ? 'text-yellow-600' : 'text-red-600'
+  const scoreCol = (s: number) => s >= 8 ? 'text-emerald-400' : s >= 6 ? 'text-amber-400' : 'text-red-400'
 
   return (
-    <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">💼 面試準備</h1>
-        <p className="mt-1 text-sm text-gray-600">AI 模擬面試、答案評分與台灣職場常見題庫</p>
+    <div className="p-6 lg:p-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-50">⬟ Interview Arena</h1>
+        <p className="mt-1 text-sm text-zinc-500">AI 模擬面試 · 即時評分 · 台灣職場題庫</p>
       </div>
 
-      <div className="mb-6 flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+      <div className="flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900/60 p-1 w-fit">
         {(['mock', 'qa'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => { setTab(t); setSelectedQ(null); setAnswer('') }}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-              tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            {t === 'mock' ? '模擬面試' : '常見題庫'}
+          <button key={t} onClick={() => { setTab(t); setSelectedQ(null); setAnswer('') }}
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${tab === t ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            {t === 'mock' ? '⬟ 模擬面試' : '📋 常見題庫'}
           </button>
         ))}
       </div>
 
+      {/* ── Mock Interview ───────────────────────────────────── */}
       {tab === 'mock' && (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <Card>
-            <CardHeader>
-              <CardTitle>設定面試情境</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+            <CardHeader><CardTitle>設定面試情境</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
               <div className="flex gap-3">
-                <Input
-                  label="目標職位"
-                  placeholder="例如：資深前端工程師"
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="flex-1"
-                />
-                <Input
-                  label="公司名稱（選填）"
-                  placeholder="例如：台積電、LINE"
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
-                  className="flex-1"
-                />
+                <Input label="目標職位" placeholder="例如：資深前端工程師" value={role} onChange={(e) => setRole(e.target.value)} className="flex-1" />
+                <Input label="公司（選填）" placeholder="例如：LINE、台積電" value={company} onChange={(e) => setCompany(e.target.value)} className="w-44" />
               </div>
-              <Button onClick={generateQuestions} loading={generating} disabled={!role.trim()}>
+              <Button variant="gradient" onClick={generateQuestions} loading={generating} disabled={!role.trim()}>
                 🎲 AI 生成面試題目
               </Button>
             </CardContent>
           </Card>
 
           {questions.length > 0 && (
-            <div className="flex gap-4">
-              <div className="w-72 shrink-0 space-y-2">
+            <div className="flex gap-5">
+              <div className="w-72 shrink-0 space-y-2 overflow-y-auto max-h-[65vh]">
                 {questions.map((q) => (
-                  <button
-                    key={q.id}
-                    onClick={() => { setSelectedQ(q); setAnswer(q.userAnswer ?? '') }}
-                    className={`w-full text-left rounded-xl border p-3 transition-all text-sm ${
-                      selectedQ?.id === q.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white hover:shadow-sm'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-gray-800 leading-snug line-clamp-2">{q.question}</p>
+                  <button key={q.id} onClick={() => { setSelectedQ(q); setAnswer(q.userAnswer ?? '') }}
+                    className={`w-full text-left rounded-2xl border p-4 transition-all duration-150 ${selectedQ?.id === q.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700 hover:bg-zinc-800/50'}`}>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <p className="text-sm text-zinc-300 line-clamp-2 leading-snug">{q.question}</p>
                       {q.aiScore !== undefined && (
-                        <span className={`shrink-0 text-sm font-bold ${scoreColor(q.aiScore)}`}>
-                          {q.aiScore}/10
-                        </span>
+                        <span className={`shrink-0 text-sm font-bold ${scoreCol(q.aiScore)}`}>{q.aiScore}/10</span>
                       )}
                     </div>
-                    <Badge variant={typeColors[q.type]} className="mt-2">{typeLabels[q.type]}</Badge>
+                    <Badge variant={TYPE[q.type]?.color ?? 'default'}>{TYPE[q.type]?.label}</Badge>
                   </button>
                 ))}
               </div>
@@ -229,40 +117,25 @@ export default function InterviewPrepPage() {
                 <div className="flex-1">
                   <Card>
                     <CardHeader>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={typeColors[selectedQ.type]}>{typeLabels[selectedQ.type]}</Badge>
-                      </div>
-                      <p className="mt-2 text-base font-medium text-gray-900">{selectedQ.question}</p>
+                      <Badge variant={TYPE[selectedQ.type]?.color ?? 'default'} className="w-fit mb-2">
+                        {TYPE[selectedQ.type]?.label}
+                      </Badge>
+                      <p className="text-sm font-medium text-zinc-100 leading-relaxed">{selectedQ.question}</p>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      <Textarea
-                        label="你的回答"
-                        placeholder="請用 STAR 方法（情境、任務、行動、結果）來回答..."
-                        rows={8}
-                        value={answer}
-                        onChange={(e) => setAnswer(e.target.value)}
-                      />
-                      <Button
-                        onClick={evaluateAnswer}
-                        loading={evaluating}
-                        disabled={!answer.trim()}
-                      >
+                      <Textarea label="你的回答" placeholder="請用 STAR 方法（情境、任務、行動、結果）回答..." rows={8} value={answer} onChange={(e) => setAnswer(e.target.value)} />
+                      <Button variant="gradient" onClick={() => evaluate(false)} loading={evaluating} disabled={!answer.trim()}>
                         🤖 AI 評分與建議
                       </Button>
-
                       {selectedQ.aiFeedback && (
                         <div className="space-y-3">
                           <div className="flex items-center gap-3">
-                            <div className={`text-3xl font-bold ${scoreColor(selectedQ.aiScore ?? 0)}`}>
-                              {selectedQ.aiScore}/10
-                            </div>
-                            <div className="text-sm text-gray-500">AI 評分</div>
+                            <span className={`text-3xl font-bold ${scoreCol(selectedQ.aiScore ?? 0)}`}>{selectedQ.aiScore}</span>
+                            <span className="text-sm text-zinc-500">/ 10</span>
                           </div>
-                          <div className="rounded-xl bg-blue-50 p-4">
-                            <p className="text-xs font-medium text-blue-700 mb-2">AI 回饋</p>
-                            <p className="text-sm text-blue-900 whitespace-pre-line leading-relaxed">
-                              {selectedQ.aiFeedback}
-                            </p>
+                          <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+                            <p className="text-xs font-semibold text-indigo-400 mb-2">AI 回饋</p>
+                            <p className="text-sm text-zinc-300 whitespace-pre-line leading-relaxed">{selectedQ.aiFeedback}</p>
                           </div>
                         </div>
                       )}
@@ -272,59 +145,50 @@ export default function InterviewPrepPage() {
               )}
             </div>
           )}
+
+          {questions.length === 0 && !generating && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="mb-3 text-4xl">⬟</div>
+              <p className="text-sm text-zinc-500">輸入目標職位，AI 將生成 8 道客製化面試題</p>
+            </div>
+          )}
         </div>
       )}
 
+      {/* ── QA Bank ──────────────────────────────────────────── */}
       {tab === 'qa' && (
-        <div className="flex gap-4">
-          <div className="w-48 shrink-0 space-y-1">
-            {builtInQA.map((cat) => (
-              <button
-                key={cat.category}
-                onClick={() => { setSelectedCategory(cat.category); setPracticeQ(null); setPracticeAnswer(''); setPracticeFeedback('') }}
-                className={`w-full text-left rounded-lg px-3 py-2 text-sm transition-colors ${
-                  selectedCategory === cat.category
-                    ? 'bg-blue-50 text-blue-700 font-medium'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
+        <div className="flex gap-5">
+          <div className="w-40 shrink-0 space-y-1">
+            {QA_BANK.map((cat) => (
+              <button key={cat.category} onClick={() => { setSelectedCat(cat.category); setPracticeQ(null); setPracticeAnswer(''); setPracticeFeedback('') }}
+                className={`w-full text-left rounded-lg px-3 py-2 text-sm transition-colors ${selectedCat === cat.category ? 'bg-indigo-500/10 text-indigo-300 font-medium' : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'}`}>
                 {cat.category}
               </button>
             ))}
           </div>
 
           <div className="flex-1 space-y-3">
-            {builtInQA.find((c) => c.category === selectedCategory)?.questions.map((q, i) => (
-              <Card
-                key={i}
-                className={`cursor-pointer transition-shadow hover:shadow-sm ${practiceQ === q ? 'border-blue-500' : ''}`}
-                onClick={() => { setPracticeQ(q); setPracticeAnswer(''); setPracticeFeedback('') }}
-              >
-                <CardContent className="py-4">
-                  <p className="text-sm text-gray-800">{q}</p>
-                </CardContent>
-              </Card>
+            {QA_BANK.find((c) => c.category === selectedCat)?.questions.map((q, i) => (
+              <button key={i} onClick={() => { setPracticeQ(q); setPracticeAnswer(''); setPracticeFeedback('') }}
+                className={`w-full text-left rounded-2xl border p-4 transition-all ${practiceQ === q ? 'border-indigo-500 bg-indigo-500/5' : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'}`}>
+                <p className="text-sm text-zinc-300">{q}</p>
+              </button>
             ))}
 
             {practiceQ && (
-              <Card>
+              <Card className="border-indigo-500/20">
                 <CardHeader>
                   <CardTitle>練習回答</CardTitle>
-                  <p className="text-sm text-gray-700 mt-1">{practiceQ}</p>
+                  <p className="text-sm text-zinc-400 mt-1">{practiceQ}</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Textarea
-                    placeholder="請輸入你的回答..."
-                    rows={6}
-                    value={practiceAnswer}
-                    onChange={(e) => setPracticeAnswer(e.target.value)}
-                  />
-                  <Button onClick={evaluatePractice} loading={practicingEval} disabled={!practiceAnswer.trim()}>
+                  <Textarea placeholder="請輸入你的回答..." rows={6} value={practiceAnswer} onChange={(e) => setPracticeAnswer(e.target.value)} />
+                  <Button variant="gradient" onClick={() => evaluate(true)} loading={practiceEval} disabled={!practiceAnswer.trim()}>
                     🤖 AI 評分
                   </Button>
                   {practiceFeedback && (
-                    <div className="rounded-xl bg-blue-50 p-4">
-                      <p className="text-sm text-blue-900 whitespace-pre-line leading-relaxed">{practiceFeedback}</p>
+                    <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+                      <p className="text-sm text-zinc-300 whitespace-pre-line leading-relaxed">{practiceFeedback}</p>
                     </div>
                   )}
                 </CardContent>

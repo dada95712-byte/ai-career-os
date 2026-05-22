@@ -5,281 +5,215 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
+import { ProgressBar } from '@/components/ui/progress-ring'
+import Link from 'next/link'
 
-interface SalaryData {
-  role: string
-  industry: string
-  experience: string
-  median: number
-  p25: number
-  p75: number
-  source: string
-  notes: string
+interface SalaryData { role: string; industry: string; experience: string; median: number; p25: number; p75: number; source: string; notes: string }
+interface Trend { industry: string; trend: 'up' | 'stable' | 'down'; hotJobs: string[]; notes: string }
+
+const TREND_CFG = {
+  up:     { icon: '↑', label: '需求上升', color: 'text-emerald-400', badge: 'success' as const },
+  stable: { icon: '→', label: '穩定',     color: 'text-zinc-400',    badge: 'default' as const },
+  down:   { icon: '↓', label: '需求下降', color: 'text-red-400',     badge: 'danger'  as const },
 }
 
-interface IndustryTrend {
-  industry: string
-  trend: 'up' | 'stable' | 'down'
-  hotJobs: string[]
-  notes: string
-}
+const STATS = [
+  { label: '總投遞數', value: 4,  icon: '📤', color: 'text-sky-400' },
+  { label: '面試邀請', value: 1,  icon: '📅', color: 'text-violet-400' },
+  { label: '練習題數', value: 0,  icon: '✍️', color: 'text-emerald-400' },
+  { label: '活躍天數', value: 3,  icon: '🔥', color: 'text-amber-400' },
+]
+
+const PIPELINE_ROWS = [
+  { label: '已投遞', count: 4, max: 10, color: 'bg-sky-500' },
+  { label: '面試邀請', count: 1, max: 10, color: 'bg-violet-500' },
+  { label: '技術面試', count: 0, max: 10, color: 'bg-amber-500' },
+  { label: '收到 Offer', count: 0, max: 10, color: 'bg-emerald-500' },
+]
 
 export default function CareerIntelligencePage() {
   const [tab, setTab] = useState<'salary' | 'trends' | 'analytics'>('salary')
-
-  const [salaryRole, setSalaryRole] = useState('')
-  const [experience, setExperience] = useState('')
-  const [salaryData, setSalaryData] = useState<SalaryData | null>(null)
-  const [loadingSalary, setLoadingSalary] = useState(false)
-
-  const [trends, setTrends] = useState<IndustryTrend[]>([])
-  const [loadingTrends, setLoadingTrends] = useState(false)
-
-  const activityStats = [
-    { label: '總投遞數', value: 0, unit: '筆' },
-    { label: '面試邀請', value: 0, unit: '次' },
-    { label: '回覆率', value: '0', unit: '%' },
-    { label: '平均回覆天數', value: '—', unit: '' },
-  ]
+  const [salaryRole, setSalaryRole] = useState(''); const [experience, setExperience] = useState('')
+  const [salaryData, setSalaryData] = useState<SalaryData | null>(null); const [loadingSalary, setLoadingSalary] = useState(false)
+  const [trends, setTrends] = useState<Trend[]>([]); const [loadingTrends, setLoadingTrends] = useState(false)
 
   async function querySalary() {
     if (!salaryRole.trim()) return
-    setLoadingSalary(true)
-    setSalaryData(null)
+    setLoadingSalary(true); setSalaryData(null)
     try {
-      const params = new URLSearchParams({ role: salaryRole, experience })
-      const res = await fetch(`/api/salary?${params}`)
-      const data = await res.json()
-      setSalaryData(data)
-    } catch {
-      setSalaryData(null)
-    } finally {
-      setLoadingSalary(false)
-    }
+      const res = await fetch(`/api/salary?${new URLSearchParams({ role: salaryRole, experience: experience || '3年' })}`)
+      setSalaryData(await res.json())
+    } catch { /* silent */ }
+    finally { setLoadingSalary(false) }
   }
 
   async function loadTrends() {
-    setLoadingTrends(true)
-    setTrends([])
+    setLoadingTrends(true); setTrends([])
     try {
       const res = await fetch('/api/trends')
-      const data = await res.json()
-      setTrends(data.trends ?? [])
-    } catch {
-      setTrends([])
-    } finally {
-      setLoadingTrends(false)
-    }
+      const data = await res.json(); setTrends(data.trends ?? [])
+    } catch { /* silent */ }
+    finally { setLoadingTrends(false) }
   }
 
-  const trendIcon = { up: '📈', stable: '➡️', down: '📉' }
-  const trendLabel = { up: '需求上升', stable: '穩定', down: '需求下降' }
-  const trendColor = { up: 'success', stable: 'default', down: 'danger' } as const
-
-  const formatNTD = (n: number) =>
-    new Intl.NumberFormat('zh-TW', { minimumFractionDigits: 0 }).format(n)
+  const fmt = (n: number) => new Intl.NumberFormat('zh-TW').format(n)
 
   return (
-    <div className="p-8">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">📈 職涯情報</h1>
-        <p className="mt-1 text-sm text-gray-600">台灣薪資行情查詢、產業趨勢分析與個人求職儀表板</p>
+    <div className="p-6 lg:p-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-zinc-50">◉ Analytics</h1>
+        <p className="mt-1 text-sm text-zinc-500">薪資行情 · 台灣產業趨勢 · 求職儀表板</p>
       </div>
 
-      <div className="mb-6 flex gap-1 rounded-lg bg-gray-100 p-1 w-fit">
+      <div className="flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900/60 p-1 w-fit">
         {(['salary', 'trends', 'analytics'] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
-              tab === t ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            {t === 'salary' ? '薪資查詢' : t === 'trends' ? '產業趨勢' : '我的儀表板'}
+          <button key={t} onClick={() => setTab(t)}
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${tab === t ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            {t === 'salary' ? '💰 薪資查詢' : t === 'trends' ? '📊 產業趨勢' : '⬡ 我的儀表板'}
           </button>
         ))}
       </div>
 
+      {/* ── Salary ───────────────────────────────────────────── */}
       {tab === 'salary' && (
-        <div className="space-y-6">
+        <div className="space-y-5 max-w-2xl">
           <Card>
-            <CardHeader>
-              <CardTitle>薪資行情查詢</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>薪資行情查詢</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-3">
-                <Input
-                  label="職位"
-                  placeholder="例如：軟體工程師、產品經理"
-                  value={salaryRole}
-                  onChange={(e) => setSalaryRole(e.target.value)}
-                  className="flex-1"
-                />
-                <Input
-                  label="年資"
-                  placeholder="例如：3 年、應屆"
-                  value={experience}
-                  onChange={(e) => setExperience(e.target.value)}
-                  className="w-40"
-                />
+                <Input label="職位" placeholder="例如：軟體工程師" value={salaryRole} onChange={(e) => setSalaryRole(e.target.value)} className="flex-1" />
+                <Input label="年資" placeholder="例如：3年、應屆" value={experience} onChange={(e) => setExperience(e.target.value)} className="w-32" />
               </div>
-              <Button onClick={querySalary} loading={loadingSalary} disabled={!salaryRole.trim()}>
+              <Button variant="gradient" onClick={querySalary} loading={loadingSalary} disabled={!salaryRole.trim()}>
                 🔍 查詢薪資
               </Button>
             </CardContent>
           </Card>
 
           {salaryData && (
-            <Card>
+            <Card className="border-indigo-500/20">
               <CardHeader>
-                <CardTitle>{salaryData.role} — 台灣薪資行情</CardTitle>
+                <CardTitle>{salaryData.role} · {salaryData.experience}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div className="rounded-xl bg-gray-50 p-4">
-                    <div className="text-xs text-gray-500 mb-1">P25 低標</div>
-                    <div className="text-xl font-bold text-gray-700">
-                      {formatNTD(salaryData.p25)}
+                {/* Salary tiers */}
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: 'P25 低標', val: salaryData.p25, dim: true },
+                    { label: '中位數',   val: salaryData.median, dim: false },
+                    { label: 'P75 高標', val: salaryData.p75, dim: true },
+                  ].map((tier) => (
+                    <div key={tier.label} className={`rounded-2xl p-4 text-center ${tier.dim ? 'bg-zinc-800/50' : 'bg-indigo-500/10 border border-indigo-500/30'}`}>
+                      <p className={`text-xs mb-1 ${tier.dim ? 'text-zinc-500' : 'text-indigo-400 font-medium'}`}>{tier.label}</p>
+                      <p className={`text-lg font-bold ${tier.dim ? 'text-zinc-300' : 'text-indigo-300'}`}>
+                        {fmt(tier.val)}
+                      </p>
+                      <p className="text-xs text-zinc-600 mt-0.5">NTD / 月</p>
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">NTD / 月</div>
-                  </div>
-                  <div className="rounded-xl bg-blue-50 p-4 ring-2 ring-blue-200">
-                    <div className="text-xs text-blue-600 mb-1 font-medium">中位數</div>
-                    <div className="text-2xl font-bold text-blue-700">
-                      {formatNTD(salaryData.median)}
-                    </div>
-                    <div className="text-xs text-blue-400 mt-1">NTD / 月</div>
-                  </div>
-                  <div className="rounded-xl bg-gray-50 p-4">
-                    <div className="text-xs text-gray-500 mb-1">P75 高標</div>
-                    <div className="text-xl font-bold text-gray-700">
-                      {formatNTD(salaryData.p75)}
-                    </div>
-                    <div className="text-xs text-gray-400 mt-1">NTD / 月</div>
-                  </div>
+                  ))}
                 </div>
 
-                {/* Salary bar visual */}
+                {/* Range bar */}
                 <div>
-                  <div className="relative h-4 rounded-full bg-gray-200">
-                    <div
-                      className="absolute h-4 rounded-full bg-gradient-to-r from-blue-300 to-blue-600"
-                      style={{ left: '15%', right: '15%' }}
-                    />
-                    <div className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-blue-700 border-2 border-white shadow"
-                      style={{ left: '45%' }} />
+                  <div className="relative h-3 rounded-full bg-zinc-800 overflow-hidden">
+                    <div className="absolute h-3 rounded-full bg-gradient-to-r from-indigo-500/40 to-indigo-500" style={{ left: '15%', right: '15%' }} />
                   </div>
-                  <div className="mt-1 flex justify-between text-xs text-gray-400">
-                    <span>低</span>
-                    <span>市場行情區間</span>
-                    <span>高</span>
+                  <div className="flex justify-between text-xs text-zinc-600 mt-1">
+                    <span>市場低標</span><span>市場高標</span>
                   </div>
                 </div>
 
-                <div className="rounded-xl bg-yellow-50 border border-yellow-200 p-4">
-                  <p className="text-sm font-medium text-yellow-800 mb-1">AI 說明</p>
-                  <p className="text-sm text-yellow-700">{salaryData.notes}</p>
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                  <p className="text-xs font-semibold text-amber-400 mb-1">🤖 AI 說明</p>
+                  <p className="text-sm text-zinc-300">{salaryData.notes}</p>
                 </div>
-                <p className="text-xs text-gray-400">資料來源：{salaryData.source}</p>
+                <p className="text-xs text-zinc-600">資料來源：{salaryData.source}</p>
               </CardContent>
             </Card>
           )}
         </div>
       )}
 
+      {/* ── Trends ───────────────────────────────────────────── */}
       {tab === 'trends' && (
-        <div className="space-y-4">
-          <Button onClick={loadTrends} loading={loadingTrends} variant="outline">
+        <div className="space-y-5">
+          <Button variant="outline" onClick={loadTrends} loading={loadingTrends}>
             🔄 載入最新產業趨勢
           </Button>
 
-          {trends.length > 0 && (
+          {trends.length > 0 ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {trends.map((t, i) => (
-                <Card key={i}>
-                  <CardContent className="pt-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-gray-900">{t.industry}</h3>
-                      <div className="flex items-center gap-1">
-                        <span>{trendIcon[t.trend]}</span>
-                        <Badge variant={trendColor[t.trend]}>{trendLabel[t.trend]}</Badge>
+              {trends.map((t, i) => {
+                const cfg = TREND_CFG[t.trend]
+                return (
+                  <Card key={i}>
+                    <CardContent className="pt-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-semibold text-zinc-200">{t.industry}</h3>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`font-bold ${cfg.color}`}>{cfg.icon}</span>
+                          <Badge variant={cfg.badge}>{cfg.label}</Badge>
+                        </div>
                       </div>
-                    </div>
-                    <div className="mb-3">
-                      <p className="text-xs font-medium text-gray-500 mb-1">熱門職缺</p>
-                      <div className="flex flex-wrap gap-1">
-                        {t.hotJobs.map((j) => (
-                          <Badge key={j} variant="info">{j}</Badge>
-                        ))}
+                      <div className="mb-3">
+                        <p className="text-xs text-zinc-600 mb-1.5">熱門職缺</p>
+                        <div className="flex flex-wrap gap-1">
+                          {t.hotJobs.map((j) => <Badge key={j} variant="indigo">{j}</Badge>)}
+                        </div>
                       </div>
-                    </div>
-                    <p className="text-xs text-gray-600">{t.notes}</p>
-                  </CardContent>
-                </Card>
-              ))}
+                      <p className="text-xs text-zinc-500 leading-relaxed">{t.notes}</p>
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
-          )}
-
-          {trends.length === 0 && !loadingTrends && (
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-8 text-center">
-              <div className="text-3xl mb-3">📊</div>
-              <p className="text-sm text-gray-600">點擊上方按鈕載入最新台灣產業趨勢分析</p>
+          ) : !loadingTrends && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <div className="mb-3 text-4xl">📊</div>
+              <p className="text-sm text-zinc-500">點擊上方按鈕載入最新台灣產業趨勢</p>
             </div>
           )}
         </div>
       )}
 
+      {/* ── Analytics ────────────────────────────────────────── */}
       {tab === 'analytics' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {activityStats.map((s) => (
+        <div className="space-y-5">
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {STATS.map((s) => (
               <Card key={s.label}>
                 <CardContent className="py-5 text-center">
-                  <div className="text-3xl font-bold text-blue-600">
-                    {s.value}
-                    <span className="text-sm text-gray-500">{s.unit}</span>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">{s.label}</div>
+                  <div className="text-2xl mb-1">{s.icon}</div>
+                  <div className={`text-2xl font-bold ${s.color}`}>{s.value}</div>
+                  <div className="text-xs text-zinc-500 mt-1">{s.label}</div>
                 </CardContent>
               </Card>
             ))}
           </div>
 
+          {/* Pipeline funnel */}
           <Card>
-            <CardHeader>
-              <CardTitle>求職進度追蹤</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {[
-                  { label: '已儲存', count: 0, color: 'bg-gray-200' },
-                  { label: '已投遞', count: 0, color: 'bg-blue-400' },
-                  { label: '面試邀請', count: 0, color: 'bg-yellow-400' },
-                  { label: '收到 Offer', count: 0, color: 'bg-green-500' },
-                ].map((row) => (
-                  <div key={row.label} className="flex items-center gap-3">
-                    <div className="w-20 text-sm text-gray-600 text-right">{row.label}</div>
-                    <div className="flex-1 h-6 rounded-full bg-gray-100 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${row.color} transition-all`}
-                        style={{ width: `${Math.min(row.count * 10, 100)}%` }}
-                      />
-                    </div>
-                    <div className="w-6 text-sm font-medium text-gray-700">{row.count}</div>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-4 text-xs text-gray-400">
-                使用「職缺配對」模組追蹤你的應徵進度後，數據將顯示於此。
-              </p>
+            <CardHeader><CardTitle>應徵漏斗</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {PIPELINE_ROWS.map((row) => (
+                <ProgressBar key={row.label} label={row.label} value={(row.count / row.max) * 100} color={row.color} showValue={false}
+                  className="after:content-[attr(data-count)]" />
+              ))}
+              <p className="text-xs text-zinc-600">數據來自「Job Pipeline」模組的應徵追蹤紀錄</p>
             </CardContent>
           </Card>
 
-          <div className="rounded-xl border border-blue-100 bg-blue-50 p-5">
-            <h3 className="text-sm font-semibold text-blue-900 mb-2">💡 職涯建議</h3>
-            <p className="text-sm text-blue-700">
-              根據台灣求職平均統計，積極求職者一週需投遞 5–10 份履歷，並追蹤每一個應徵狀態，才能維持良好的面試轉換率。
+          {/* AI tip */}
+          <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-5">
+            <p className="text-xs font-semibold text-indigo-400 mb-2">💡 AI 職涯建議</p>
+            <p className="text-sm text-zinc-300">
+              根據台灣求職統計，積極求職者每週需投遞 5–10 份履歷，追蹤每個應徵狀態，才能維持良好的面試轉換率。
+              你目前的投遞數略低，建議每日使用 Job Pipeline 搜尋並追蹤新職缺。
             </p>
+            <Link href="/career-match" className="mt-3 inline-block text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
+              前往 Job Pipeline →
+            </Link>
           </div>
         </div>
       )}
