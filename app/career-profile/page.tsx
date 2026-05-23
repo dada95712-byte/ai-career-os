@@ -68,22 +68,22 @@ export default function CareerProfilePage() {
     finally { setConvertingJournal(false) }
   }
 
-  const scoreCol = (s: number) => s >= 80 ? 'text-emerald-400' : s >= 60 ? 'text-amber-400' : 'text-red-400'
+  const scoreCol = (s: number) => s >= 80 ? 'text-sage-600' : s >= 60 ? 'text-honey-500' : 'text-red-400'
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-bold text-zinc-50">◈ Resume Lab</h1>
-        <p className="mt-1 text-sm text-zinc-500">AI 驅動的履歷解析 · ATS 評分 · STAR 故事庫</p>
+        <h1 className="text-2xl font-bold text-ink-900">◈ Resume Lab</h1>
+        <p className="mt-1 text-sm text-ink-500">AI 驅動的履歷解析 · ATS 評分 · STAR 故事庫</p>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900/60 p-1 w-fit">
+      <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-fit shadow-[var(--shadow-warm-xs)]">
         {TABS.map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${
-              tab === t ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'
+              tab === t ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'
             }`}
           >
             {TAB_LABELS[t]}
@@ -98,22 +98,22 @@ export default function CareerProfilePage() {
             <CardContent className="pt-5">
               <div
                 className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 cursor-pointer transition-all duration-200 ${
-                  dragging ? 'border-indigo-500 bg-indigo-500/5' : 'border-zinc-700 hover:border-zinc-600 hover:bg-zinc-800/30'
+                  dragging ? 'border-terra-400 bg-terra-50' : 'border-warm-300 hover:border-terra-300 hover:bg-terra-50'
                 }`}
                 onClick={() => fileRef.current?.click()}
                 onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}
               >
-                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-800 text-2xl">
+                <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-cream-200 text-2xl">
                   {file ? '✓' : '↑'}
                 </div>
-                <p className="text-sm font-medium text-zinc-300">
+                <p className="text-sm font-medium text-ink-600">
                   {file ? file.name : '拖曳或點擊上傳 PDF / DOCX'}
                 </p>
-                <p className="mt-1 text-xs text-zinc-600">最大 10MB · 支援繁體中文履歷</p>
+                <p className="mt-1 text-xs text-ink-400">最大 10MB · 支援繁體中文履歷</p>
                 {parsing && (
-                  <div className="mt-4 flex items-center gap-2 text-sm text-indigo-400">
+                  <div className="mt-4 flex items-center gap-2 text-sm text-terra-500">
                     <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
@@ -140,49 +140,49 @@ export default function CareerProfilePage() {
                 <CardContent className="space-y-4">
                   {parsed.name && (
                     <div>
-                      <p className="text-xs text-zinc-600 mb-1">姓名</p>
-                      <p className="text-sm font-medium text-zinc-200">{parsed.name}</p>
+                      <p className="text-xs text-ink-400 mb-1">姓名</p>
+                      <p className="text-sm font-medium text-ink-700">{parsed.name}</p>
                     </div>
                   )}
                   <div>
-                    <p className="text-xs text-zinc-600 mb-2">技能</p>
+                    <p className="text-xs text-ink-400 mb-2">技能</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {parsed.skills.map((s) => <Badge key={s} variant="indigo">{s}</Badge>)}
+                      {parsed.skills.map((s) => <Badge key={s} variant="terra">{s}</Badge>)}
                     </div>
                   </div>
                   {parsed.experiences.map((exp, i) => (
-                    <div key={i} className="rounded-xl bg-zinc-800/50 p-3">
-                      <p className="text-sm font-medium text-zinc-200">{exp.title} @ {exp.company}</p>
-                      <p className="mt-1 text-xs text-zinc-500 line-clamp-2">{exp.description}</p>
+                    <div key={i} className="rounded-xl bg-cream-100 p-3">
+                      <p className="text-sm font-medium text-ink-700">{exp.title} @ {exp.company}</p>
+                      <p className="mt-1 text-xs text-ink-500 line-clamp-2">{exp.description}</p>
                     </div>
                   ))}
                 </CardContent>
               </Card>
 
               {score && (
-                <Card className="border-indigo-500/20">
+                <Card className="border-terra-100">
                   <CardHeader><CardTitle>AI 評分報告</CardTitle></CardHeader>
                   <CardContent className="space-y-5">
                     <div className="flex gap-8 justify-center">
                       <div className="text-center">
                         <ProgressRing score={score.score} size={100} strokeWidth={8} animate />
-                        <p className="text-xs text-zinc-500 mt-2">整體評分</p>
+                        <p className="text-xs text-ink-500 mt-2">整體評分</p>
                       </div>
                       <div className="text-center">
                         <ProgressRing score={score.atsScore} size={100} strokeWidth={8} animate />
-                        <p className="text-xs text-zinc-500 mt-2">ATS 友善度</p>
+                        <p className="text-xs text-ink-500 mt-2">ATS 友善度</p>
                       </div>
                     </div>
                     <div className="space-y-2">
                       {score.suggestions.map((s, i) => (
-                        <div key={i} className="flex items-start gap-2 rounded-lg bg-amber-500/5 border border-amber-500/15 px-3 py-2">
-                          <span className="text-amber-400 text-sm mt-0.5">⚠</span>
-                          <p className="text-xs text-zinc-300">{s}</p>
+                        <div key={i} className="flex items-start gap-2 rounded-lg bg-honey-500/5 border border-amber-500/15 px-3 py-2">
+                          <span className="text-honey-500 text-sm mt-0.5">⚠</span>
+                          <p className="text-xs text-ink-600">{s}</p>
                         </div>
                       ))}
                     </div>
                     <div>
-                      <p className="text-xs text-zinc-600 mb-2">重要關鍵字</p>
+                      <p className="text-xs text-ink-400 mb-2">重要關鍵字</p>
                       <div className="flex flex-wrap gap-1.5">
                         {score.keywords.map((k) => <Badge key={k} variant="success">{k}</Badge>)}
                       </div>
@@ -212,22 +212,22 @@ export default function CareerProfilePage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>我的技能 <span className="text-zinc-500 font-normal">({skills.length})</span></CardTitle>
+              <CardTitle>我的技能 <span className="text-ink-500 font-normal">({skills.length})</span></CardTitle>
             </CardHeader>
             <CardContent>
               {skills.length === 0 ? (
                 <div className="py-10 text-center">
                   <p className="text-3xl mb-3">⚡</p>
-                  <p className="text-sm text-zinc-500">尚未新增技能</p>
-                  <p className="text-xs text-zinc-600 mt-1">也可上傳履歷自動擷取技能</p>
+                  <p className="text-sm text-ink-500">尚未新增技能</p>
+                  <p className="text-xs text-ink-400 mt-1">也可上傳履歷自動擷取技能</p>
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-2">
                   {skills.map((s, i) => (
-                    <div key={i} className="flex items-center gap-1 rounded-full border border-indigo-500/30 bg-indigo-500/10 pl-3 pr-2 py-1">
-                      <span className="text-sm text-indigo-300">{s}</span>
+                    <div key={i} className="flex items-center gap-1 rounded-full border border-terra-400/30 bg-terra-50 pl-3 pr-2 py-1">
+                      <span className="text-sm text-terra-600">{s}</span>
                       <button onClick={() => setSkills((p) => p.filter((_, j) => j !== i))}
-                        className="text-indigo-500 hover:text-red-400 transition-colors ml-1 text-xs">×</button>
+                        className="text-terra-500 hover:text-red-400 transition-colors ml-1 text-xs">×</button>
                     </div>
                   ))}
                 </div>
@@ -246,17 +246,17 @@ export default function CareerProfilePage() {
               <Textarea label="輸入工作成就或故事"
                 placeholder="例如：我帶領團隊重構電商系統，將載入時間從 5 秒縮短到 1.5 秒，轉換率提升 23%..."
                 rows={6} value={journalText} onChange={(e) => setJournalText(e.target.value)} />
-              <Button variant="gradient" onClick={convertToStar} loading={convertingJournal} disabled={!journalText.trim()}>
+              <Button variant="primary" onClick={convertToStar} loading={convertingJournal} disabled={!journalText.trim()}>
                 🤖 AI 轉換 STAR 格式
               </Button>
             </CardContent>
           </Card>
 
           {starResult && (
-            <Card className="border-indigo-500/20">
+            <Card className="border-terra-100">
               <CardHeader><CardTitle>STAR 結果</CardTitle></CardHeader>
               <CardContent>
-                <div className="whitespace-pre-wrap rounded-xl bg-zinc-800/60 p-4 text-sm text-zinc-300 leading-relaxed font-mono">
+                <div className="whitespace-pre-wrap rounded-xl bg-cream-200 p-4 text-sm text-ink-600 leading-relaxed font-mono">
                   {starResult}
                 </div>
               </CardContent>

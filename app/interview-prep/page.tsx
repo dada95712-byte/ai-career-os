@@ -62,19 +62,19 @@ export default function InterviewPrepPage() {
     finally { if (forPractice) setPracticeEval(false); else setEvaluating(false) }
   }
 
-  const scoreCol = (s: number) => s >= 8 ? 'text-emerald-400' : s >= 6 ? 'text-amber-400' : 'text-red-400'
+  const scoreCol = (s: number) => s >= 8 ? 'text-sage-600' : s >= 6 ? 'text-honey-500' : 'text-red-400'
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-50">⬟ Interview Arena</h1>
-        <p className="mt-1 text-sm text-zinc-500">AI 模擬面試 · 即時評分 · 台灣職場題庫</p>
+        <h1 className="text-2xl font-bold text-ink-900">⬟ Interview Arena</h1>
+        <p className="mt-1 text-sm text-ink-500">AI 模擬面試 · 即時評分 · 台灣職場題庫</p>
       </div>
 
-      <div className="flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900/60 p-1 w-fit">
+      <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-fit shadow-[var(--shadow-warm-xs)]">
         {(['mock', 'qa'] as const).map((t) => (
           <button key={t} onClick={() => { setTab(t); setSelectedQ(null); setAnswer('') }}
-            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${tab === t ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${tab === t ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'}`}>
             {t === 'mock' ? '⬟ 模擬面試' : '📋 常見題庫'}
           </button>
         ))}
@@ -90,7 +90,7 @@ export default function InterviewPrepPage() {
                 <Input label="目標職位" placeholder="例如：資深前端工程師" value={role} onChange={(e) => setRole(e.target.value)} className="flex-1" />
                 <Input label="公司（選填）" placeholder="例如：LINE、台積電" value={company} onChange={(e) => setCompany(e.target.value)} className="w-44" />
               </div>
-              <Button variant="gradient" onClick={generateQuestions} loading={generating} disabled={!role.trim()}>
+              <Button variant="primary" onClick={generateQuestions} loading={generating} disabled={!role.trim()}>
                 🎲 AI 生成面試題目
               </Button>
             </CardContent>
@@ -101,9 +101,9 @@ export default function InterviewPrepPage() {
               <div className="w-72 shrink-0 space-y-2 overflow-y-auto max-h-[65vh]">
                 {questions.map((q) => (
                   <button key={q.id} onClick={() => { setSelectedQ(q); setAnswer(q.userAnswer ?? '') }}
-                    className={`w-full text-left rounded-2xl border p-4 transition-all duration-150 ${selectedQ?.id === q.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700 hover:bg-zinc-800/50'}`}>
+                    className={`w-full text-left rounded-2xl border p-4 transition-all duration-150 ${selectedQ?.id === q.id ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300 hover:bg-cream-100'}`}>
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <p className="text-sm text-zinc-300 line-clamp-2 leading-snug">{q.question}</p>
+                      <p className="text-sm text-ink-600 line-clamp-2 leading-snug">{q.question}</p>
                       {q.aiScore !== undefined && (
                         <span className={`shrink-0 text-sm font-bold ${scoreCol(q.aiScore)}`}>{q.aiScore}/10</span>
                       )}
@@ -120,22 +120,22 @@ export default function InterviewPrepPage() {
                       <Badge variant={TYPE[selectedQ.type]?.color ?? 'default'} className="w-fit mb-2">
                         {TYPE[selectedQ.type]?.label}
                       </Badge>
-                      <p className="text-sm font-medium text-zinc-100 leading-relaxed">{selectedQ.question}</p>
+                      <p className="text-sm font-medium text-ink-900 leading-relaxed">{selectedQ.question}</p>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <Textarea label="你的回答" placeholder="請用 STAR 方法（情境、任務、行動、結果）回答..." rows={8} value={answer} onChange={(e) => setAnswer(e.target.value)} />
-                      <Button variant="gradient" onClick={() => evaluate(false)} loading={evaluating} disabled={!answer.trim()}>
+                      <Button variant="primary" onClick={() => evaluate(false)} loading={evaluating} disabled={!answer.trim()}>
                         🤖 AI 評分與建議
                       </Button>
                       {selectedQ.aiFeedback && (
                         <div className="space-y-3">
                           <div className="flex items-center gap-3">
                             <span className={`text-3xl font-bold ${scoreCol(selectedQ.aiScore ?? 0)}`}>{selectedQ.aiScore}</span>
-                            <span className="text-sm text-zinc-500">/ 10</span>
+                            <span className="text-sm text-ink-500">/ 10</span>
                           </div>
-                          <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
-                            <p className="text-xs font-semibold text-indigo-400 mb-2">AI 回饋</p>
-                            <p className="text-sm text-zinc-300 whitespace-pre-line leading-relaxed">{selectedQ.aiFeedback}</p>
+                          <div className="rounded-xl border border-terra-100 bg-terra-50 p-4">
+                            <p className="text-xs font-semibold text-terra-500 mb-2">AI 回饋</p>
+                            <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">{selectedQ.aiFeedback}</p>
                           </div>
                         </div>
                       )}
@@ -149,7 +149,7 @@ export default function InterviewPrepPage() {
           {questions.length === 0 && !generating && (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="mb-3 text-4xl">⬟</div>
-              <p className="text-sm text-zinc-500">輸入目標職位，AI 將生成 8 道客製化面試題</p>
+              <p className="text-sm text-ink-500">輸入目標職位，AI 將生成 8 道客製化面試題</p>
             </div>
           )}
         </div>
@@ -161,7 +161,7 @@ export default function InterviewPrepPage() {
           <div className="w-40 shrink-0 space-y-1">
             {QA_BANK.map((cat) => (
               <button key={cat.category} onClick={() => { setSelectedCat(cat.category); setPracticeQ(null); setPracticeAnswer(''); setPracticeFeedback('') }}
-                className={`w-full text-left rounded-lg px-3 py-2 text-sm transition-colors ${selectedCat === cat.category ? 'bg-indigo-500/10 text-indigo-300 font-medium' : 'text-zinc-500 hover:bg-zinc-800 hover:text-zinc-300'}`}>
+                className={`w-full text-left rounded-lg px-3 py-2 text-sm transition-colors ${selectedCat === cat.category ? 'bg-terra-50 text-terra-600 font-medium' : 'text-ink-500 hover:bg-cream-200 hover:text-ink-600'}`}>
                 {cat.category}
               </button>
             ))}
@@ -170,25 +170,25 @@ export default function InterviewPrepPage() {
           <div className="flex-1 space-y-3">
             {QA_BANK.find((c) => c.category === selectedCat)?.questions.map((q, i) => (
               <button key={i} onClick={() => { setPracticeQ(q); setPracticeAnswer(''); setPracticeFeedback('') }}
-                className={`w-full text-left rounded-2xl border p-4 transition-all ${practiceQ === q ? 'border-indigo-500 bg-indigo-500/5' : 'border-zinc-800 bg-zinc-900 hover:border-zinc-700'}`}>
-                <p className="text-sm text-zinc-300">{q}</p>
+                className={`w-full text-left rounded-2xl border p-4 transition-all ${practiceQ === q ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                <p className="text-sm text-ink-600">{q}</p>
               </button>
             ))}
 
             {practiceQ && (
-              <Card className="border-indigo-500/20">
+              <Card className="border-terra-100">
                 <CardHeader>
                   <CardTitle>練習回答</CardTitle>
-                  <p className="text-sm text-zinc-400 mt-1">{practiceQ}</p>
+                  <p className="text-sm text-ink-400 mt-1">{practiceQ}</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Textarea placeholder="請輸入你的回答..." rows={6} value={practiceAnswer} onChange={(e) => setPracticeAnswer(e.target.value)} />
-                  <Button variant="gradient" onClick={() => evaluate(true)} loading={practiceEval} disabled={!practiceAnswer.trim()}>
+                  <Button variant="primary" onClick={() => evaluate(true)} loading={practiceEval} disabled={!practiceAnswer.trim()}>
                     🤖 AI 評分
                   </Button>
                   {practiceFeedback && (
-                    <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
-                      <p className="text-sm text-zinc-300 whitespace-pre-line leading-relaxed">{practiceFeedback}</p>
+                    <div className="rounded-xl border border-terra-100 bg-terra-50 p-4">
+                      <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">{practiceFeedback}</p>
                     </div>
                   )}
                 </CardContent>

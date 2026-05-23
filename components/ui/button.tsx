@@ -4,18 +4,18 @@ import { cn } from '@/lib/utils'
 import { ButtonHTMLAttributes, forwardRef } from 'react'
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'gradient'
+  variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'sage'
   size?: 'xs' | 'sm' | 'md' | 'lg'
   loading?: boolean
 }
 
 const variants = {
-  primary:  'bg-indigo-600 text-white hover:bg-indigo-500 focus:ring-indigo-500',
-  secondary:'bg-zinc-800 text-zinc-200 hover:bg-zinc-700 border border-zinc-700 hover:border-zinc-600 focus:ring-zinc-600',
-  outline:  'border border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 focus:ring-zinc-600',
-  ghost:    'text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 focus:ring-zinc-700',
-  danger:   'bg-red-600 text-white hover:bg-red-500 focus:ring-red-500',
-  gradient: 'gradient-brand text-white hover:opacity-90 focus:ring-indigo-500',
+  primary:   'bg-terra-500 text-white hover:bg-terra-700 active:scale-[0.98] shadow-[var(--shadow-warm-xs)] focus:ring-terra-300',
+  secondary: 'bg-cream-200 text-ink-700 hover:bg-cream-300 border border-warm-200 hover:border-warm-300 focus:ring-warm-300',
+  outline:   'border border-warm-200 text-ink-500 hover:bg-cream-200 hover:text-ink-700 hover:border-warm-300 focus:ring-warm-300',
+  ghost:     'text-ink-400 hover:bg-cream-200 hover:text-ink-700 focus:ring-warm-300',
+  danger:    'bg-red-600 text-white hover:bg-red-700 focus:ring-red-300',
+  sage:      'bg-sage-500 text-white hover:bg-sage-700 focus:ring-sage-300 shadow-[var(--shadow-warm-xs)]',
 }
 
 const sizes = {
@@ -39,7 +39,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       disabled={disabled || loading}
       className={cn(
         'inline-flex items-center justify-center gap-2 font-medium transition-all duration-150',
-        'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-zinc-950',
+        'focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-cream-100',
         'disabled:cursor-not-allowed disabled:opacity-40',
         variants[variant],
         sizes[size],

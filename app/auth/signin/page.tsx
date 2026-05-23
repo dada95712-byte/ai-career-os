@@ -29,21 +29,17 @@ function SignInForm() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
-      {/* Background glow */}
-      <div className="pointer-events-none fixed inset-0 flex items-center justify-center">
-        <div className="h-80 w-80 rounded-full bg-indigo-600/8 blur-3xl" />
-      </div>
-
-      <div className="relative w-full max-w-sm">
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-8">
+    <div className="flex min-h-screen items-center justify-center bg-cream-100 px-4">
+      <div className="w-full max-w-sm">
+        <div className="rounded-2xl border border-warm-200 bg-white p-8"
+          style={{ boxShadow: 'var(--shadow-warm-lg)' }}>
           {/* Logo */}
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl gradient-brand text-white font-bold text-sm">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-terra-500 text-white font-bold text-sm shadow-[var(--shadow-warm-sm)]">
               AI
             </div>
-            <h1 className="text-lg font-bold text-zinc-100">AI Career OS</h1>
-            <p className="mt-1 text-sm text-zinc-500">登入你的職涯指揮中心</p>
+            <h1 className="text-lg font-bold text-ink-900">AI Career OS</h1>
+            <p className="mt-1 text-sm text-ink-400">你的職涯成長夥伴</p>
           </div>
 
           {/* Google OAuth */}
@@ -54,13 +50,13 @@ function SignInForm() {
               <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
             </svg>
-            使用 Google 登入
+            使用 Google 帳號登入
           </Button>
 
           <div className="my-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-zinc-800" />
-            <span className="text-xs text-zinc-600">或用 Email</span>
-            <div className="h-px flex-1 bg-zinc-800" />
+            <div className="h-px flex-1 bg-warm-200" />
+            <span className="text-xs text-ink-300">或用 Email</span>
+            <div className="h-px flex-1 bg-warm-200" />
           </div>
 
           <form onSubmit={handleEmail} className="space-y-3">
@@ -69,13 +65,13 @@ function SignInForm() {
             <Button type="submit" className="w-full" loading={loading}>繼續</Button>
           </form>
 
-          <p className="mt-5 text-center text-xs text-zinc-600">
+          <p className="mt-5 text-center text-xs text-ink-300">
             登入即同意使用條款與隱私政策
           </p>
         </div>
 
-        <p className="mt-4 text-center text-xs text-zinc-700">
-          還沒有帳號？直接輸入 Email 即可建立
+        <p className="mt-4 text-center text-xs text-ink-300">
+          還沒有帳號？直接輸入 Email 即可立即建立
         </p>
       </div>
     </div>

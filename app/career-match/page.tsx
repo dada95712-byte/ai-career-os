@@ -13,11 +13,11 @@ type AppStatus = 'saved' | 'applied' | 'phone_screen' | 'interview' | 'offer' | 
 interface Application { id: string; jobTitle: string; company: string; status: AppStatus; platform?: string }
 
 const STATUS: Record<AppStatus, { label: string; color: string; dot: string; badge: 'default' | 'info' | 'warning' | 'success' | 'danger' }> = {
-  saved:        { label: '已儲存',   color: 'text-zinc-400', dot: 'bg-zinc-600', badge: 'default' },
+  saved:        { label: '已儲存',   color: 'text-ink-400', dot: 'bg-zinc-600', badge: 'default' },
   applied:      { label: '已投遞',   color: 'text-sky-400',  dot: 'bg-sky-500',  badge: 'info' },
-  phone_screen: { label: '電話面試', color: 'text-amber-400',dot: 'bg-amber-500',badge: 'warning' },
+  phone_screen: { label: '電話面試', color: 'text-honey-500',dot: 'bg-honey-500',badge: 'warning' },
   interview:    { label: '面試中',   color: 'text-violet-400',dot: 'bg-violet-500',badge: 'info' },
-  offer:        { label: 'Offer',    color: 'text-emerald-400',dot: 'bg-emerald-500',badge: 'success' },
+  offer:        { label: 'Offer',    color: 'text-sage-600',dot: 'bg-sage-500',badge: 'success' },
   rejected:     { label: '未錄取',  color: 'text-red-400', dot: 'bg-red-500',   badge: 'danger' },
 }
 const COLS: AppStatus[] = ['saved', 'applied', 'phone_screen', 'interview', 'offer', 'rejected']
@@ -65,14 +65,14 @@ export default function CareerMatchPage() {
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-50">◎ Job Pipeline</h1>
-        <p className="mt-1 text-sm text-zinc-500">AI 職缺匹配 · 台灣職缺整合 · 應徵狀態追蹤</p>
+        <h1 className="text-2xl font-bold text-ink-900">◎ Job Pipeline</h1>
+        <p className="mt-1 text-sm text-ink-500">AI 職缺匹配 · 台灣職缺整合 · 應徵狀態追蹤</p>
       </div>
 
-      <div className="flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900/60 p-1 w-fit">
+      <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-fit shadow-[var(--shadow-warm-xs)]">
         {(['search', 'track'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${tab === t ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${tab === t ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'}`}>
             {t === 'search' ? `◎ 搜尋職缺${jobs.length ? ` (${jobs.length})` : ''}` : `⬡ 應徵看板 (${apps.length})`}
           </button>
         ))}
@@ -100,16 +100,16 @@ export default function CareerMatchPage() {
               <div className="w-72 shrink-0 space-y-2 overflow-y-auto max-h-[70vh]">
                 {jobs.map((job) => (
                   <button key={job.id} onClick={() => analyze(job)}
-                    className={`w-full text-left rounded-2xl border p-4 transition-all duration-150 hover:border-zinc-700 ${
-                      selected?.id === job.id ? 'border-indigo-500 bg-indigo-500/10' : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800/50'
+                    className={`w-full text-left rounded-2xl border p-4 transition-all duration-150 hover:border-warm-300 ${
+                      selected?.id === job.id ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:bg-cream-100'
                     }`}>
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-zinc-200 truncate">{job.title}</p>
-                        <p className="text-xs text-zinc-500 truncate">{job.company}</p>
+                        <p className="text-sm font-semibold text-ink-700 truncate">{job.title}</p>
+                        <p className="text-xs text-ink-500 truncate">{job.company}</p>
                       </div>
                       {job.matchScore !== undefined && (
-                        <span className={`shrink-0 text-sm font-bold ${job.matchScore >= 70 ? 'text-emerald-400' : job.matchScore >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
+                        <span className={`shrink-0 text-sm font-bold ${job.matchScore >= 70 ? 'text-sage-600' : job.matchScore >= 50 ? 'text-honey-500' : 'text-red-400'}`}>
                           {job.matchScore}%
                         </span>
                       )}
@@ -119,7 +119,7 @@ export default function CareerMatchPage() {
                       <Badge variant="default">{job.platform}</Badge>
                     </div>
                     {job.salaryMin && (
-                      <p className="mt-1.5 text-xs text-emerald-400">
+                      <p className="mt-1.5 text-xs text-sage-600">
                         NTD {job.salaryMin.toLocaleString()}~{job.salaryMax?.toLocaleString()}
                       </p>
                     )}
@@ -135,14 +135,14 @@ export default function CareerMatchPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <CardTitle className="text-base">{selected.title}</CardTitle>
-                          <p className="text-sm text-zinc-500 mt-1">{selected.company} · {selected.location}</p>
+                          <p className="text-sm text-ink-500 mt-1">{selected.company} · {selected.location}</p>
                         </div>
                         <Button size="sm" variant="secondary" onClick={() => saveJob(selected)}>+ 儲存</Button>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-5">
                       {analyzing && (
-                        <div className="flex items-center gap-2 text-sm text-indigo-400">
+                        <div className="flex items-center gap-2 text-sm text-terra-500">
                           <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
@@ -152,14 +152,14 @@ export default function CareerMatchPage() {
                       )}
                       {selected.matchScore !== undefined && (
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="flex flex-col items-center justify-center rounded-2xl bg-zinc-800/50 p-5">
+                          <div className="flex flex-col items-center justify-center rounded-2xl bg-cream-100 p-5">
                             <ProgressRing score={selected.matchScore} size={90} strokeWidth={7} animate />
-                            <p className="text-xs text-zinc-500 mt-2">匹配度</p>
+                            <p className="text-xs text-ink-500 mt-2">匹配度</p>
                           </div>
                           <div className="space-y-3">
                             {selected.matchedSkills && selected.matchedSkills.length > 0 && (
                               <div>
-                                <p className="text-xs text-emerald-400 mb-1.5">✓ 符合技能</p>
+                                <p className="text-xs text-sage-600 mb-1.5">✓ 符合技能</p>
                                 <div className="flex flex-wrap gap-1">{selected.matchedSkills.map((s) => <Badge key={s} variant="success">{s}</Badge>)}</div>
                               </div>
                             )}
@@ -173,11 +173,11 @@ export default function CareerMatchPage() {
                         </div>
                       )}
                       <div>
-                        <p className="text-xs text-zinc-600 mb-2">職缺描述</p>
-                        <p className="whitespace-pre-line text-sm text-zinc-400 leading-relaxed">{selected.description}</p>
+                        <p className="text-xs text-ink-400 mb-2">職缺描述</p>
+                        <p className="whitespace-pre-line text-sm text-ink-400 leading-relaxed">{selected.description}</p>
                       </div>
                       {selected.url && (
-                        <a href={selected.url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-400 hover:text-indigo-300 transition-colors">
+                        <a href={selected.url} target="_blank" rel="noopener noreferrer" className="text-sm text-terra-500 hover:text-terra-600 transition-colors">
                           查看原始職缺 →
                         </a>
                       )}
@@ -191,7 +191,7 @@ export default function CareerMatchPage() {
           {jobs.length === 0 && !searching && (
             <div className="flex flex-col items-center justify-center py-20">
               <div className="mb-3 text-4xl">◎</div>
-              <p className="text-sm text-zinc-500">輸入職位關鍵字開始搜尋台灣職缺</p>
+              <p className="text-sm text-ink-500">輸入職位關鍵字開始搜尋台灣職缺</p>
             </div>
           )}
         </div>
@@ -203,8 +203,8 @@ export default function CareerMatchPage() {
           {apps.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24">
               <div className="mb-3 text-4xl">⬡</div>
-              <p className="text-sm text-zinc-500">尚未儲存任何職缺</p>
-              <button onClick={() => setTab('search')} className="mt-2 text-sm text-indigo-400 hover:text-indigo-300">
+              <p className="text-sm text-ink-500">尚未儲存任何職缺</p>
+              <button onClick={() => setTab('search')} className="mt-2 text-sm text-terra-500 hover:text-terra-600">
                 搜尋職缺 →
               </button>
             </div>
@@ -217,19 +217,19 @@ export default function CareerMatchPage() {
                     <div key={col} className="w-56 shrink-0">
                       <div className="mb-3 flex items-center gap-2">
                         <div className={`h-2 w-2 rounded-full ${cfg.dot}`} />
-                        <span className="text-xs font-semibold text-zinc-400">{cfg.label}</span>
-                        <span className="ml-auto text-xs text-zinc-600">{colApps.length}</span>
+                        <span className="text-xs font-semibold text-ink-400">{cfg.label}</span>
+                        <span className="ml-auto text-xs text-ink-400">{colApps.length}</span>
                       </div>
                       <div className="space-y-2">
                         {colApps.map((app) => (
-                          <div key={app.id} className="rounded-xl border border-zinc-800 bg-zinc-900 p-3">
-                            <p className="text-sm font-medium text-zinc-200">{app.jobTitle}</p>
-                            <p className="text-xs text-zinc-500">{app.company}</p>
+                          <div key={app.id} className="rounded-xl border border-warm-200 bg-white p-3">
+                            <p className="text-sm font-medium text-ink-700">{app.jobTitle}</p>
+                            <p className="text-xs text-ink-500">{app.company}</p>
                             {app.platform && <Badge variant="outline" className="mt-2 text-[10px]">{app.platform}</Badge>}
                             <div className="mt-3 flex flex-wrap gap-1">
                               {COLS.filter((s) => s !== col).slice(0, 2).map((s) => (
                                 <button key={s} onClick={() => updateStatus(app.id, s)}
-                                  className="text-[10px] text-zinc-600 hover:text-indigo-400 transition-colors">
+                                  className="text-[10px] text-ink-400 hover:text-terra-500 transition-colors">
                                   → {STATUS[s].label}
                                 </button>
                               ))}
@@ -237,8 +237,8 @@ export default function CareerMatchPage() {
                           </div>
                         ))}
                         {colApps.length === 0 && (
-                          <div className="rounded-xl border border-dashed border-zinc-800 py-6 text-center">
-                            <p className="text-xs text-zinc-700">空</p>
+                          <div className="rounded-xl border border-dashed border-warm-200 py-6 text-center">
+                            <p className="text-xs text-ink-700">空</p>
                           </div>
                         )}
                       </div>

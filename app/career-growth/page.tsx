@@ -12,7 +12,7 @@ interface ChatMessage { role: 'user' | 'assistant'; content: string }
 
 const QUICK_Q = ['我想從傳統產業轉往科技業', '我想在現有公司升職', '我剛被裁員，下一步怎麼辦？', '我是應屆生，不知道從哪裡找工作']
 const STATUS_ICON = { has: '✓', partial: '~', missing: '✗' }
-const STATUS_COLOR = { has: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', partial: 'text-amber-400 bg-amber-500/10 border-amber-500/20', missing: 'text-red-400 bg-red-500/10 border-red-500/20' }
+const STATUS_COLOR = { has: 'text-sage-600 bg-sage-500/10 border-emerald-500/20', partial: 'text-honey-500 bg-honey-500/10 border-amber-500/20', missing: 'text-red-400 bg-red-500/10 border-red-500/20' }
 const IMP_COLOR: Record<string, 'danger' | 'warning' | 'default'> = { high: 'danger', medium: 'warning', low: 'default' }
 
 export default function CareerGrowthPage() {
@@ -58,14 +58,14 @@ export default function CareerGrowthPage() {
   return (
     <div className="p-6 lg:p-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-50">◈ Skill Map</h1>
-        <p className="mt-1 text-sm text-zinc-500">技能落差分析 · 個人化學習路徑 · AI 職涯教練</p>
+        <h1 className="text-2xl font-bold text-ink-900">◈ Skill Map</h1>
+        <p className="mt-1 text-sm text-ink-500">技能落差分析 · 個人化學習路徑 · AI 職涯教練</p>
       </div>
 
-      <div className="flex gap-1 rounded-xl border border-zinc-800 bg-zinc-900/60 p-1 w-fit">
+      <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-fit shadow-[var(--shadow-warm-xs)]">
         {(['gap', 'coach'] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${tab === t ? 'bg-zinc-800 text-zinc-100 shadow-sm' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${tab === t ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'}`}>
             {t === 'gap' ? '⚡ 技能落差分析' : '🤖 AI 職涯教練'}
           </button>
         ))}
@@ -79,7 +79,7 @@ export default function CareerGrowthPage() {
             <CardContent className="space-y-4">
               <Input label="目標職位" placeholder="例如：資深前端工程師、產品經理" value={targetRole} onChange={(e) => setTargetRole(e.target.value)} />
               <Textarea label="目前技能（選填）" placeholder="例如：React、3 年前端經驗、基本 SQL" rows={2} value={currentSkills} onChange={(e) => setCurrentSkills(e.target.value)} />
-              <Button variant="gradient" onClick={analyzeGap} loading={analyzing} disabled={!targetRole.trim()}>
+              <Button variant="primary" onClick={analyzeGap} loading={analyzing} disabled={!targetRole.trim()}>
                 🔍 分析技能落差
               </Button>
             </CardContent>
@@ -87,7 +87,7 @@ export default function CareerGrowthPage() {
 
           {gaps.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-zinc-600">
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-ink-400">
                 分析結果 — {targetRole}
               </h2>
               {gaps.map((gap, i) => (
@@ -99,8 +99,8 @@ export default function CareerGrowthPage() {
                           {STATUS_ICON[gap.status]}
                         </div>
                         <div>
-                          <p className="font-semibold text-zinc-200">{gap.skill}</p>
-                          <p className="text-xs text-zinc-500">
+                          <p className="font-semibold text-ink-700">{gap.skill}</p>
+                          <p className="text-xs text-ink-500">
                             {gap.status === 'has' ? '已具備' : gap.status === 'partial' ? '部分具備' : '完全缺乏'}
                           </p>
                         </div>
@@ -112,16 +112,16 @@ export default function CareerGrowthPage() {
 
                     {gap.status !== 'has' && gap.resources.length > 0 && (
                       <div>
-                        <p className="text-xs text-zinc-600 mb-2">推薦學習資源</p>
+                        <p className="text-xs text-ink-400 mb-2">推薦學習資源</p>
                         <div className="space-y-2">
                           {gap.resources.map((r, j) => (
-                            <div key={j} className="flex items-center justify-between rounded-lg bg-zinc-800/60 px-3 py-2.5">
+                            <div key={j} className="flex items-center justify-between rounded-lg bg-cream-200 px-3 py-2.5">
                               {r.url ? (
-                                <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-sm text-indigo-400 hover:text-indigo-300 font-medium">
+                                <a href={r.url} target="_blank" rel="noopener noreferrer" className="text-sm text-terra-500 hover:text-terra-600 font-medium">
                                   {r.name}
                                 </a>
                               ) : (
-                                <span className="text-sm text-zinc-300 font-medium">{r.name}</span>
+                                <span className="text-sm text-ink-600 font-medium">{r.name}</span>
                               )}
                               <div className="flex gap-1.5">
                                 <Badge variant="outline">{r.time}</Badge>
@@ -147,7 +147,7 @@ export default function CareerGrowthPage() {
           <div className="flex flex-wrap gap-2">
             {QUICK_Q.map((q) => (
               <button key={q} onClick={() => sendMessage(q)}
-                className="rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-400 hover:border-indigo-500/50 hover:bg-indigo-500/5 hover:text-indigo-400 transition-all">
+                className="rounded-full border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-400 hover:border-terra-400/50 hover:bg-terra-50 hover:text-terra-500 transition-all">
                 {q}
               </button>
             ))}
@@ -159,10 +159,10 @@ export default function CareerGrowthPage() {
               {messages.map((m, i) => (
                 <div key={i} className={`flex gap-3 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
                   {m.role === 'assistant' && (
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-sm">🤖</div>
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-terra-100 text-sm">🤖</div>
                   )}
                   <div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-line ${
-                    m.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-200'
+                    m.role === 'user' ? 'bg-terra-500 text-white' : 'bg-cream-200 text-ink-700'
                   }`}>
                     {m.content}
                   </div>
@@ -170,8 +170,8 @@ export default function CareerGrowthPage() {
               ))}
               {chatLoading && (
                 <div className="flex gap-3">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-500/20 text-sm">🤖</div>
-                  <div className="rounded-2xl bg-zinc-800 px-4 py-3">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-terra-100 text-sm">🤖</div>
+                  <div className="rounded-2xl bg-cream-200 px-4 py-3">
                     <div className="flex gap-1">
                       {[0,150,300].map((d) => (
                         <div key={d} className="h-1.5 w-1.5 animate-bounce rounded-full bg-zinc-500" style={{ animationDelay: `${d}ms` }} />
@@ -182,17 +182,17 @@ export default function CareerGrowthPage() {
               )}
               <div ref={endRef} />
             </div>
-            <div className="border-t border-zinc-800 p-3">
+            <div className="border-t border-warm-200 p-3">
               <div className="flex gap-2">
                 <input
-                  className="flex-1 rounded-xl border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-500 focus:outline-none"
+                  className="flex-1 rounded-xl border border-warm-300 bg-cream-200 px-4 py-2 text-sm text-ink-900 placeholder:text-ink-500 focus:border-terra-400 focus:outline-none"
                   placeholder="輸入你的職涯問題..."
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
                   disabled={chatLoading}
                 />
-                <Button variant="gradient" size="sm" onClick={() => sendMessage()} loading={chatLoading}>
+                <Button variant="primary" size="sm" onClick={() => sendMessage()} loading={chatLoading}>
                   送出
                 </Button>
               </div>

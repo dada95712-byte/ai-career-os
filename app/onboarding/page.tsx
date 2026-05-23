@@ -46,20 +46,20 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-cream-100 flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
 
         {/* Progress bar */}
         <div className="mb-10">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs text-zinc-500">第 {step} 步，共 {TOTAL_STEPS} 步</span>
-            <button onClick={() => router.push('/dashboard')} className="text-xs text-zinc-600 hover:text-zinc-400">
+            <span className="text-xs text-ink-400">第 {step} 步，共 {TOTAL_STEPS} 步</span>
+            <button onClick={() => router.push('/dashboard')} className="text-xs text-ink-300 hover:text-ink-500">
               跳過
             </button>
           </div>
-          <div className="h-1 w-full rounded-full bg-zinc-800 overflow-hidden">
+          <div className="h-1 w-full rounded-full bg-warm-200 overflow-hidden">
             <div
-              className="h-full rounded-full gradient-brand transition-all duration-500"
+              className="h-full rounded-full bg-terra-400 transition-all duration-500"
               style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
             />
           </div>
@@ -106,7 +106,7 @@ export default function OnboardingPage() {
               onKeyDown={(e) => e.key === 'Enter' && targetRole.trim() && next()}
               autoFocus
             />
-            <p className="mt-2 text-xs text-zinc-600">或輸入你感興趣的產業，例如：科技業、金融業</p>
+            <p className="mt-2 text-xs text-ink-300">或輸入你感興趣的產業，例如：科技業、金融業</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {['前端工程師', '產品經理', '數據分析師', '軟體工程師', 'UI/UX 設計師'].map((r) => (
                 <button
@@ -115,8 +115,8 @@ export default function OnboardingPage() {
                   className={cn(
                     'rounded-full border px-3 py-1 text-xs transition-colors',
                     targetRole === r
-                      ? 'border-indigo-500 bg-indigo-500/10 text-indigo-400'
-                      : 'border-zinc-700 text-zinc-500 hover:border-zinc-600 hover:text-zinc-400'
+                      ? 'border-terra-300 bg-terra-50 text-terra-600'
+                      : 'border-warm-300 text-ink-400 hover:border-warm-400 hover:text-ink-600'
                   )}
                 >
                   {r}
@@ -136,7 +136,7 @@ export default function OnboardingPage() {
             title="一切就緒！"
             sub="你的 AI 職涯指揮中心已準備好"
           >
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5 space-y-3">
+            <div className="rounded-2xl border border-warm-200 bg-cream-50 p-5 space-y-4 border-l-4 border-l-terra-400">
               {[
                 { icon: '🎯', label: '職涯目標', value: GOALS.find((g) => g.id === goal)?.title ?? goal },
                 { icon: '👤', label: '目前狀態', value: STAGES.find((s) => s.id === stage)?.title ?? stage },
@@ -145,22 +145,22 @@ export default function OnboardingPage() {
                 <div key={row.label} className="flex items-center gap-3">
                   <span className="text-lg">{row.icon}</span>
                   <div>
-                    <p className="text-[10px] text-zinc-500 uppercase tracking-wide">{row.label}</p>
-                    <p className="text-sm font-medium text-zinc-200">{row.value}</p>
+                    <p className="text-[10px] text-ink-300 uppercase tracking-wide">{row.label}</p>
+                    <p className="text-sm font-medium text-ink-800">{row.value}</p>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="mt-5 rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4">
-              <p className="text-xs text-indigo-300">
-                🤖 AI 已根據你的資料準備了個人化任務清單。第一步建議上傳履歷，讓系統給出完整分析。
+            <div className="mt-5 rounded-xl border border-sage-100 bg-sage-50 p-4">
+              <p className="text-xs text-sage-700 leading-relaxed">
+                🌿 AI 已根據你的資料準備了個人化任務清單。第一步建議上傳履歷，讓系統給出完整分析。
               </p>
             </div>
 
             <div className="flex gap-3 mt-6">
               <Button variant="outline" className="flex-1" onClick={back}>← 修改</Button>
-              <Button variant="gradient" className="flex-1" loading={loading} onClick={finish}>
+              <Button variant="primary" className="flex-1" loading={loading} onClick={finish}>
                 進入 Dashboard 🚀
               </Button>
             </div>
@@ -175,8 +175,8 @@ export default function OnboardingPage() {
 function StepFrame({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
   return (
     <div className="animate-fade-in-up">
-      <h1 className="text-2xl font-bold text-zinc-50 mb-2">{title}</h1>
-      <p className="text-sm text-zinc-400 mb-8">{sub}</p>
+      <h1 className="text-2xl font-bold text-ink-900 mb-1.5 tracking-tight">{title}</h1>
+      <p className="text-sm text-ink-400 mb-8 leading-relaxed">{sub}</p>
       {children}
     </div>
   )
@@ -198,21 +198,21 @@ function OptionGrid({
           key={o.id}
           onClick={() => onSelect(o.id)}
           className={cn(
-            'rounded-2xl border p-4 text-left transition-all duration-150 hover:border-zinc-600',
+            'rounded-2xl border p-4 text-left transition-all duration-150',
             selected === o.id
-              ? 'border-indigo-500 bg-indigo-500/10 shadow-lg shadow-indigo-500/10'
-              : 'border-zinc-800 bg-zinc-900 hover:bg-zinc-800/60'
+              ? 'border-terra-300 bg-terra-50 shadow-[var(--shadow-warm-md)]'
+              : 'border-warm-200 bg-white hover:border-warm-300 hover:bg-cream-50 shadow-[var(--shadow-warm-xs)]'
           )}
         >
           <div className="text-2xl mb-2">{o.icon}</div>
-          <p className={cn('text-sm font-semibold', selected === o.id ? 'text-indigo-300' : 'text-zinc-200')}>
+          <p className={cn('text-sm font-semibold', selected === o.id ? 'text-terra-700' : 'text-ink-800')}>
             {o.title}
           </p>
-          <p className="text-xs text-zinc-500 mt-0.5">{o.sub}</p>
+          <p className="text-xs text-ink-400 mt-0.5">{o.sub}</p>
           {selected === o.id && (
             <div className="mt-2 flex items-center gap-1">
-              <div className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
-              <span className="text-[10px] text-indigo-400">已選擇</span>
+              <div className="h-1.5 w-1.5 rounded-full bg-terra-400" />
+              <span className="text-[10px] text-terra-500">已選擇</span>
             </div>
           )}
         </button>

@@ -80,30 +80,31 @@ export function CommandPalette() {
       onClick={closePalette}
     >
       <div
-        className="w-full max-w-xl rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl shadow-black/60 overflow-hidden animate-fade-in-up"
+        className="w-full max-w-xl rounded-2xl border border-warm-300 bg-white overflow-hidden animate-fade-in-up"
+        style={{ boxShadow: 'var(--shadow-warm-xl)' }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search input */}
-        <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3.5">
-          <svg className="h-4 w-4 shrink-0 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <div className="flex items-center gap-3 border-b border-warm-200 px-4 py-3.5">
+          <svg className="h-4 w-4 shrink-0 text-ink-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
           </svg>
           <input
             ref={inputRef}
-            className="flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+            className="flex-1 bg-transparent text-sm text-ink-900 placeholder:text-ink-300 focus:outline-none"
             placeholder="搜尋功能或指令..."
             value={query}
             onChange={(e) => { setQuery(e.target.value); setCursor(0) }}
           />
-          <kbd className="hidden rounded border border-zinc-700 px-1.5 py-0.5 text-[10px] text-zinc-500 sm:block">
+          <kbd className="hidden rounded border border-warm-200 px-1.5 py-0.5 text-[10px] text-ink-300 sm:block">
             ESC
           </kbd>
         </div>
 
         {/* Results */}
-        <div className="max-h-72 overflow-y-auto p-2">
+        <div className="max-h-72 overflow-y-auto p-2 bg-cream-50">
           {filtered.length === 0 && (
-            <p className="py-8 text-center text-sm text-zinc-500">沒有找到相關指令</p>
+            <p className="py-8 text-center text-sm text-ink-300">沒有找到相關指令</p>
           )}
 
           {!query && (
@@ -125,11 +126,11 @@ export function CommandPalette() {
         </div>
 
         {/* Footer */}
-        <div className="border-t border-zinc-800 px-4 py-2.5 flex items-center gap-4 text-[10px] text-zinc-600">
-          <span><kbd className="text-zinc-500">↑↓</kbd> 選擇</span>
-          <span><kbd className="text-zinc-500">↵</kbd> 前往</span>
-          <span><kbd className="text-zinc-500">Esc</kbd> 關閉</span>
-          <span className="ml-auto">⌘K</span>
+        <div className="border-t border-warm-100 bg-cream-100 px-4 py-2.5 flex items-center gap-4 text-[10px] text-ink-300">
+          <span><kbd className="text-ink-200">↑↓</kbd> 選擇</span>
+          <span><kbd className="text-ink-200">↵</kbd> 前往</span>
+          <span><kbd className="text-ink-200">Esc</kbd> 關閉</span>
+          <span className="ml-auto text-ink-200">⌘K</span>
         </div>
       </div>
     </div>
@@ -138,7 +139,7 @@ export function CommandPalette() {
 
 function SectionLabel({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <p className={cn('px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-zinc-600', className)}>
+    <p className={cn('px-2 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-widest text-ink-300', className)}>
       {children}
     </p>
   )
@@ -149,17 +150,17 @@ function PaletteItem({ item, active, onClick }: { item: Item; active: boolean; o
     <button
       onClick={onClick}
       className={cn(
-        'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors',
-        active ? 'bg-indigo-600 text-white' : 'text-zinc-300 hover:bg-zinc-800'
+        'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-all duration-100',
+        active ? 'bg-terra-500 text-white shadow-[var(--shadow-warm-sm)]' : 'text-ink-600 hover:bg-cream-200'
       )}
     >
-      <span className={cn('text-base', active ? 'text-white' : 'text-zinc-500')}>{item.icon}</span>
+      <span className={cn('text-base shrink-0', active ? 'text-white' : 'text-ink-300')}>{item.icon}</span>
       <span className="flex-1 font-medium">{item.label}</span>
       {item.tag && (
-        <span className={cn('text-xs', active ? 'text-indigo-200' : 'text-zinc-600')}>{item.tag}</span>
+        <span className={cn('text-xs', active ? 'text-terra-100' : 'text-ink-300')}>{item.tag}</span>
       )}
       {item.shortcut && (
-        <span className={cn('text-[10px] font-mono', active ? 'text-indigo-200' : 'text-zinc-600')}>
+        <span className={cn('text-[10px] font-mono', active ? 'text-terra-100' : 'text-ink-200')}>
           {item.shortcut}
         </span>
       )}

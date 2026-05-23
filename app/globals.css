@@ -1,73 +1,167 @@
 @import "tailwindcss";
 
-@theme inline {
+/* ═══════════════════════════════════════════════════════════════
+   WARM COLOR SYSTEM — AI Career OS
+   Inspired by Notion · Arc · Readwise Reader · Headspace
+   ═══════════════════════════════════════════════════════════════ */
+
+@theme {
   --font-sans: var(--font-geist);
+
+  /* Cream backgrounds — warm paper feel */
+  --color-cream-50:  #FDFCFA;
+  --color-cream-100: #FAF8F5;
+  --color-cream-200: #F5F1EB;
+  --color-cream-300: #EDE8DF;
+  --color-cream-400: #DDD5C8;
+
+  /* Warm borders */
+  --color-warm-100: #F0EBE3;
+  --color-warm-200: #E3DDD3;
+  --color-warm-300: #D4CCC0;
+  --color-warm-400: #C8BDB2;
+
+  /* Ink — warm near-black text */
+  --color-ink-900: #2C2420;
+  --color-ink-700: #4A3D38;
+  --color-ink-500: #6B5E54;
+  --color-ink-400: #8B7D73;
+  --color-ink-300: #9B8C82;
+  --color-ink-200: #C4B5AB;
+  --color-ink-100: #DDD3CC;
+
+  /* Terracotta — primary accent */
+  --color-terra-900: #7D2E18;
+  --color-terra-700: #A84F31;
+  --color-terra-600: #B5553A;
+  --color-terra-500: #C15C3B;
+  --color-terra-400: #D07556;
+  --color-terra-300: #E09B80;
+  --color-terra-200: #EDBBAA;
+  --color-terra-100: #F5E6DF;
+  --color-terra-50:  #FBF2EE;
+
+  /* Sage green — secondary accent */
+  --color-sage-700: #4A6E52;
+  --color-sage-600: #597F61;
+  --color-sage-500: #6B8F71;
+  --color-sage-400: #8AAD90;
+  --color-sage-300: #9BB8A0;
+  --color-sage-100: #E8F0E9;
+  --color-sage-50:  #F3F7F3;
+
+  /* Warm amber — highlights */
+  --color-honey-500: #D4A853;
+  --color-honey-400: #DDB96A;
+  --color-honey-100: #FDF3DC;
+  --color-honey-50:  #FFFBF0;
+
+  /* Clay — warm brown accent */
+  --color-clay-700: #6B4F44;
+  --color-clay-500: #8B6356;
+  --color-clay-300: #B99086;
+  --color-clay-100: #F2E8E4;
+
+  /* Warm shadows */
+  --shadow-warm-xs: 0 1px 2px rgba(44, 36, 32, 0.05);
+  --shadow-warm-sm: 0 1px 4px rgba(44, 36, 32, 0.07), 0 1px 2px rgba(44, 36, 32, 0.04);
+  --shadow-warm-md: 0 4px 12px rgba(44, 36, 32, 0.08), 0 2px 4px rgba(44, 36, 32, 0.05);
+  --shadow-warm-lg: 0 8px 24px rgba(44, 36, 32, 0.10), 0 4px 8px rgba(44, 36, 32, 0.06);
+  --shadow-warm-xl: 0 16px 40px rgba(44, 36, 32, 0.12), 0 8px 16px rgba(44, 36, 32, 0.07);
 }
 
-/* ── Dark base ─────────────────────────────────────────────── */
+/* ── Base styles ────────────────────────────────────────────── */
 html, body {
   font-family: var(--font-geist, system-ui, sans-serif);
-  background-color: #09090B;   /* zinc-950 */
-  color: #FAFAFA;              /* zinc-50 */
+  background-color: #FAF8F5;   /* cream-100 — warm paper */
+  color: #2C2420;              /* ink-900 — warm near-black */
   -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
 }
 
-/* ── Custom scrollbar ──────────────────────────────────────── */
+/* ── Warm scrollbar ────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #3F3F46; border-radius: 9999px; }
-::-webkit-scrollbar-thumb:hover { background: #52525B; }
+::-webkit-scrollbar-thumb { background: #D4CCC0; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #C8BDB2; }
 
-/* ── Gradient utilities ────────────────────────────────────── */
-.gradient-brand {
-  background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%);
+/* ── Warm selection ────────────────────────────────────────── */
+::selection { background: #F5E6DF; color: #2C2420; }
+
+/* ── Warm card system ──────────────────────────────────────── */
+.card-warm {
+  background: #FFFFFF;
+  border: 1px solid #E3DDD3;
+  border-radius: 14px;
+  box-shadow: var(--shadow-warm-sm);
 }
-.gradient-text {
-  background: linear-gradient(135deg, #818CF8 0%, #A78BFA 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-.gradient-border {
-  border-image: linear-gradient(135deg, #6366F1, #8B5CF6) 1;
+.card-warm-hover:hover {
+  border-color: #D4CCC0;
+  box-shadow: var(--shadow-warm-md);
+  transform: translateY(-1px);
+  transition: all 0.18s ease;
 }
 
-/* ── Glow effects ──────────────────────────────────────────── */
-.glow-indigo  { box-shadow: 0 0 40px rgba(99, 102, 241, 0.18); }
-.glow-sm      { box-shadow: 0 0 16px rgba(99, 102, 241, 0.12); }
+/* ── Warm surface variants ─────────────────────────────────── */
+.surface-cream  { background: #FAF8F5; }
+.surface-white  { background: #FFFFFF; }
+.surface-warm   { background: #F5F1EB; }
 
-/* ── Glassmorphism ─────────────────────────────────────────── */
-.glass {
-  background: rgba(24, 24, 27, 0.75);
+/* ── Terracotta accent utilities ────────────────────────────── */
+.btn-terra {
+  background: #C15C3B;
+  color: white;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+.btn-terra:hover  { background: #A84F31; }
+.btn-terra:active { transform: scale(0.98); }
+
+/* ── Subtle divider ────────────────────────────────────────── */
+.divider-warm { border-color: #E3DDD3; }
+
+/* ── Notebook left-border accent ───────────────────────────── */
+.border-l-terra { border-left: 3px solid #C15C3B; }
+.border-l-sage  { border-left: 3px solid #6B8F71; }
+.border-l-honey { border-left: 3px solid #D4A853; }
+
+/* ── Warm frosted glass header ─────────────────────────────── */
+.glass-warm {
+  background: rgba(250, 248, 245, 0.85);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
 }
 
 /* ── Animations ────────────────────────────────────────────── */
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-@keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 20px rgba(99,102,241,0.08); }
-  50%       { box-shadow: 0 0 36px rgba(99,102,241,0.28); }
+@keyframes softPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
 }
-@keyframes shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
+@keyframes shimmerWarm {
+  0%   { background-position: -600px 0; }
+  100% { background-position: 600px 0; }
 }
 
-.animate-fade-in-up  { animation: fadeInUp  0.35s ease both; }
-.animate-pulse-glow  { animation: pulseGlow  3s ease-in-out infinite; }
-.animate-shimmer {
-  background: linear-gradient(90deg, #18181B 25%, #27272A 50%, #18181B 75%);
-  background-size: 800px 100%;
-  animation: shimmer 1.5s infinite;
+.animate-fade-in-up { animation: fadeInUp 0.3s ease both; }
+.animate-soft-pulse { animation: softPulse 2.5s ease-in-out infinite; }
+.animate-shimmer-warm {
+  background: linear-gradient(90deg, #F5F1EB 25%, #FAF8F5 50%, #F5F1EB 75%);
+  background-size: 1200px 100%;
+  animation: shimmerWarm 1.8s infinite;
 }
 
 /* ── Command palette backdrop ──────────────────────────────── */
 .cmd-overlay {
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(44, 36, 32, 0.30);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* ── Warm focus ring ───────────────────────────────────────── */
+.focus-warm:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(193, 92, 59, 0.18);
 }
