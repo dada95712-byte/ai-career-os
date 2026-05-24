@@ -23,29 +23,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '僅支援 PDF 或 DOCX 格式' }, { status: 400 })
     }
 
-    const prompt = `請解析以下履歷內容，並以 JSON 格式回傳以下欄位：
-- name: 姓名
-- email: 電子郵件
-- phone: 電話
-- skills: 技能陣列（字串）
-- experiences: 工作經歷陣列，每筆包含 company, title, description
-- education: 學歷陣列（字串）
+    const prompt = `Parse the following resume content. Auto-detect the language (Traditional Chinese or English) and reply in the SAME language as the resume.
 
-履歷內容：
+Return ONLY a JSON object with these fields:
+- name: full name (string)
+- email: email address (string)
+- phone: phone number (string)
+- skills: array of skill strings (keep in original language)
+- experiences: array of objects, each with { company, title, description } (strings)
+- education: array of objects, each with { school, degree, major, year } (strings)
+
+Resume content:
 ${rawText.slice(0, 4000)}
 
-請只回傳 JSON，不要其他文字。`
+Return ONLY valid JSON, no other text.`
 
     const aiResponse = await callAI(prompt)
     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
     let parsed: Record<string, unknown> = {}
 
     if (jsonMatch) {
-      try {
-        parsed = JSON.parse(jsonMatch[0])
-      } catch {
-        parsed = {}
-      }
+      try { parsed = JSON.parse(jsonMatch[0]) } catch { parsed = {} }
     }
 
     return NextResponse.json({

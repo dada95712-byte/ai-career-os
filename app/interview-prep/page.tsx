@@ -1,42 +1,146 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { useReactToPrint } from 'react-to-print'
 
-interface Question { id: string; question: string; type: 'behavioral' | 'technical' | 'situational' | 'general'; userAnswer?: string; aiFeedback?: string; aiScore?: number }
+// ── Types ──────────────────────────────────────────────────────────────────────
 
-const TYPE: Record<string, { label: string; color: 'info' | 'warning' | 'success' | 'default' }> = {
-  behavioral:  { label: '行為面試', color: 'info' },
-  technical:   { label: '技術面試', color: 'warning' },
-  situational: { label: '情境題',   color: 'success' },
-  general:     { label: '一般題',   color: 'default' },
+interface Question {
+  id: string; question: string; questionEn?: string
+  type: 'behavioral' | 'technical' | 'situational' | 'general'
+  userAnswer?: string; aiFeedback?: string; aiScore?: number
+}
+interface RealRecord {
+  id: string; question: string; answer: string; score?: number; feedback?: string; date: string
+}
+
+const TYPE: Record<string, { label: string; labelEn: string; color: 'info' | 'warning' | 'success' | 'default' }> = {
+  behavioral:  { label: '行為面試', labelEn: 'Behavioral',  color: 'info' },
+  technical:   { label: '技術面試', labelEn: 'Technical',   color: 'warning' },
+  situational: { label: '情境題',   labelEn: 'Situational', color: 'success' },
+  general:     { label: '一般題',   labelEn: 'General',     color: 'default' },
 }
 
 const QA_BANK = [
-  { category: '工程師', questions: ['請描述一個你解決過的技術難題，你是如何找到解決方案的？','你如何確保程式碼品質？','描述一次你在 deadline 壓力下完成專案的經驗。','說說你最熟悉的系統架構設計原則。'] },
-  { category: '產品經理', questions: ['你如何決定產品功能的優先順序？','描述一個你主導的功能從想法到上線的過程。','當工程師認為功能無法如期完成，你如何處理？','指標下滑時你的排查流程是什麼？'] },
-  { category: '行銷', questions: ['請描述一個效果最好的行銷活動。','你如何設定和追蹤行銷 KPI？','預算縮減 50% 你如何調整策略？','說說你用數據改變行銷方向的經驗。'] },
-  { category: '通用', questions: ['請簡單介紹你自己，以及你為什麼想應徵這個職位。','你最大的優點和缺點各是什麼？','五年後你希望在職業上達到什麼目標？','描述一次你與同事意見不合的處理方式。'] },
+  { category: '工程師', questions: [
+    { zh: '請描述一個你解決過的技術難題，你是如何找到解決方案的？', en: 'Describe a technical challenge you solved. How did you find the solution?' },
+    { zh: '你如何確保程式碼品質？', en: 'How do you ensure code quality?' },
+    { zh: '描述一次你在 deadline 壓力下完成專案的經驗。', en: 'Describe a time you completed a project under deadline pressure.' },
+    { zh: '說說你最熟悉的系統架構設計原則。', en: 'Describe the system architecture principles you are most familiar with.' },
+  ]},
+  { category: '產品經理', questions: [
+    { zh: '你如何決定產品功能的優先順序？', en: 'How do you prioritize product features?' },
+    { zh: '描述一個你主導的功能從想法到上線的過程。', en: 'Describe a feature you led from idea to launch.' },
+    { zh: '當工程師認為功能無法如期完成，你如何處理？', en: "What do you do when engineers say a feature can't be delivered on time?" },
+    { zh: '指標下滑時你的排查流程是什麼？', en: 'What is your process when key metrics decline?' },
+  ]},
+  { category: '通用', questions: [
+    { zh: '請簡單介紹你自己，以及你為什麼想應徵這個職位。', en: 'Please introduce yourself and explain why you are applying for this position.' },
+    { zh: '你最大的優點和缺點各是什麼？', en: 'What are your greatest strengths and weaknesses?' },
+    { zh: '五年後你希望在職業上達到什麼目標？', en: 'Where do you see yourself professionally in 5 years?' },
+    { zh: '描述一次你與同事意見不合的處理方式。', en: 'Describe a time you disagreed with a colleague and how you handled it.' },
+  ]},
 ]
 
+function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }
+const scoreCol = (s: number) => s >= 8 ? 'text-sage-600' : s >= 6 ? 'text-honey-500' : 'text-red-400'
+
+type SpeechRecognitionCtor = new () => {
+  continuous: boolean; interimResults: boolean; lang: string
+  start(): void; stop(): void
+  onresult: ((event: Event & { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null
+  onerror: ((event: Event) => void) | null
+  onend: (() => void) | null
+}
+declare global {
+  interface Window { SpeechRecognition: SpeechRecognitionCtor; webkitSpeechRecognition: SpeechRecognitionCtor }
+}
+
+// ── Component ──────────────────────────────────────────────────────────────────
+
 export default function InterviewPrepPage() {
-  const [tab, setTab] = useState<'mock' | 'qa'>('mock')
+  const [tab, setTab] = useState<'mock' | 'qa' | 'record'>('mock')
+
+  // Mock interview
   const [role, setRole] = useState(''); const [company, setCompany] = useState('')
   const [questions, setQuestions] = useState<Question[]>([])
   const [generating, setGenerating] = useState(false)
   const [selectedQ, setSelectedQ] = useState<Question | null>(null)
-  const [answer, setAnswer] = useState(''); const [evaluating, setEvaluating] = useState(false)
-  const [selectedCat, setSelectedCat] = useState('通用')
-  const [practiceQ, setPracticeQ] = useState<string | null>(null)
-  const [practiceAnswer, setPracticeAnswer] = useState(''); const [practiceFeedback, setPracticeFeedback] = useState(''); const [practiceEval, setPracticeEval] = useState(false)
+  const [answer, setAnswer] = useState(''); const [answerLang, setAnswerLang] = useState<'zh' | 'en'>('zh')
+  const [evaluating, setEvaluating] = useState(false)
+  const [showEn, setShowEn] = useState(false)
 
+  // QA bank
+  const [selectedCat, setSelectedCat] = useState('通用')
+  const [practiceQ, setPracticeQ] = useState<{ zh: string; en: string } | null>(null)
+  const [practiceAnswer, setPracticeAnswer] = useState('')
+  const [practiceFeedback, setPracticeFeedback] = useState('')
+  const [practiceEval, setPracticeEval] = useState(false)
+
+  // Real interview record
+  const [records, setRecords] = useState<RealRecord[]>([])
+  const [recQuestion, setRecQuestion] = useState('')
+  const [recAnswer, setRecAnswer] = useState('')
+  const [recEvaluating, setRecEvaluating] = useState(false)
+  const printRef = useRef<HTMLDivElement>(null)
+  const handlePrint = useReactToPrint({ contentRef: printRef })
+
+  // Voice / speech
+  const [voiceActive, setVoiceActive] = useState(false)
+  const [voiceTarget, setVoiceTarget] = useState<'mock' | 'practice' | 'record'>('mock')
+  const recognitionRef = useRef<InstanceType<SpeechRecognitionCtor> | null>(null)
+
+  // Load records from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('interview-records')
+    if (saved) setRecords(JSON.parse(saved))
+  }, [])
+
+  const saveRecords = useCallback((next: RealRecord[]) => {
+    setRecords(next)
+    localStorage.setItem('interview-records', JSON.stringify(next))
+  }, [])
+
+  // ── Voice mode ──
+  function startVoice(target: typeof voiceTarget) {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) { alert('你的瀏覽器不支援語音輸入，請使用 Chrome 或 Safari'); return }
+
+    if (voiceActive) {
+      recognitionRef.current?.stop()
+      setVoiceActive(false)
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = answerLang === 'en' ? 'en-US' : 'zh-TW'
+    recognition.continuous = true
+    recognition.interimResults = false
+
+    recognition.onresult = (event) => {
+      const transcript = Array.from(event.results).map((r) => r[0].transcript).join('')
+      if (target === 'mock') setAnswer((p) => p + transcript)
+      else if (target === 'practice') setPracticeAnswer((p) => p + transcript)
+      else setRecAnswer((p) => p + transcript)
+    }
+    recognition.onerror = () => { setVoiceActive(false) }
+    recognition.onend = () => { setVoiceActive(false) }
+
+    recognitionRef.current = recognition
+    recognition.start()
+    setVoiceActive(true)
+    setVoiceTarget(target)
+  }
+
+  // ── Mock interview ──
   async function generateQuestions() {
     if (!role.trim()) return
-    setGenerating(true); setQuestions([]); setSelectedQ(null)
+    setGenerating(true); setQuestions([]); setSelectedQ(null); setAnswer('')
     try {
       const res = await fetch('/api/interview/questions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, company }) })
       const data = await res.json(); setQuestions(data.questions ?? [])
@@ -45,7 +149,7 @@ export default function InterviewPrepPage() {
   }
 
   async function evaluate(forPractice = false) {
-    const q = forPractice ? practiceQ : selectedQ?.question
+    const q = forPractice ? practiceQ?.zh : selectedQ?.question
     const a = forPractice ? practiceAnswer : answer
     if (!q || !a?.trim()) return
     if (forPractice) setPracticeEval(true); else setEvaluating(true)
@@ -62,130 +166,186 @@ export default function InterviewPrepPage() {
     finally { if (forPractice) setPracticeEval(false); else setEvaluating(false) }
   }
 
-  const scoreCol = (s: number) => s >= 8 ? 'text-sage-600' : s >= 6 ? 'text-honey-500' : 'text-red-400'
+  // ── Real record ──
+  async function evaluateRecord() {
+    if (!recQuestion.trim() || !recAnswer.trim()) return
+    setRecEvaluating(true)
+    try {
+      const res = await fetch('/api/interview/evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: recQuestion, answer: recAnswer }) })
+      const data = await res.json()
+      const rec: RealRecord = { id: genId(), question: recQuestion, answer: recAnswer, score: data.score, feedback: data.feedback, date: new Date().toISOString() }
+      saveRecords([rec, ...records])
+      setRecQuestion(''); setRecAnswer('')
+    } catch { /* silent */ }
+    finally { setRecEvaluating(false) }
+  }
+
+  function deleteRecord(id: string) { saveRecords(records.filter((r) => r.id !== id)) }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 lg:p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-ink-900">⬟ Interview Arena</h1>
-        <p className="mt-1 text-sm text-ink-500">AI 模擬面試 · 即時評分 · 台灣職場題庫</p>
+        <h1 className="text-xl md:text-2xl font-bold text-ink-900">⬟ Interview Arena</h1>
+        <p className="mt-1 text-sm text-ink-500">AI 模擬面試 · 常見題庫 · 實際面試記錄 · PDF 匯出</p>
       </div>
 
-      <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-fit shadow-[var(--shadow-warm-xs)]">
-        {(['mock', 'qa'] as const).map((t) => (
+      <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-full sm:w-fit shadow-[var(--shadow-warm-xs)] overflow-x-auto">
+        {([
+          ['mock',   '⬟ 模擬面試'],
+          ['qa',     '📋 常見題庫'],
+          ['record', '🎙 實際記錄'],
+        ] as const).map(([t, label]) => (
           <button key={t} onClick={() => { setTab(t); setSelectedQ(null); setAnswer('') }}
-            className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${tab === t ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'}`}>
-            {t === 'mock' ? '⬟ 模擬面試' : '📋 常見題庫'}
+            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${tab === t ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'}`}>
+            {label}
           </button>
         ))}
       </div>
 
-      {/* ── Mock Interview ───────────────────────────────────── */}
+      {/* ── Mock Interview ──────────────────────────────────── */}
       {tab === 'mock' && (
         <div className="space-y-5">
-          <Card>
-            <CardHeader><CardTitle>設定面試情境</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-3">
-                <Input label="目標職位" placeholder="例如：資深前端工程師" value={role} onChange={(e) => setRole(e.target.value)} className="flex-1" />
-                <Input label="公司（選填）" placeholder="例如：LINE、台積電" value={company} onChange={(e) => setCompany(e.target.value)} className="w-44" />
-              </div>
-              <Button variant="primary" onClick={generateQuestions} loading={generating} disabled={!role.trim()}>
-                🎲 AI 生成面試題目
-              </Button>
-            </CardContent>
-          </Card>
-
-          {questions.length > 0 && (
-            <div className="flex gap-5">
-              <div className="w-72 shrink-0 space-y-2 overflow-y-auto max-h-[65vh]">
-                {questions.map((q) => (
-                  <button key={q.id} onClick={() => { setSelectedQ(q); setAnswer(q.userAnswer ?? '') }}
-                    className={`w-full text-left rounded-2xl border p-4 transition-all duration-150 ${selectedQ?.id === q.id ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300 hover:bg-cream-100'}`}>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <p className="text-sm text-ink-600 line-clamp-2 leading-snug">{q.question}</p>
-                      {q.aiScore !== undefined && (
-                        <span className={`shrink-0 text-sm font-bold ${scoreCol(q.aiScore)}`}>{q.aiScore}/10</span>
-                      )}
+          {/* Left/right layout */}
+          <div className="flex flex-col lg:flex-row gap-5">
+            {/* Left: Setup */}
+            <div className="w-full lg:w-72 shrink-0 space-y-4">
+              <Card>
+                <CardHeader><CardTitle>設定面試情境</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  <Input label="目標職位" placeholder="例如：資深前端工程師" value={role} onChange={(e) => setRole(e.target.value)} />
+                  <Input label="公司（選填）" placeholder="例如：LINE、台積電" value={company} onChange={(e) => setCompany(e.target.value)} />
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-ink-400">回答語言</label>
+                    <div className="flex gap-1 rounded-lg border border-warm-200 bg-white p-0.5">
+                      {(['zh', 'en'] as const).map((l) => (
+                        <button key={l} onClick={() => setAnswerLang(l)}
+                          className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${answerLang === l ? 'bg-cream-200 text-ink-700' : 'text-ink-400'}`}>
+                          {l === 'zh' ? '中文' : 'English'}
+                        </button>
+                      ))}
                     </div>
-                    <Badge variant={TYPE[q.type]?.color ?? 'default'}>{TYPE[q.type]?.label}</Badge>
-                  </button>
-                ))}
-              </div>
+                  </div>
+                  <Button variant="primary" onClick={generateQuestions} loading={generating} disabled={!role.trim()} className="w-full">
+                    🎲 AI 生成面試題目
+                  </Button>
+                </CardContent>
+              </Card>
 
-              {selectedQ && (
-                <div className="flex-1">
-                  <Card>
-                    <CardHeader>
-                      <Badge variant={TYPE[selectedQ.type]?.color ?? 'default'} className="w-fit mb-2">
-                        {TYPE[selectedQ.type]?.label}
-                      </Badge>
-                      <p className="text-sm font-medium text-ink-900 leading-relaxed">{selectedQ.question}</p>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <Textarea label="你的回答" placeholder="請用 STAR 方法（情境、任務、行動、結果）回答..." rows={8} value={answer} onChange={(e) => setAnswer(e.target.value)} />
-                      <Button variant="primary" onClick={() => evaluate(false)} loading={evaluating} disabled={!answer.trim()}>
-                        🤖 AI 評分與建議
-                      </Button>
-                      {selectedQ.aiFeedback && (
-                        <div className="space-y-3">
-                          <div className="flex items-center gap-3">
-                            <span className={`text-3xl font-bold ${scoreCol(selectedQ.aiScore ?? 0)}`}>{selectedQ.aiScore}</span>
-                            <span className="text-sm text-ink-500">/ 10</span>
-                          </div>
-                          <div className="rounded-xl border border-terra-100 bg-terra-50 p-4">
-                            <p className="text-xs font-semibold text-terra-500 mb-2">AI 回饋</p>
-                            <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">{selectedQ.aiFeedback}</p>
-                          </div>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+              {/* Question list */}
+              {questions.length > 0 && (
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+                  {questions.map((q) => (
+                    <button key={q.id} onClick={() => { setSelectedQ(q); setAnswer(q.userAnswer ?? '') }}
+                      className={`w-full text-left rounded-2xl border p-3 transition-all ${selectedQ?.id === q.id ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                      <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <p className="text-xs text-ink-600 line-clamp-2 leading-snug">{q.question}</p>
+                        {q.aiScore !== undefined && <span className={`shrink-0 text-sm font-bold ${scoreCol(q.aiScore)}`}>{q.aiScore}/10</span>}
+                      </div>
+                      <Badge variant={TYPE[q.type]?.color ?? 'default'}>{TYPE[q.type]?.label}</Badge>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
-          )}
 
-          {questions.length === 0 && !generating && (
-            <div className="flex flex-col items-center justify-center py-20">
-              <div className="mb-3 text-4xl">⬟</div>
-              <p className="text-sm text-ink-500">輸入目標職位，AI 將生成 8 道客製化面試題</p>
+            {/* Right: Answer area */}
+            <div className="flex-1">
+              {selectedQ ? (
+                <Card>
+                  <CardHeader>
+                    <Badge variant={TYPE[selectedQ.type]?.color ?? 'default'} className="w-fit mb-2">
+                      {TYPE[selectedQ.type]?.label} · {TYPE[selectedQ.type]?.labelEn}
+                    </Badge>
+                    <div>
+                      <p className="text-sm font-semibold text-ink-900 leading-relaxed">{selectedQ.question}</p>
+                      {selectedQ.questionEn && (
+                        <button onClick={() => setShowEn((p) => !p)} className="text-xs text-terra-500 mt-1">
+                          {showEn ? '▲ 收起英文題目' : '▼ 顯示英文題目'}
+                        </button>
+                      )}
+                      {showEn && selectedQ.questionEn && (
+                        <p className="text-sm text-ink-500 mt-1 italic leading-relaxed">{selectedQ.questionEn}</p>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Textarea
+                        label={answerLang === 'en' ? 'Your Answer (English)' : '你的回答'}
+                        placeholder={answerLang === 'en' ? 'Use STAR method: Situation, Task, Action, Result...' : '請用 STAR 方法（情境、任務、行動、結果）回答...'}
+                        rows={6} value={answer} onChange={(e) => setAnswer(e.target.value)} />
+                      <button
+                        onClick={() => startVoice('mock')}
+                        className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all ${voiceActive && voiceTarget === 'mock' ? 'border-red-300 bg-red-50 text-red-500' : 'border-warm-300 text-ink-400 hover:border-terra-300'}`}>
+                        {voiceActive && voiceTarget === 'mock' ? '⏹ 停止錄音' : '🎙 語音輸入'}
+                      </button>
+                    </div>
+                    <Button variant="primary" onClick={() => evaluate(false)} loading={evaluating} disabled={!answer.trim()}>🤖 AI 評分與建議</Button>
+                    {selectedQ.aiFeedback && (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <span className={`text-3xl font-bold ${scoreCol(selectedQ.aiScore ?? 0)}`}>{selectedQ.aiScore}</span>
+                          <span className="text-sm text-ink-500">/ 10</span>
+                        </div>
+                        <div className="rounded-xl border border-terra-100 bg-terra-50 p-4">
+                          <p className="text-xs font-semibold text-terra-500 mb-2">AI 回饋</p>
+                          <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">{selectedQ.aiFeedback}</p>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : questions.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <p className="text-4xl mb-3">⬟</p>
+                  <p className="text-sm text-ink-500">輸入目標職位，AI 將生成 8 道客製化面試題</p>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <p className="text-sm text-ink-500">← 從左側選擇一道題目開始練習</p>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* ── QA Bank ──────────────────────────────────────────── */}
+      {/* ── QA Bank ─────────────────────────────────────────── */}
       {tab === 'qa' && (
-        <div className="flex gap-5">
-          <div className="w-40 shrink-0 space-y-1">
+        <div className="flex flex-col sm:flex-row gap-5">
+          <div className="flex sm:flex-col gap-1 sm:w-32 shrink-0 overflow-x-auto">
             {QA_BANK.map((cat) => (
               <button key={cat.category} onClick={() => { setSelectedCat(cat.category); setPracticeQ(null); setPracticeAnswer(''); setPracticeFeedback('') }}
-                className={`w-full text-left rounded-lg px-3 py-2 text-sm transition-colors ${selectedCat === cat.category ? 'bg-terra-50 text-terra-600 font-medium' : 'text-ink-500 hover:bg-cream-200 hover:text-ink-600'}`}>
+                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors ${selectedCat === cat.category ? 'bg-terra-50 text-terra-600 font-medium' : 'text-ink-500 hover:bg-cream-200 hover:text-ink-600'}`}>
                 {cat.category}
               </button>
             ))}
           </div>
-
           <div className="flex-1 space-y-3">
             {QA_BANK.find((c) => c.category === selectedCat)?.questions.map((q, i) => (
               <button key={i} onClick={() => { setPracticeQ(q); setPracticeAnswer(''); setPracticeFeedback('') }}
-                className={`w-full text-left rounded-2xl border p-4 transition-all ${practiceQ === q ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
-                <p className="text-sm text-ink-600">{q}</p>
+                className={`w-full text-left rounded-2xl border p-4 transition-all ${practiceQ?.zh === q.zh ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                <p className="text-sm text-ink-600">{q.zh}</p>
+                <p className="text-xs text-ink-400 mt-1 italic">{q.en}</p>
               </button>
             ))}
-
             {practiceQ && (
               <Card className="border-terra-100">
                 <CardHeader>
                   <CardTitle>練習回答</CardTitle>
-                  <p className="text-sm text-ink-400 mt-1">{practiceQ}</p>
+                  <p className="text-sm text-ink-700 mt-1">{practiceQ.zh}</p>
+                  <p className="text-xs text-ink-400 italic mt-0.5">{practiceQ.en}</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <Textarea placeholder="請輸入你的回答..." rows={6} value={practiceAnswer} onChange={(e) => setPracticeAnswer(e.target.value)} />
-                  <Button variant="primary" onClick={() => evaluate(true)} loading={practiceEval} disabled={!practiceAnswer.trim()}>
-                    🤖 AI 評分
-                  </Button>
+                  <button
+                    onClick={() => startVoice('practice')}
+                    className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all ${voiceActive && voiceTarget === 'practice' ? 'border-red-300 bg-red-50 text-red-500' : 'border-warm-300 text-ink-400 hover:border-terra-300'}`}>
+                    {voiceActive && voiceTarget === 'practice' ? '⏹ 停止錄音' : '🎙 語音輸入'}
+                  </button>
+                  <Button variant="primary" onClick={() => evaluate(true)} loading={practiceEval} disabled={!practiceAnswer.trim()}>🤖 AI 評分</Button>
                   {practiceFeedback && (
                     <div className="rounded-xl border border-terra-100 bg-terra-50 p-4">
                       <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">{practiceFeedback}</p>
@@ -195,6 +355,77 @@ export default function InterviewPrepPage() {
               </Card>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ── Real Interview Record ────────────────────────────── */}
+      {tab === 'record' && (
+        <div className="space-y-5">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>記錄實際面試題目</CardTitle>
+                {records.length > 0 && (
+                  <Button size="sm" variant="outline" onClick={() => handlePrint()}>匯出 PDF</Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Input label="面試題目" placeholder="輸入實際被問到的問題..." value={recQuestion} onChange={(e) => setRecQuestion(e.target.value)} />
+              <div className="space-y-2">
+                <Textarea label="你的回答" placeholder="記錄你當時的回答..." rows={5} value={recAnswer} onChange={(e) => setRecAnswer(e.target.value)} />
+                <button
+                  onClick={() => startVoice('record')}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all ${voiceActive && voiceTarget === 'record' ? 'border-red-300 bg-red-50 text-red-500' : 'border-warm-300 text-ink-400 hover:border-terra-300'}`}>
+                  {voiceActive && voiceTarget === 'record' ? '⏹ 停止錄音' : '🎙 語音輸入'}
+                </button>
+              </div>
+              <Button variant="primary" onClick={evaluateRecord} loading={recEvaluating} disabled={!recQuestion.trim() || !recAnswer.trim()}>
+                🤖 AI 評分 + 儲存到個人題庫
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Printable records */}
+          {records.length > 0 && (
+            <div ref={printRef} className="space-y-3 print:p-6">
+              <h2 className="text-sm font-semibold text-ink-600 print:text-base print:mb-4">我的面試題庫 ({records.length} 題)</h2>
+              {records.map((r) => (
+                <Card key={r.id}>
+                  <CardContent className="pt-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-ink-700">{r.question}</p>
+                        <p className="text-xs text-ink-400 mt-0.5">{new Date(r.date).toLocaleDateString('zh-TW')}</p>
+                        {r.score !== undefined && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className={`text-lg font-bold ${scoreCol(r.score)}`}>{r.score}</span>
+                            <span className="text-xs text-ink-400">/ 10</span>
+                          </div>
+                        )}
+                        <p className="mt-2 text-sm text-ink-600 leading-relaxed">{r.answer}</p>
+                        {r.feedback && (
+                          <div className="mt-3 rounded-xl border border-terra-100 bg-terra-50 p-3">
+                            <p className="text-xs font-semibold text-terra-500 mb-1">AI 回饋與優化建議</p>
+                            <p className="text-xs text-ink-600 whitespace-pre-line leading-relaxed">{r.feedback}</p>
+                          </div>
+                        )}
+                      </div>
+                      <button onClick={() => deleteRecord(r.id)} className="print:hidden rounded-lg border border-warm-200 px-2.5 py-1 text-xs text-ink-400 hover:border-red-200 hover:text-red-400 transition-all shrink-0">刪除</button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+
+          {records.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-20">
+              <p className="text-4xl mb-3">🎙</p>
+              <p className="text-sm text-ink-500">記錄你在真實面試中被問到的問題</p>
+              <p className="text-xs text-ink-400 mt-1">AI 評分後自動存入個人題庫，可匯出 PDF</p>
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,10 +1,5 @@
-import { Sidebar } from '@/components/nav/sidebar'
+import { AppLayout } from '@/components/nav/app-layout'
 
-export default function CareerMatchLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto bg-gray-50">{children}</main>
-    </div>
-  )
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return <AppLayout>{children}</AppLayout>
 }
