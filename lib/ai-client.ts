@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 
-const PRIMARY_MODEL  = 'google/gemini-2.0-flash-exp:free'
-const FALLBACK_MODEL = 'meta-llama/llama-3.1-8b-instruct:free'
+const PRIMARY_MODEL  = 'google/gemini-2.0-flash-lite:free'
+const FALLBACK_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
 const DEFAULT_SYSTEM = '你是一個專業的台灣職涯顧問，請用繁體中文回答。'
 
 // ── Lazy singleton ────────────────────────────────────────────────────────────
