@@ -1,7 +1,7 @@
 import OpenAI from 'openai'
 
-const PRIMARY_MODEL  = 'openrouter/auto'
-const FALLBACK_MODEL = 'meta-llama/llama-3.3-70b:free'
+const PRIMARY_MODEL  = 'meta-llama/llama-3.1-8b-instruct:free'
+const FALLBACK_MODEL = 'mistralai/mistral-7b-instruct:free'
 const DEFAULT_SYSTEM = '你是一個專業的台灣職涯顧問，請用繁體中文回答。'
 
 // ── Lazy singleton ────────────────────────────────────────────────────────────
