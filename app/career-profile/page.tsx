@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { ProgressRing } from '@/components/ui/progress-ring'
+import { ResumeEditor, type SavedResumeData } from '@/components/resume/resume-editor'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -14,11 +14,23 @@ const SKILL_CATEGORIES = ['專業技能', '工具與軟體', '核心職能', '�
 type SkillCategory = typeof SKILL_CATEGORIES[number]
 
 interface TaggedSkill { name: string; category: SkillCategory }
-interface Education { school: string; degree: string; major: string; year: string }
-interface Experience { company: string; title: string; description: string }
+// Extended for WYSIWYG editor — all new fields are optional for backward compat
+interface Education {
+  school: string; degree: string; major: string; year: string
+  startDate?: string; endDate?: string
+}
+interface Experience {
+  company: string; title: string; description: string
+  startDate?: string; endDate?: string; current?: boolean
+}
 interface ParsedResume {
   name: string; email: string; phone: string
-  skills: string[]; experiences: Experience[]; education: Education[]; rawText: string
+  jobTitle?: string; location?: string; linkedin?: string; website?: string; summary?: string
+  skills: string[]
+  experiences: Experience[]
+  education: Education[]
+  languages?: { name: string; level: string }[]
+  rawText: string
 }
 interface ResumeScore { score: number; atsScore: number; suggestions: string[]; keywords: string[] }
 interface ResumeEntry {
@@ -111,9 +123,6 @@ export default function CareerProfilePage() {
   const [editingResumeId, setEditingResumeId] = useState<string | null>(null)
   const [resumeName, setResumeName] = useState('')
   const [editedResume, setEditedResume] = useState<ParsedResume>(EMPTY_RESUME)
-  const [score, setScore] = useState<ResumeScore | null>(null)
-  const [resumeSaved, setResumeSaved] = useState(false)
-  const [scoring, setScoring] = useState(false)
   const [resumeError, setResumeError] = useState('')
   const [parsing, setParsing] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -207,7 +216,7 @@ export default function CareerProfilePage() {
 
   function goToEditor(data: ParsedResume, name: string, source: ResumeEntry['source']) {
     setEditedResume(data); setEditingResumeId(null); setResumeName(name)
-    setScore(null); setResumeError(''); setResumeSaved(false)
+    setResumeError('')
     setResumeView('edit'); setCreateMode('none')
     // Merge skills
     const tagged = data.skills.map((s) => ({ name: s, category: '專業技能' as SkillCategory }))
@@ -222,30 +231,7 @@ export default function CareerProfilePage() {
 
   function startEdit(entry: ResumeEntry) {
     setEditedResume(entry.data); setEditingResumeId(entry.id); setResumeName(entry.name)
-    setScore(null); setResumeError(''); setResumeSaved(false); setResumeView('edit')
-  }
-
-  function saveResumeEntry() {
-    const now = new Date().toISOString()
-    const existing = resumes.find((r) => r.id === editingResumeId)
-    const entry: ResumeEntry = {
-      id: editingResumeId ?? genId(),
-      name: resumeName.trim() || editedResume.name || '我的履歷',
-      language: detectLang(editedResume.rawText),
-      score: score?.score ?? existing?.score ?? null,
-      atsScore: score?.atsScore ?? existing?.atsScore ?? null,
-      isPrimary: existing?.isPrimary ?? resumes.length === 0,
-      source: existing?.source ?? 'manual',
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-      data: editedResume,
-    }
-    const next = editingResumeId
-      ? resumes.map((r) => r.id === editingResumeId ? entry : r)
-      : [...resumes, entry]
-    persistResumes(next)
-    setEditingResumeId(entry.id)
-    setResumeSaved(true); setTimeout(() => setResumeSaved(false), 3000)
+    setResumeView('edit')
   }
 
   function deleteResume(id: string) {
@@ -291,31 +277,6 @@ export default function CareerProfilePage() {
     if (!t) return
     goToEditor({ ...EMPTY_RESUME, ...t.data }, `${t.emoji} ${t.label}`, 'template')
     setSelectedTemplateId('')
-  }
-
-  function updateResume<K extends keyof ParsedResume>(field: K, value: ParsedResume[K]) {
-    setEditedResume((p) => ({ ...p, [field]: value })); setResumeSaved(false)
-  }
-  function updateExp(i: number, field: keyof Experience, value: string) {
-    updateResume('experiences', editedResume.experiences.map((e, idx) => idx === i ? { ...e, [field]: value } : e))
-  }
-  function updateEdu(i: number, field: keyof Education, value: string) {
-    updateResume('education', editedResume.education.map((e, idx) => idx === i ? { ...e, [field]: value } : e))
-  }
-
-  async function handleScore() {
-    const text = editedResume.rawText; if (!text) return
-    setScoring(true)
-    try {
-      const res = await fetch('/api/resume/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resumeText: text }) })
-      const s: ResumeScore = await res.json(); setScore(s)
-      // Persist score in entry
-      if (editingResumeId) {
-        const next = resumes.map((r) => r.id === editingResumeId ? { ...r, score: s.score, atsScore: s.atsScore } : r)
-        persistResumes(next)
-      }
-    } catch { setResumeError('評分失敗') }
-    finally { setScoring(false) }
   }
 
   // ── Skills handlers ───────────────────────────────────────────────────────────
@@ -673,120 +634,35 @@ export default function CareerProfilePage() {
             </div>
           )}
 
-          {/* ── LEVEL 3: Editor ───────────────────────────────────────────────── */}
+          {/* ── LEVEL 3: WYSIWYG Editor ──────────────────────────────────────── */}
           {resumeView === 'edit' && (
-            <div className="space-y-5">
-              {/* Back + resume name */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <button onClick={() => { setResumeView('list'); setScore(null); setResumeError('') }}
-                  className="flex items-center gap-1 text-sm text-ink-400 hover:text-ink-700 transition-colors w-fit">
-                  ← 返回我的履歷
-                </button>
-                <input
-                  className="flex-1 rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm font-medium text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
-                  placeholder="履歷名稱（例如：前端工程師履歷）"
-                  value={resumeName}
-                  onChange={(e) => setResumeName(e.target.value)} />
-              </div>
-
-              {/* Action buttons */}
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant={resumeSaved ? 'sage' : 'primary'} onClick={saveResumeEntry}>
-                  {resumeSaved ? '✓ 已儲存' : '儲存履歷'}
-                </Button>
-                <Button size="sm" onClick={handleScore} loading={scoring} disabled={!editedResume.rawText}>AI 評分</Button>
-              </div>
-
-              {/* Editor grid */}
-              <div className="grid gap-5 lg:grid-cols-2">
-                <Card>
-                  <CardHeader><CardTitle>履歷編輯</CardTitle></CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <Input label="姓名" value={editedResume.name} onChange={(e) => updateResume('name', e.target.value)} />
-                      <Input label="電話" value={editedResume.phone} onChange={(e) => updateResume('phone', e.target.value)} />
-                    </div>
-                    <Input label="Email" value={editedResume.email} onChange={(e) => updateResume('email', e.target.value)} />
-
-                    {/* Skills inline */}
-                    <div>
-                      <p className="text-xs text-ink-400 mb-2">技能</p>
-                      <div className="flex flex-wrap gap-1.5 mb-2">
-                        {editedResume.skills.map((s, i) => (
-                          <div key={i} className="flex items-center gap-1 rounded-full border border-terra-200 bg-terra-50 pl-3 pr-1.5 py-0.5">
-                            <span className="text-xs text-terra-600">{s}</span>
-                            <button onClick={() => updateResume('skills', editedResume.skills.filter((_, j) => j !== i))} className="text-terra-400 hover:text-red-400 text-xs ml-0.5">×</button>
-                          </div>
-                        ))}
-                      </div>
-                      <input className="w-full rounded-lg border border-warm-300 bg-cream-100 px-3 py-1.5 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
-                        placeholder="輸入技能後按 Enter..."
-                        onKeyDown={(e) => { if (e.key === 'Enter') { const t = (e.target as HTMLInputElement).value.trim(); if (t && !editedResume.skills.includes(t)) { updateResume('skills', [...editedResume.skills, t]); (e.target as HTMLInputElement).value = '' } } }} />
-                    </div>
-
-                    {/* Experiences */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs text-ink-400">工作經歷</p>
-                        <button onClick={() => updateResume('experiences', [...editedResume.experiences, { company: '', title: '', description: '' }])} className="text-xs text-terra-500 hover:text-terra-600">+ 新增</button>
-                      </div>
-                      {editedResume.experiences.map((exp, i) => (
-                        <div key={i} className="mb-3 rounded-xl bg-cream-100 p-3 space-y-2">
-                          <div className="flex gap-2">
-                            <input className="flex-1 rounded-lg border border-warm-300 bg-white px-2.5 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" placeholder="公司" value={exp.company} onChange={(e) => updateExp(i, 'company', e.target.value)} />
-                            <input className="flex-1 rounded-lg border border-warm-300 bg-white px-2.5 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" placeholder="職稱" value={exp.title} onChange={(e) => updateExp(i, 'title', e.target.value)} />
-                            <button onClick={() => updateResume('experiences', editedResume.experiences.filter((_, j) => j !== i))} className="text-ink-400 hover:text-red-400 text-xs">×</button>
-                          </div>
-                          <textarea className="w-full rounded-lg border border-warm-300 bg-white px-2.5 py-1.5 text-xs text-ink-600 focus:border-terra-400 focus:outline-none resize-none" rows={2} placeholder="工作描述" value={exp.description} onChange={(e) => updateExp(i, 'description', e.target.value)} />
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Education */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs text-ink-400">學歷</p>
-                        <button onClick={() => updateResume('education', [...editedResume.education, { school: '', degree: '', major: '', year: '' }])} className="text-xs text-terra-500 hover:text-terra-600">+ 新增</button>
-                      </div>
-                      {editedResume.education.map((edu, i) => (
-                        <div key={i} className="mb-2 rounded-xl bg-cream-100 p-3 space-y-2">
-                          <div className="flex gap-2">
-                            <input className="flex-1 rounded-lg border border-warm-300 bg-white px-2.5 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" placeholder="學校" value={edu.school} onChange={(e) => updateEdu(i, 'school', e.target.value)} />
-                            <input className="w-20 rounded-lg border border-warm-300 bg-white px-2.5 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" placeholder="畢業年" value={edu.year} onChange={(e) => updateEdu(i, 'year', e.target.value)} />
-                            <button onClick={() => updateResume('education', editedResume.education.filter((_, j) => j !== i))} className="text-ink-400 hover:text-red-400 text-xs">×</button>
-                          </div>
-                          <div className="flex gap-2">
-                            <input className="flex-1 rounded-lg border border-warm-300 bg-white px-2.5 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" placeholder="學位" value={edu.degree} onChange={(e) => updateEdu(i, 'degree', e.target.value)} />
-                            <input className="flex-1 rounded-lg border border-warm-300 bg-white px-2.5 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" placeholder="科系" value={edu.major} onChange={(e) => updateEdu(i, 'major', e.target.value)} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {score && (
-                  <Card className="border-terra-100">
-                    <CardHeader><CardTitle>AI 評分報告</CardTitle></CardHeader>
-                    <CardContent className="space-y-5">
-                      <div className="flex gap-8 justify-center">
-                        <div className="text-center"><ProgressRing score={score.score} size={90} strokeWidth={8} animate /><p className="text-xs text-ink-500 mt-2">整體評分</p></div>
-                        <div className="text-center"><ProgressRing score={score.atsScore} size={90} strokeWidth={8} animate /><p className="text-xs text-ink-500 mt-2">ATS 友善度</p></div>
-                      </div>
-                      <div className="space-y-2">
-                        {score.suggestions.map((s, i) => (
-                          <div key={i} className="flex items-start gap-2 rounded-lg bg-honey-500/5 border border-amber-500/15 px-3 py-2">
-                            <span className="text-honey-500 text-sm mt-0.5">⚠</span><p className="text-xs text-ink-600">{s}</p>
-                          </div>
-                        ))}
-                      </div>
-                      <div><p className="text-xs text-ink-400 mb-2">重要關鍵字</p><div className="flex flex-wrap gap-1.5">{score.keywords.map((k) => <Badge key={k} variant="success">{k}</Badge>)}</div></div>
-                    </CardContent>
-                  </Card>
-                )}
-              </div>
-              {resumeError && <p className="text-sm text-red-400">{resumeError}</p>}
-            </div>
+            <ResumeEditor
+              initialData={editedResume as SavedResumeData}
+              initialName={resumeName}
+              onSave={(data, name) => {
+                const now = new Date().toISOString()
+                const existing = resumes.find((r) => r.id === editingResumeId)
+                const newId = editingResumeId ?? genId()
+                const entry: ResumeEntry = {
+                  id: newId,
+                  name: name.trim() || data.name || '我的履歷',
+                  language: detectLang(data.rawText),
+                  score: existing?.score ?? null,
+                  atsScore: existing?.atsScore ?? null,
+                  isPrimary: existing?.isPrimary ?? resumes.length === 0,
+                  source: existing?.source ?? 'manual',
+                  createdAt: existing?.createdAt ?? now,
+                  updatedAt: now,
+                  data: data as ParsedResume,
+                }
+                const next = editingResumeId
+                  ? resumes.map((r) => r.id === editingResumeId ? entry : r)
+                  : [...resumes, entry]
+                persistResumes(next)
+                if (!editingResumeId) setEditingResumeId(newId)
+              }}
+              onBack={() => { setResumeView('list'); setResumeError('') }}
+            />
           )}
         </div>
       )}
