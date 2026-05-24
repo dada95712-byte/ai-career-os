@@ -38,11 +38,6 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="px-6 py-24 text-center">
         <div className="mx-auto max-w-2xl">
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-warm-300 bg-white px-4 py-1.5 text-xs font-medium text-ink-500 shadow-[var(--shadow-warm-xs)]">
-            <span className="h-1.5 w-1.5 rounded-full bg-terra-400 animate-soft-pulse" />
-            🇹🇼 專為台灣求職者設計 · Google Gemini 驅動
-          </div>
-
           <h1 className="mb-5 text-4xl font-bold leading-snug tracking-tight text-ink-900 sm:text-5xl">
             讓 AI 成為你的
             <br />
@@ -64,23 +59,6 @@ export default function LandingPage() {
             </Link>
           </div>
           <p className="mt-4 text-xs text-ink-300">無需信用卡 · 基本功能永久免費</p>
-        </div>
-      </section>
-
-      {/* Stats strip */}
-      <section className="border-y border-warm-200 bg-white px-6 py-8">
-        <div className="mx-auto flex max-w-3xl flex-wrap justify-center gap-10">
-          {[
-            { num: '5',       label: '核心功能模組' },
-            { num: 'Gemini',  label: '2.0 Flash 驅動' },
-            { num: '104',     label: '台灣職缺整合' },
-            { num: '繁中',    label: 'AI 原生語言' },
-          ].map((s) => (
-            <div key={s.label} className="text-center">
-              <p className="text-xl font-bold text-terra-500">{s.num}</p>
-              <p className="text-xs text-ink-400 mt-0.5">{s.label}</p>
-            </div>
-          ))}
         </div>
       </section>
 
