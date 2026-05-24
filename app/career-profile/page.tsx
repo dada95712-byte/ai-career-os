@@ -21,6 +21,18 @@ interface ParsedResume {
   skills: string[]; experiences: Experience[]; education: Education[]; rawText: string
 }
 interface ResumeScore { score: number; atsScore: number; suggestions: string[]; keywords: string[] }
+interface ResumeEntry {
+  id: string
+  name: string
+  language: 'zh' | 'en'
+  score: number | null
+  atsScore: number | null
+  isPrimary: boolean
+  source: 'upload' | 'template' | 'linkedin' | 'manual'
+  createdAt: string
+  updatedAt: string
+  data: ParsedResume
+}
 interface JournalImage { url: string; aiDescription?: string; uploadedAt: string }
 interface JournalEntry {
   id: string; title: string; company: string; date: string
@@ -47,26 +59,11 @@ const CATEGORY_COLORS: Record<SkillCategory, string> = {
 }
 
 const RESUME_TEMPLATES = [
-  {
-    id: 'freshman', label: '🎓 新鮮人', desc: '剛畢業，強調學習能力',
-    data: { name: '王小明', email: 'example@gmail.com', phone: '0912-345-678', skills: ['Python', 'Microsoft Office', '數據分析', '快速學習', '英文溝通'], experiences: [{ company: '某科技公司', title: '暑期實習生', description: '協助開發內部工具，參與敏捷開發流程' }], education: [{ school: '國立台灣大學', degree: '學士', major: '資訊管理學系', year: '2024' }], rawText: '' },
-  },
-  {
-    id: 'engineer', label: '⚙️ 工程師', desc: '3–5 年，強調技術深度',
-    data: { name: '李工程', email: 'engineer@gmail.com', phone: '0923-456-789', skills: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'Docker'], experiences: [{ company: '某新創公司', title: '資深前端工程師', description: '主導前端架構重構，導入 React + TypeScript，開發效率提升 40%' }, { company: '某傳產公司', title: '軟體工程師', description: '維護 ERP 系統，開發客製化報表模組' }], education: [{ school: '國立成功大學', degree: '學士', major: '資訊工程學系', year: '2021' }], rawText: '' },
-  },
-  {
-    id: 'marketing', label: '📢 行銷', desc: '數位行銷，數據驅動',
-    data: { name: '陳行銷', email: 'marketing@gmail.com', phone: '0934-567-890', skills: ['Google Analytics', 'SEO/SEM', 'Meta Ads', '內容行銷', 'KOL 合作'], experiences: [{ company: '某電商平台', title: '數位行銷專員', description: '管理月預算 200 萬廣告投放，ROI 提升 35%' }], education: [{ school: '輔仁大學', degree: '學士', major: '廣告傳播學系', year: '2022' }], rawText: '' },
-  },
-  {
-    id: 'management', label: '👔 管理職', desc: '帶領 5 人以上團隊',
-    data: { name: '張主管', email: 'manager@gmail.com', phone: '0945-678-901', skills: ['團隊管理', '跨部門協作', 'OKR', '敏捷開發', '人才培育'], experiences: [{ company: '某科技集團', title: '產品開發主管', description: '帶領 8 人團隊，管理 3 個產品線，年營收 2,000 萬' }], education: [{ school: '政治大學', degree: '碩士', major: 'MBA', year: '2019' }], rawText: '' },
-  },
-  {
-    id: 'career_change', label: '🔄 轉職用', desc: '強調可轉移技能',
-    data: { name: '林轉職', email: 'change@gmail.com', phone: '0956-789-012', skills: ['溝通協調', '問題分析', 'Excel 進階', '客戶服務', '自學能力'], experiences: [{ company: '某金融機構', title: '業務專員', description: '管理 200+ 客戶，業績達成率 120%' }], education: [{ school: '淡江大學', degree: '學士', major: '財務金融學系', year: '2020' }], rawText: '' },
-  },
+  { id: 'freshman',     emoji: '🎓', label: '新鮮人', desc: '剛畢業，強調學習能力',    data: { name: '王小明', email: 'example@gmail.com',    phone: '0912-345-678', skills: ['Python', 'Microsoft Office', '數據分析', '快速學習', '英文溝通'],              experiences: [{ company: '某科技公司', title: '暑期實習生',     description: '協助開發內部工具，參與敏捷開發流程' }],                                                                        education: [{ school: '國立台灣大學', degree: '學士', major: '資訊管理學系', year: '2024' }], rawText: '' } },
+  { id: 'engineer',     emoji: '⚙️', label: '工程師', desc: '3–5 年，強調技術深度',    data: { name: '李工程', email: 'engineer@gmail.com',   phone: '0923-456-789', skills: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'Docker'],                         experiences: [{ company: '某新創公司', title: '資深前端工程師', description: '主導前端架構重構，導入 React + TypeScript，開發效率提升 40%' }, { company: '某傳產公司', title: '軟體工程師', description: '維護 ERP 系統，開發客製化報表模組' }], education: [{ school: '國立成功大學', degree: '學士', major: '資訊工程學系', year: '2021' }], rawText: '' } },
+  { id: 'marketing',    emoji: '📢', label: '行銷',   desc: '數位行銷，數據驅動',      data: { name: '陳行銷', email: 'marketing@gmail.com',  phone: '0934-567-890', skills: ['Google Analytics', 'SEO/SEM', 'Meta Ads', '內容行銷', 'KOL 合作'],               experiences: [{ company: '某電商平台', title: '數位行銷專員',   description: '管理月預算 200 萬廣告投放，ROI 提升 35%' }],                                                                   education: [{ school: '輔仁大學',     degree: '學士', major: '廣告傳播學系',   year: '2022' }], rawText: '' } },
+  { id: 'management',   emoji: '👔', label: '管理職', desc: '帶領 5 人以上團隊',        data: { name: '張主管', email: 'manager@gmail.com',    phone: '0945-678-901', skills: ['團隊管理', '跨部門協作', 'OKR', '敏捷開發', '人才培育'],                           experiences: [{ company: '某科技集團', title: '產品開發主管',   description: '帶領 8 人團隊，管理 3 個產品線，年營收 2,000 萬' }],                                                              education: [{ school: '政治大學',     degree: '碩士', major: 'MBA',           year: '2019' }], rawText: '' } },
+  { id: 'career_change',emoji: '🔄', label: '轉職用', desc: '強調可轉移技能',          data: { name: '林轉職', email: 'change@gmail.com',     phone: '0956-789-012', skills: ['溝通協調', '問題分析', 'Excel 進階', '客戶服務', '自學能力'],                       experiences: [{ company: '某金融機構', title: '業務專員',       description: '管理 200+ 客戶，業績達成率 120%' }],                                                                            education: [{ school: '淡江大學',     degree: '學士', major: '財務金融學系', year: '2020' }],  rawText: '' } },
 ]
 
 const EMPTY_RESUME: ParsedResume = { name: '', email: '', phone: '', skills: [], experiences: [], education: [], rawText: '' }
@@ -74,8 +71,20 @@ const EMPTY_RESUME: ParsedResume = { name: '', email: '', phone: '', skills: [],
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7) }
 function todayStr() { return new Date().toISOString().slice(0, 10) }
 function fmtDate(d: string) { try { return new Date(d).toLocaleDateString('zh-TW') } catch { return d } }
+function detectLang(text: string): 'zh' | 'en' { return /[一-鿿]/.test(text) ? 'zh' : 'en' }
 function emptyEntry(): JournalEntry {
   return { id: '', title: '', company: '', date: todayStr(), template: 'free', content: '', tags: [], images: [], createdAt: '' }
+}
+
+// ── Spinner ────────────────────────────────────────────────────────────────────
+
+function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+    </svg>
+  )
 }
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -83,7 +92,7 @@ function emptyEntry(): JournalEntry {
 export default function CareerProfilePage() {
   const [tab, setTab] = useState<Tab>('resume')
 
-  // Auto-save
+  // Auto-save indicator
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
   const saveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const autoSave = useCallback((key: string, data: unknown) => {
@@ -96,32 +105,40 @@ export default function CareerProfilePage() {
     }, 1000)
   }, [])
 
-  // Resume state
-  const [parsed, setParsed] = useState<ParsedResume | null>(null)
+  // ── Resume state ──────────────────────────────────────────────────────────────
+  const [resumeView, setResumeView] = useState<'list' | 'create' | 'edit'>('list')
+  const [resumes, setResumes] = useState<ResumeEntry[]>([])
+  const [editingResumeId, setEditingResumeId] = useState<string | null>(null)
+  const [resumeName, setResumeName] = useState('')
   const [editedResume, setEditedResume] = useState<ParsedResume>(EMPTY_RESUME)
-  const [isEditing, setIsEditing] = useState(false)
-  const [resumeSaved, setResumeSaved] = useState(false)
   const [score, setScore] = useState<ResumeScore | null>(null)
-  const [parsing, setParsing] = useState(false)
+  const [resumeSaved, setResumeSaved] = useState(false)
   const [scoring, setScoring] = useState(false)
   const [resumeError, setResumeError] = useState('')
-  const [showTemplates, setShowTemplates] = useState(false)
-  const [showUpload, setShowUpload] = useState(false)
+  const [parsing, setParsing] = useState(false)
   const [dragging, setDragging] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Skills state
+  // Create-flow state
+  const [createMode, setCreateMode] = useState<'none' | 'upload' | 'linkedin' | 'template'>('none')
+  const [selectedTemplateId, setSelectedTemplateId] = useState('')
+  const [linkedinUrl, setLinkedinUrl] = useState('')
+  const [linkedinText, setLinkedinText] = useState('')
+  const [linkedinStep, setLinkedinStep] = useState<1 | 2>(1)
+  const [linkedinParsing, setLinkedinParsing] = useState(false)
+
+  // ── Skills state ──────────────────────────────────────────────────────────────
   const [skills, setSkills] = useState<TaggedSkill[]>([])
   const [newSkill, setNewSkill] = useState('')
   const [newSkillCat, setNewSkillCat] = useState<SkillCategory>('核心職能')
   const [skillView, setSkillView] = useState<'category' | 'all'>('category')
   const [collapsedCats, setCollapsedCats] = useState<Set<SkillCategory>>(new Set())
-  const [recommendedSkills, setRecommendedSkills] = useState<Array<{name: string; category: SkillCategory}>>([])
+  const [recommendedSkills, setRecommendedSkills] = useState<Array<{ name: string; category: SkillCategory }>>([])
   const [checkedSkills, setCheckedSkills] = useState<Set<string>>(new Set())
   const [loadingRecommend, setLoadingRecommend] = useState(false)
   const [showRecommend, setShowRecommend] = useState(false)
 
-  // Journal state
+  // ── Journal state ─────────────────────────────────────────────────────────────
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [draft, setDraft] = useState<JournalEntry>(emptyEntry())
   const [showForm, setShowForm] = useState(false)
@@ -142,68 +159,143 @@ export default function CareerProfilePage() {
   // Init from localStorage
   useEffect(() => {
     setIsMobile(window.innerWidth < 768)
+
     const rawSkills = localStorage.getItem('career-skills')
     if (rawSkills) {
-      const parsed = JSON.parse(rawSkills)
-      if (Array.isArray(parsed)) {
-        // Migrate old string[] format
-        if (typeof parsed[0] === 'string') {
-          setSkills(parsed.map((s: string) => ({ name: s, category: '核心職能' as SkillCategory })))
-        } else {
-          setSkills(parsed)
-        }
+      const p = JSON.parse(rawSkills)
+      if (Array.isArray(p)) {
+        if (typeof p[0] === 'string') setSkills(p.map((s: string) => ({ name: s, category: '核心職能' as SkillCategory })))
+        else setSkills(p)
       }
     }
+
     const rawEntries = localStorage.getItem('career-journal')
     if (rawEntries) {
       const es: JournalEntry[] = JSON.parse(rawEntries)
       setEntries(es)
-      const companies = [...new Set(es.map((e) => e.company).filter(Boolean))]
-      setCompanyHistory(companies)
+      setCompanyHistory([...new Set(es.map((e) => e.company).filter(Boolean))])
     }
-    const rawResume = localStorage.getItem('career-resume')
-    if (rawResume) {
-      const r = JSON.parse(rawResume); setParsed(r); setEditedResume(r); setIsEditing(true)
+
+    // Multi-resume format (new)
+    const rawResumes = localStorage.getItem('career-resumes')
+    if (rawResumes) {
+      setResumes(JSON.parse(rawResumes))
+    } else {
+      // Migrate from old single-resume key
+      const rawResume = localStorage.getItem('career-resume')
+      if (rawResume) {
+        const r: ParsedResume = JSON.parse(rawResume)
+        const migrated: ResumeEntry = {
+          id: genId(), name: r.name || '我的履歷',
+          language: detectLang(r.rawText), score: null, atsScore: null,
+          isPrimary: true, source: 'manual',
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+          data: r,
+        }
+        setResumes([migrated])
+        localStorage.setItem('career-resumes', JSON.stringify([migrated]))
+      }
     }
   }, [])
 
-  // ── Resume handlers ──
+  // ── Resume handlers ──────────────────────────────────────────────────────────
+
+  function persistResumes(next: ResumeEntry[]) {
+    setResumes(next)
+    localStorage.setItem('career-resumes', JSON.stringify(next))
+  }
+
+  function goToEditor(data: ParsedResume, name: string, source: ResumeEntry['source']) {
+    setEditedResume(data); setEditingResumeId(null); setResumeName(name)
+    setScore(null); setResumeError(''); setResumeSaved(false)
+    setResumeView('edit'); setCreateMode('none')
+    // Merge skills
+    const tagged = data.skills.map((s) => ({ name: s, category: '專業技能' as SkillCategory }))
+    setSkills((prev) => {
+      const existing = new Set(prev.map((t) => t.name))
+      const toAdd = tagged.filter((t) => !existing.has(t.name))
+      if (!toAdd.length) return prev
+      const next = [...prev, ...toAdd]; autoSave('career-skills', next); return next
+    })
+    void source
+  }
+
+  function startEdit(entry: ResumeEntry) {
+    setEditedResume(entry.data); setEditingResumeId(entry.id); setResumeName(entry.name)
+    setScore(null); setResumeError(''); setResumeSaved(false); setResumeView('edit')
+  }
+
+  function saveResumeEntry() {
+    const now = new Date().toISOString()
+    const existing = resumes.find((r) => r.id === editingResumeId)
+    const entry: ResumeEntry = {
+      id: editingResumeId ?? genId(),
+      name: resumeName.trim() || editedResume.name || '我的履歷',
+      language: detectLang(editedResume.rawText),
+      score: score?.score ?? existing?.score ?? null,
+      atsScore: score?.atsScore ?? existing?.atsScore ?? null,
+      isPrimary: existing?.isPrimary ?? resumes.length === 0,
+      source: existing?.source ?? 'manual',
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      data: editedResume,
+    }
+    const next = editingResumeId
+      ? resumes.map((r) => r.id === editingResumeId ? entry : r)
+      : [...resumes, entry]
+    persistResumes(next)
+    setEditingResumeId(entry.id)
+    setResumeSaved(true); setTimeout(() => setResumeSaved(false), 3000)
+  }
+
+  function deleteResume(id: string) {
+    if (!confirm('確定要刪除這份履歷？')) return
+    let next = resumes.filter((r) => r.id !== id)
+    if (next.length > 0 && !next.some((r) => r.isPrimary)) next = [{ ...next[0], isPrimary: true }, ...next.slice(1)]
+    persistResumes(next)
+  }
+
+  function setPrimaryResume(id: string) {
+    persistResumes(resumes.map((r) => ({ ...r, isPrimary: r.id === id })))
+  }
+
   async function handleFile(f: File) {
-    setResumeError(''); setParsing(true); setParsed(null); setScore(null); setResumeSaved(false)
+    setResumeError(''); setParsing(true)
     const form = new FormData(); form.append('file', f)
     try {
       const res = await fetch('/api/resume/parse', { method: 'POST', body: form })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? '解析失敗')
-      const r: ParsedResume = { ...EMPTY_RESUME, ...data }
-      setParsed(r); setEditedResume(r); setIsEditing(true); setShowUpload(false)
-      // Auto-add skills with AI category detection
-      const newTagged = r.skills.map((s) => ({ name: s, category: '專業技能' as SkillCategory }))
-      setSkills((p) => {
-        const existing = new Set(p.map((t) => t.name))
-        const toAdd = newTagged.filter((t) => !existing.has(t.name))
-        const next = [...p, ...toAdd]; autoSave('career-skills', next); return next
-      })
+      goToEditor({ ...EMPTY_RESUME, ...data }, data.name || '上傳履歷', 'upload')
     } catch (err) { setResumeError((err as Error).message) }
     finally { setParsing(false) }
   }
 
-  function applyTemplate(t: typeof RESUME_TEMPLATES[number]) {
-    const r: ParsedResume = { ...EMPTY_RESUME, ...t.data }
-    setParsed(r); setEditedResume(r); setIsEditing(true); setShowTemplates(false); setResumeSaved(false)
+  async function handleLinkedinImport() {
+    const text = linkedinText.trim(); if (!text) return
+    setLinkedinParsing(true); setResumeError('')
+    const form = new FormData()
+    form.append('file', new Blob([text], { type: 'text/plain' }), 'linkedin.txt')
+    try {
+      const res = await fetch('/api/resume/parse', { method: 'POST', body: form })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? '解析失敗')
+      goToEditor({ ...EMPTY_RESUME, ...data }, data.name || 'LinkedIn 履歷', 'linkedin')
+      setLinkedinUrl(''); setLinkedinText(''); setLinkedinStep(1)
+    } catch (err) { setResumeError((err as Error).message) }
+    finally { setLinkedinParsing(false) }
+  }
+
+  function applyTemplate() {
+    const t = RESUME_TEMPLATES.find((x) => x.id === selectedTemplateId)
+    if (!t) return
+    goToEditor({ ...EMPTY_RESUME, ...t.data }, `${t.emoji} ${t.label}`, 'template')
+    setSelectedTemplateId('')
   }
 
   function updateResume<K extends keyof ParsedResume>(field: K, value: ParsedResume[K]) {
-    setEditedResume((p) => ({ ...p, [field]: value }))
-    setResumeSaved(false)
+    setEditedResume((p) => ({ ...p, [field]: value })); setResumeSaved(false)
   }
-
-  function saveResume() {
-    autoSave('career-resume', editedResume)
-    setResumeSaved(true)
-    setTimeout(() => setResumeSaved(false), 3000)
-  }
-
   function updateExp(i: number, field: keyof Experience, value: string) {
     updateResume('experiences', editedResume.experiences.map((e, idx) => idx === i ? { ...e, [field]: value } : e))
   }
@@ -212,17 +304,22 @@ export default function CareerProfilePage() {
   }
 
   async function handleScore() {
-    const text = editedResume.rawText || parsed?.rawText || ''
-    if (!text) return
+    const text = editedResume.rawText; if (!text) return
     setScoring(true)
     try {
       const res = await fetch('/api/resume/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resumeText: text }) })
-      setScore(await res.json())
+      const s: ResumeScore = await res.json(); setScore(s)
+      // Persist score in entry
+      if (editingResumeId) {
+        const next = resumes.map((r) => r.id === editingResumeId ? { ...r, score: s.score, atsScore: s.atsScore } : r)
+        persistResumes(next)
+      }
     } catch { setResumeError('評分失敗') }
     finally { setScoring(false) }
   }
 
-  // ── Skills handlers ──
+  // ── Skills handlers ───────────────────────────────────────────────────────────
+
   function addSkill() {
     const t = newSkill.trim(); if (!t || skills.some((s) => s.name === t)) return
     const next = [...skills, { name: t, category: newSkillCat }]
@@ -236,35 +333,25 @@ export default function CareerProfilePage() {
   }
 
   async function handleRecommendSkills() {
-    const text = entries.map((e) =>
-      [e.title, e.content, e.situation, e.task, e.action, e.result].filter(Boolean).join(' ')
-    ).join('\n')
+    const text = entries.map((e) => [e.title, e.content, e.situation, e.task, e.action, e.result].filter(Boolean).join(' ')).join('\n')
     if (!text.trim()) { alert('請先新增一些工作日誌再進行分析'); return }
     setLoadingRecommend(true); setRecommendedSkills([]); setCheckedSkills(new Set()); setShowRecommend(true)
     try {
-      const result = await fetch('/api/skills/recommend-from-journal', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ journalText: text })
-      })
-      const data = await result.json()
-      // Return with category guessing
-      const withCats = (data.skills ?? []).map((s: string) => ({
-        name: s,
-        category: guessCategory(s),
-      }))
-      setRecommendedSkills(withCats)
+      const res = await fetch('/api/skills/recommend-from-journal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ journalText: text }) })
+      const data = await res.json()
+      setRecommendedSkills((data.skills ?? []).map((s: string) => ({ name: s, category: guessCategory(s) })))
     } catch { setRecommendedSkills([]) }
     finally { setLoadingRecommend(false) }
   }
 
   function guessCategory(skill: string): SkillCategory {
-    const lower = skill.toLowerCase()
-    if (/python|react|node|sql|docker|git|aws|figma|excel|office|javascript|typescript|java|c\+\+/.test(lower)) return '工具與軟體'
-    if (/english|日文|日語|韓文|french|德文|語言|toeic|ielts/.test(lower)) return '語言能力'
-    if (/pmp|aws certified|google analytics|certificate|認證|證照/.test(lower)) return '證照與認證'
-    if (/learning|學習|進修|studying/.test(lower)) return '學習中'
-    if (/溝通|協作|領導|表達|服務|人際|軟|soft/.test(lower)) return '軟實力'
-    if (/管理|規劃|分析|策略|行銷|業務|財務|設計|架構/.test(lower)) return '核心職能'
+    const l = skill.toLowerCase()
+    if (/python|react|node|sql|docker|git|aws|figma|excel|office|javascript|typescript|java|c\+\+/.test(l)) return '工具與軟體'
+    if (/english|日文|日語|韓文|french|德文|語言|toeic|ielts/.test(l)) return '語言能力'
+    if (/pmp|certified|certificate|認證|證照/.test(l)) return '證照與認證'
+    if (/learning|學習|進修|studying/.test(l)) return '學習中'
+    if (/溝通|協作|領導|表達|服務|人際|軟|soft/.test(l)) return '軟實力'
+    if (/管理|規劃|分析|策略|行銷|業務|財務|設計|架構/.test(l)) return '核心職能'
     return '專業技能'
   }
 
@@ -275,18 +362,18 @@ export default function CareerProfilePage() {
     setShowRecommend(false); setCheckedSkills(new Set())
   }
 
-  // ── Journal handlers ──
+  // ── Journal handlers ──────────────────────────────────────────────────────────
+
   function updateDraft<K extends keyof JournalEntry>(field: K, value: JournalEntry[K]) {
     setDraft((p) => ({ ...p, [field]: value }))
   }
 
   async function handleImageFiles(files: FileList | null) {
-    if (!files || files.length === 0) return
-    const available = 3 - draft.images.length
-    if (available <= 0) { alert('每篇日誌最多 3 張圖片'); return }
+    if (!files || !files.length) return
+    const available = 3 - draft.images.length; if (available <= 0) { alert('每篇日誌最多 3 張圖片'); return }
     setUploadingImg(true)
     for (const f of Array.from(files).slice(0, available)) {
-      if (f.size > 5 * 1024 * 1024) { alert(`「${f.name}」超過 5MB 限制`); continue }
+      if (f.size > 5 * 1024 * 1024) { alert(`「${f.name}」超過 5MB`); continue }
       const form = new FormData(); form.append('file', f)
       try {
         const res = await fetch('/api/journal/upload', { method: 'POST', body: form })
@@ -294,28 +381,14 @@ export default function CareerProfilePage() {
         if (!res.ok) { alert(data.error ?? '上傳失敗'); continue }
         const img: JournalImage = { url: data.url, uploadedAt: new Date().toISOString() }
         setDraft((p) => ({ ...p, images: [...p.images, img] }))
-        // AI analysis — only for persistent URLs, not base64
         if (!data.local && data.url) {
           setAnalyzingImg(true)
-          fetch('/api/journal/analyze-image', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageUrl: data.url }),
-          })
+          fetch('/api/journal/analyze-image', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imageUrl: data.url }) })
             .then((r) => r.json())
-            .then((d) => {
-              if (d.description) {
-                setDraft((p) => ({
-                  ...p,
-                  images: p.images.map((im) =>
-                    im.url === data.url ? { ...im, aiDescription: d.description } : im
-                  ),
-                }))
-              }
-            })
-            .catch(() => {})
-            .finally(() => setAnalyzingImg(false))
+            .then((d) => { if (d.description) setDraft((p) => ({ ...p, images: p.images.map((im) => im.url === data.url ? { ...im, aiDescription: d.description } : im) })) })
+            .catch(() => {}).finally(() => setAnalyzingImg(false))
         }
-      } catch { alert('上傳失敗，請稍後再試') }
+      } catch { alert('上傳失敗') }
     }
     setUploadingImg(false)
   }
@@ -325,43 +398,25 @@ export default function CareerProfilePage() {
     const entry: JournalEntry = { ...draft, id, createdAt: new Date().toISOString() }
     const next = editingId ? entries.map((e) => e.id === editingId ? entry : e) : [entry, ...entries]
     setEntries(next); autoSave('career-journal', next)
-    // Update company history
-    if (entry.company && !companyHistory.includes(entry.company)) {
-      setCompanyHistory((p) => [...p, entry.company])
-    }
+    if (entry.company && !companyHistory.includes(entry.company)) setCompanyHistory((p) => [...p, entry.company])
     setShowForm(false); setEditingId(null); setDraft(emptyEntry())
-
-    // Background: AI tag + auto-title
     const text = [entry.content, entry.situation, entry.task, entry.action, entry.result].filter(Boolean).join('\n')
     setTaggingId(id)
-    fetch('/api/journal/tag', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    })
+    fetch('/api/journal/tag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) })
       .then((r) => r.json())
       .then((d) => {
         setEntries((p) => {
-          const u = p.map((e) => e.id === id ? {
-            ...e,
-            ...(d.tags?.length ? { tags: d.tags } : {}),
-            ...(d.title && !e.title ? { title: d.title } : {}),
-          } : e)
+          const u = p.map((e) => e.id === id ? { ...e, ...(d.tags?.length ? { tags: d.tags } : {}), ...(d.title && !e.title ? { title: d.title } : {}) } : e)
           autoSave('career-journal', u); return u
         })
       })
-      .catch(() => {})
-      .finally(() => setTaggingId(null))
+      .catch(() => {}).finally(() => setTaggingId(null))
   }
 
-  function deleteEntry(id: string) {
-    const next = entries.filter((e) => e.id !== id); setEntries(next); autoSave('career-journal', next)
-  }
-
+  function deleteEntry(id: string) { const next = entries.filter((e) => e.id !== id); setEntries(next); autoSave('career-journal', next) }
   function editEntry(e: JournalEntry) { setDraft({ ...e }); setEditingId(e.id); setShowForm(true) }
 
-  const sortedEntries = [...entries].sort((a, b) =>
-    sortBy === 'date' ? b.date.localeCompare(a.date) : a.company.localeCompare(b.company)
-  )
+  const sortedEntries = [...entries].sort((a, b) => sortBy === 'date' ? b.date.localeCompare(a.date) : a.company.localeCompare(b.company))
   const filteredEntries = sortedEntries.filter((e) => {
     if (filterDateFrom && e.date < filterDateFrom) return false
     if (filterDateTo && e.date > filterDateTo) return false
@@ -369,12 +424,15 @@ export default function CareerProfilePage() {
     return true
   })
 
-  const groupedSkills = SKILL_CATEGORIES.reduce((acc, cat) => {
-    acc[cat] = skills.filter((s) => s.category === cat)
-    return acc
-  }, {} as Record<SkillCategory, TaggedSkill[]>)
+  const groupedSkills = SKILL_CATEGORIES.reduce((acc, cat) => { acc[cat] = skills.filter((s) => s.category === cat); return acc }, {} as Record<SkillCategory, TaggedSkill[]>)
 
-  // ── Render ─────────────────────────────────────────────────────────────────
+  // ── Card variant helper ───────────────────────────────────────────────────────
+  const entryCardCls = (active: boolean) =>
+    `flex flex-col items-center gap-4 rounded-2xl border-2 p-6 sm:p-8 cursor-pointer transition-all text-center ${
+      active ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-terra-300 hover:bg-terra-50/50'
+    }`
+
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-4 md:p-8 space-y-5">
@@ -386,7 +444,7 @@ export default function CareerProfilePage() {
         </div>
         {saveStatus !== 'idle' && (
           <span className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${saveStatus === 'saved' ? 'bg-sage-500/10 text-sage-600' : 'bg-cream-200 text-ink-400'}`}>
-            {saveStatus === 'saving' ? <><svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>儲存中</> : '✓ 已儲存'}
+            {saveStatus === 'saving' ? <><Spinner className="h-3 w-3" />儲存中</> : '✓ 已儲存'}
           </span>
         )}
       </div>
@@ -401,83 +459,245 @@ export default function CareerProfilePage() {
         ))}
       </div>
 
-      {/* ── Resume Tab ─────────────────────────────────────── */}
+      {/* ══════════════════════════════════════════════════════════════════════════
+          RESUME TAB
+      ══════════════════════════════════════════════════════════════════════════ */}
       {tab === 'resume' && (
         <div className="space-y-5">
-          {/* Two entry points */}
-          {!isEditing && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
-              <button onClick={() => setShowUpload(true)}
-                className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-warm-300 bg-white p-8 hover:border-terra-300 hover:bg-terra-50 transition-all">
-                <span className="text-3xl">↑</span>
-                <div className="text-center">
-                  <p className="font-semibold text-ink-700">上傳履歷</p>
-                  <p className="text-xs text-ink-400 mt-0.5">PDF / DOCX · AI 自動解析</p>
-                </div>
-              </button>
-              <button onClick={() => setShowTemplates(true)}
-                className="flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-warm-300 bg-white p-8 hover:border-terra-300 hover:bg-terra-50 transition-all">
-                <span className="text-3xl">📄</span>
-                <div className="text-center">
-                  <p className="font-semibold text-ink-700">從範本建立</p>
-                  <p className="text-xs text-ink-400 mt-0.5">5 種職位範本</p>
-                </div>
-              </button>
-            </div>
-          )}
 
-          {/* Upload modal */}
-          {showUpload && (
-            <Card className="max-w-lg">
-              <CardContent className="pt-5 space-y-4">
-                <div className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 cursor-pointer transition-all ${dragging ? 'border-terra-400 bg-terra-50' : 'border-warm-300 hover:border-terra-300 hover:bg-terra-50'}`}
-                  onClick={() => fileRef.current?.click()}
-                  onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-                  onDragLeave={() => setDragging(false)}
-                  onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}>
-                  <span className="text-3xl mb-2">↑</span>
-                  <p className="text-sm font-medium text-ink-600">拖曳或點擊上傳 PDF / DOCX</p>
-                  <p className="text-xs text-ink-400 mt-1">最大 10MB · 支援中英文履歷</p>
-                  {parsing && <div className="mt-3 flex items-center gap-2 text-sm text-terra-500"><svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>AI 解析中...</div>}
-                </div>
-                <input ref={fileRef} type="file" accept=".pdf,.docx" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
-                {resumeError && <p className="text-sm text-red-400">{resumeError}</p>}
-                <Button variant="outline" size="sm" onClick={() => setShowUpload(false)}>取消</Button>
-              </CardContent>
-            </Card>
-          )}
+          {/* ── LEVEL 1: Resume List ──────────────────────────────────────────── */}
+          {resumeView === 'list' && (
+            <div className="space-y-5">
+              {/* Level-1 header */}
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-semibold text-ink-800">我的履歷</h2>
+                <Button variant="primary" size="sm" onClick={() => { setCreateMode('none'); setResumeView('create') }}>
+                  ＋ 新增履歷
+                </Button>
+              </div>
 
-          {/* Template modal */}
-          {showTemplates && (
-            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/30 p-4" onClick={() => setShowTemplates(false)}>
-              <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-[var(--shadow-warm-xl)]" onClick={(e) => e.stopPropagation()}>
-                <h2 className="text-base font-semibold text-ink-800 mb-3">選擇履歷範本</h2>
-                <div className="space-y-2">
-                  {RESUME_TEMPLATES.map((t) => (
-                    <button key={t.id} onClick={() => applyTemplate(t)}
-                      className="w-full text-left rounded-xl border border-warm-200 bg-cream-50 px-4 py-3 hover:border-terra-300 hover:bg-terra-50 transition-all">
-                      <span className="font-medium text-ink-700">{t.label}</span>
-                      <span className="ml-2 text-xs text-ink-400">{t.desc}</span>
-                    </button>
-                  ))}
+              {/* Empty state */}
+              {resumes.length === 0 && (
+                <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-warm-200 bg-white py-20 space-y-4">
+                  <span className="text-5xl">📄</span>
+                  <p className="font-medium text-ink-600">尚未建立任何履歷</p>
+                  <p className="text-sm text-ink-400">建立你的第一份履歷，開始職涯旅程</p>
+                  <Button variant="primary" onClick={() => { setCreateMode('none'); setResumeView('create') }}>＋ 新增履歷</Button>
                 </div>
-                <button onClick={() => setShowTemplates(false)} className="mt-3 text-xs text-ink-400 hover:text-ink-600">取消</button>
+              )}
+
+              {/* Resume cards */}
+              <div className="space-y-3">
+                {resumes.map((r) => (
+                  <Card key={r.id}>
+                    <CardContent className="pt-4 pb-4">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center flex-wrap gap-2 mb-1">
+                            <p className="font-semibold text-ink-700 text-sm">{r.name}</p>
+                            {r.isPrimary && <Badge variant="success">主要履歷</Badge>}
+                            <Badge variant="outline">{r.language === 'zh' ? '中文' : 'English'}</Badge>
+                            <Badge variant="outline">{r.source === 'upload' ? '上傳' : r.source === 'template' ? '範本' : r.source === 'linkedin' ? 'LinkedIn' : '手動'}</Badge>
+                          </div>
+                          <p className="text-xs text-ink-400">更新於 {fmtDate(r.updatedAt)}</p>
+                          {r.score !== null ? (
+                            <div className="mt-2 flex items-center gap-2">
+                              <div className="relative h-2 w-28 rounded-full bg-cream-200 overflow-hidden">
+                                <div className="absolute left-0 top-0 h-2 rounded-full bg-terra-500 transition-all duration-700" style={{ width: `${r.score}%` }} />
+                              </div>
+                              <span className="text-xs font-medium text-terra-500">AI 評分 {r.score}</span>
+                              {r.atsScore !== null && <span className="text-xs text-ink-400">· ATS {r.atsScore}</span>}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-ink-300 mt-1.5">尚未評分</p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-1.5 shrink-0">
+                          {!r.isPrimary && (
+                            <button onClick={() => setPrimaryResume(r.id)}
+                              className="rounded-lg border border-warm-200 bg-white px-2.5 py-1 text-xs text-ink-400 hover:border-sage-300 hover:text-sage-600 transition-all whitespace-nowrap">
+                              設為主要
+                            </button>
+                          )}
+                          <button onClick={() => startEdit(r)}
+                            className="rounded-lg border border-warm-200 bg-white px-2.5 py-1 text-xs text-ink-400 hover:border-terra-300 hover:text-terra-600 transition-all">
+                            編輯
+                          </button>
+                          <button onClick={() => deleteResume(r.id)}
+                            className="rounded-lg border border-warm-200 bg-white px-2.5 py-1 text-xs text-ink-400 hover:border-red-200 hover:text-red-400 transition-all">
+                            刪除
+                          </button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             </div>
           )}
 
-          {/* Resume editor */}
-          {isEditing && (
+          {/* ── LEVEL 2: Create New Resume ────────────────────────────────────── */}
+          {resumeView === 'create' && (
+            <div className="space-y-6">
+              {/* Back + title */}
+              <button onClick={() => { setResumeView('list'); setCreateMode('none'); setResumeError('') }}
+                className="flex items-center gap-1 text-sm text-ink-400 hover:text-ink-700 transition-colors">
+                ← 返回
+              </button>
+              <div>
+                <h2 className="text-xl font-bold text-ink-900">打造您的完美履歷</h2>
+                <p className="text-sm text-ink-500 mt-1">選擇一種方式開始</p>
+              </div>
+
+              {/* Three entry cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Card 1: Upload */}
+                <button className={entryCardCls(createMode === 'upload')} onClick={() => { setCreateMode('upload'); setResumeError('') }}>
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-terra-50 border border-terra-100 text-2xl">↑</div>
+                  <div>
+                    <p className="font-semibold text-ink-800 text-sm">上傳您的履歷</p>
+                    <p className="text-xs text-ink-400 mt-1 leading-relaxed">自動解析並最佳化<br/>支援 PDF、DOC、DOCX</p>
+                  </div>
+                </button>
+
+                {/* Card 2: LinkedIn */}
+                <button className={entryCardCls(createMode === 'linkedin')} onClick={() => { setCreateMode('linkedin'); setResumeError(''); setLinkedinStep(1) }}>
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 border border-blue-100 text-xl font-bold text-blue-600">in</div>
+                  <div>
+                    <p className="font-semibold text-ink-800 text-sm">從 LinkedIn 匯入</p>
+                    <p className="text-xs text-ink-400 mt-1 leading-relaxed">輸入 LinkedIn 個人頁連結<br/>AI 自動解析個人資料</p>
+                  </div>
+                </button>
+
+                {/* Card 3: Template */}
+                <button className={entryCardCls(createMode === 'template')} onClick={() => { setCreateMode('template'); setResumeError('') }}>
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-honey-50 border border-amber-100 text-2xl">📄</div>
+                  <div>
+                    <p className="font-semibold text-ink-800 text-sm">使用範本</p>
+                    <p className="text-xs text-ink-400 mt-1 leading-relaxed">從 5 種範本中選擇開始<br/>快速建立客製履歷</p>
+                  </div>
+                </button>
+              </div>
+
+              {/* ── Upload expanded ── */}
+              {createMode === 'upload' && (
+                <Card>
+                  <CardContent className="pt-5 space-y-4">
+                    <div
+                      className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 cursor-pointer transition-all ${dragging ? 'border-terra-400 bg-terra-50' : 'border-warm-300 hover:border-terra-300 hover:bg-terra-50/50'}`}
+                      onClick={() => fileRef.current?.click()}
+                      onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+                      onDragLeave={() => setDragging(false)}
+                      onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}>
+                      <span className="text-3xl mb-2">↑</span>
+                      <p className="text-sm font-medium text-ink-600">拖曳或點擊上傳</p>
+                      <p className="text-xs text-ink-400 mt-1">PDF · DOCX · DOC · 最大 10MB</p>
+                      {parsing && <div className="mt-3 flex items-center gap-2 text-sm text-terra-500"><Spinner />AI 解析中...</div>}
+                    </div>
+                    <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="hidden"
+                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+                    {resumeError && <p className="text-sm text-red-400">{resumeError}</p>}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── LinkedIn expanded ── */}
+              {createMode === 'linkedin' && (
+                <Card>
+                  <CardContent className="pt-5 space-y-4">
+                    {linkedinStep === 1 ? (
+                      <>
+                        <div>
+                          <label className="block text-xs text-ink-400 mb-1.5">LinkedIn 個人頁網址</label>
+                          <input
+                            className="w-full rounded-xl border border-warm-300 bg-cream-100 px-4 py-2.5 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
+                            placeholder="linkedin.com/in/username"
+                            value={linkedinUrl}
+                            onChange={(e) => setLinkedinUrl(e.target.value)} />
+                        </div>
+                        <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-xs text-blue-600 leading-relaxed">
+                          <p className="font-medium mb-1">如何匯入 LinkedIn 資料</p>
+                          <p>由於 LinkedIn 隱私限制，請前往你的 LinkedIn 個人頁，複製所有文字（Ctrl+A → Ctrl+C），貼到下一步的欄位中，AI 將自動解析為結構化履歷。</p>
+                        </div>
+                        <Button variant="primary" onClick={() => setLinkedinStep(2)}>
+                          下一步：貼上個人資料 →
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={() => setLinkedinStep(1)} className="text-xs text-ink-400 hover:text-ink-600">← 上一步</button>
+                        <Textarea
+                          label="貼上 LinkedIn 個人資料文字"
+                          placeholder="前往你的 LinkedIn 個人頁，選取所有文字（Ctrl+A），複製後貼到此處..."
+                          rows={8}
+                          value={linkedinText}
+                          onChange={(e) => setLinkedinText(e.target.value)} />
+                        {resumeError && <p className="text-sm text-red-400">{resumeError}</p>}
+                        <Button variant="primary" onClick={handleLinkedinImport} loading={linkedinParsing} disabled={!linkedinText.trim()}>
+                          匯入個人資料
+                        </Button>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── Template expanded ── */}
+              {createMode === 'template' && (
+                <Card>
+                  <CardContent className="pt-5 space-y-4">
+                    <div>
+                      <label className="block text-xs text-ink-400 mb-1.5">選擇範本</label>
+                      <select
+                        value={selectedTemplateId}
+                        onChange={(e) => setSelectedTemplateId(e.target.value)}
+                        className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2.5 text-sm text-ink-700 focus:border-terra-400 focus:outline-none">
+                        <option value="">— 選擇適合你的範本 —</option>
+                        {RESUME_TEMPLATES.map((t) => (
+                          <option key={t.id} value={t.id}>{t.emoji} {t.label} · {t.desc}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {selectedTemplateId && (
+                      <div className="rounded-xl bg-cream-200 px-4 py-3 text-xs text-ink-500">
+                        {RESUME_TEMPLATES.find((t) => t.id === selectedTemplateId)?.desc}
+                      </div>
+                    )}
+                    <Button variant="primary" disabled={!selectedTemplateId} onClick={applyTemplate}>
+                      使用此範本開始 →
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* ── LEVEL 3: Editor ───────────────────────────────────────────────── */}
+          {resumeView === 'edit' && (
             <div className="space-y-5">
+              {/* Back + resume name */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <button onClick={() => { setResumeView('list'); setScore(null); setResumeError('') }}
+                  className="flex items-center gap-1 text-sm text-ink-400 hover:text-ink-700 transition-colors w-fit">
+                  ← 返回我的履歷
+                </button>
+                <input
+                  className="flex-1 rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm font-medium text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
+                  placeholder="履歷名稱（例如：前端工程師履歷）"
+                  value={resumeName}
+                  onChange={(e) => setResumeName(e.target.value)} />
+              </div>
+
+              {/* Action buttons */}
               <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant={resumeSaved ? 'sage' : 'primary'} onClick={saveResume}>
+                <Button size="sm" variant={resumeSaved ? 'sage' : 'primary'} onClick={saveResumeEntry}>
                   {resumeSaved ? '✓ 已儲存' : '儲存履歷'}
                 </Button>
-                <Button size="sm" onClick={handleScore} loading={scoring}>AI 評分</Button>
-                <Button size="sm" variant="outline" onClick={() => setShowTemplates(true)}>換範本</Button>
-                <Button size="sm" variant="outline" onClick={() => setShowUpload(true)}>重新上傳</Button>
+                <Button size="sm" onClick={handleScore} loading={scoring} disabled={!editedResume.rawText}>AI 評分</Button>
               </div>
 
+              {/* Editor grid */}
               <div className="grid gap-5 lg:grid-cols-2">
                 <Card>
                   <CardHeader><CardTitle>履歷編輯</CardTitle></CardHeader>
@@ -488,7 +708,7 @@ export default function CareerProfilePage() {
                     </div>
                     <Input label="Email" value={editedResume.email} onChange={(e) => updateResume('email', e.target.value)} />
 
-                    {/* Skills editor */}
+                    {/* Skills inline */}
                     <div>
                       <p className="text-xs text-ink-400 mb-2">技能</p>
                       <div className="flex flex-wrap gap-1.5 mb-2">
@@ -565,15 +785,17 @@ export default function CareerProfilePage() {
                   </Card>
                 )}
               </div>
+              {resumeError && <p className="text-sm text-red-400">{resumeError}</p>}
             </div>
           )}
         </div>
       )}
 
-      {/* ── Skills Tab ──────────────────────────────────────── */}
+      {/* ══════════════════════════════════════════════════════════════════════════
+          SKILLS TAB
+      ══════════════════════════════════════════════════════════════════════════ */}
       {tab === 'skills' && (
         <div className="space-y-4">
-          {/* Add skill */}
           <Card>
             <CardContent className="pt-5 space-y-3">
               <div className="flex flex-col sm:flex-row gap-2">
@@ -601,7 +823,6 @@ export default function CareerProfilePage() {
             </CardContent>
           </Card>
 
-          {/* Recommend panel */}
           {showRecommend && (
             <Card className="border-terra-100">
               <CardHeader>
@@ -612,7 +833,7 @@ export default function CareerProfilePage() {
               </CardHeader>
               <CardContent className="space-y-3">
                 {loadingRecommend ? (
-                  <div className="flex items-center gap-2 text-sm text-terra-500 py-4 justify-center"><svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>AI 分析日誌中...</div>
+                  <div className="flex items-center gap-2 text-sm text-terra-500 py-4 justify-center"><Spinner />AI 分析日誌中...</div>
                 ) : recommendedSkills.length === 0 ? (
                   <p className="text-sm text-ink-400 py-2">無法取得推薦，請確認日誌有足夠內容。</p>
                 ) : (
@@ -627,14 +848,15 @@ export default function CareerProfilePage() {
                         </label>
                       ))}
                     </div>
-                    <Button variant="primary" size="sm" disabled={checkedSkills.size === 0} onClick={addCheckedSkills}>一鍵新增 {checkedSkills.size > 0 ? `(${checkedSkills.size})` : ''}</Button>
+                    <Button variant="primary" size="sm" disabled={checkedSkills.size === 0} onClick={addCheckedSkills}>
+                      一鍵新增 {checkedSkills.size > 0 ? `(${checkedSkills.size})` : ''}
+                    </Button>
                   </>
                 )}
               </CardContent>
             </Card>
           )}
 
-          {/* Skills display */}
           {skillView === 'all' ? (
             <Card>
               <CardHeader><CardTitle>所有技能 <span className="text-ink-400 font-normal">({skills.length})</span></CardTitle></CardHeader>
@@ -658,7 +880,7 @@ export default function CareerProfilePage() {
             <div className="space-y-3">
               {SKILL_CATEGORIES.map((cat) => {
                 const catSkills = groupedSkills[cat]
-                if (catSkills.length === 0) return null
+                if (!catSkills.length) return null
                 const collapsed = collapsedCats.has(cat)
                 return (
                   <Card key={cat}>
@@ -693,10 +915,11 @@ export default function CareerProfilePage() {
         </div>
       )}
 
-      {/* ── Journal Tab ─────────────────────────────────────── */}
+      {/* ══════════════════════════════════════════════════════════════════════════
+          JOURNAL TAB
+      ══════════════════════════════════════════════════════════════════════════ */}
       {tab === 'journal' && (
         <div className="space-y-4">
-          {/* Controls */}
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="primary" size="sm" onClick={() => { setDraft(emptyEntry()); setEditingId(null); setShowForm(true) }}>+ 新增日誌</Button>
             <div className="flex gap-1 rounded-lg border border-warm-200 bg-white p-0.5">
@@ -708,12 +931,11 @@ export default function CareerProfilePage() {
             </div>
           </div>
 
-          {/* Filters */}
           <div className="flex flex-wrap gap-2">
             <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
-              className="rounded-lg border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" placeholder="開始日期" />
+              className="rounded-lg border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" />
             <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
-              className="rounded-lg border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" placeholder="結束日期" />
+              className="rounded-lg border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" />
             <input placeholder="篩選公司..." value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)}
               className="rounded-lg border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" />
             {(filterDateFrom || filterDateTo || filterCompany) && (
@@ -721,7 +943,6 @@ export default function CareerProfilePage() {
             )}
           </div>
 
-          {/* New / edit form */}
           {showForm && (
             <Card className="border-terra-100">
               <CardHeader>
@@ -739,18 +960,14 @@ export default function CareerProfilePage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
-                {/* Company with dropdown */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="relative">
                     <label className="block text-xs text-ink-400 mb-1">公司</label>
-                    <input
-                      className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
-                      placeholder="任職公司"
-                      value={draft.company}
+                    <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
+                      placeholder="任職公司" value={draft.company}
                       onChange={(e) => updateDraft('company', e.target.value)}
                       onFocus={() => setShowCompanyDD(true)}
-                      onBlur={() => setTimeout(() => setShowCompanyDD(false), 150)}
-                    />
+                      onBlur={() => setTimeout(() => setShowCompanyDD(false), 150)} />
                     {showCompanyDD && companyHistory.length > 0 && (
                       <div className="absolute top-full mt-1 w-full rounded-xl border border-warm-200 bg-white shadow-[var(--shadow-warm-md)] z-10">
                         {companyHistory.filter((c) => c.toLowerCase().includes(draft.company.toLowerCase())).map((c) => (
@@ -765,8 +982,6 @@ export default function CareerProfilePage() {
                       className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 focus:border-terra-400 focus:outline-none" />
                   </div>
                 </div>
-
-                {/* Title (optional — AI will generate if empty) */}
                 <div>
                   <label className="block text-xs text-ink-400 mb-1">標題（選填，留空由 AI 自動生成）</label>
                   <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
@@ -784,7 +999,6 @@ export default function CareerProfilePage() {
                   <Textarea label="內容" rows={6} placeholder="記錄這次的工作故事、心得或成就..." value={draft.content ?? ''} onChange={(e) => updateDraft('content', e.target.value)} />
                 )}
 
-                {/* Image upload */}
                 <div>
                   <p className="text-xs text-ink-400 mb-2">圖片（最多 3 張）</p>
                   <div className="flex gap-2 flex-wrap">
@@ -792,10 +1006,10 @@ export default function CareerProfilePage() {
                       <>
                         <button onClick={() => uploadRef.current?.click()} disabled={uploadingImg}
                           className="flex items-center gap-1.5 rounded-lg border border-warm-300 bg-cream-100 px-3 py-2 text-xs text-ink-500 hover:border-terra-300 hover:bg-terra-50 transition-all disabled:opacity-50">
-                          {uploadingImg ? <svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> : '📎'} 上傳圖片
+                          {uploadingImg ? <Spinner className="h-3 w-3" /> : '📎'} 上傳圖片
                         </button>
                         {isMobile && (
-                          <button onClick={() => { const i = document.createElement('input'); i.type='file'; i.accept='image/*'; i.onchange=(e)=>handleImageFiles((e.target as HTMLInputElement).files); i.click() }} disabled={uploadingImg}
+                          <button onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = (e) => handleImageFiles((e.target as HTMLInputElement).files); i.click() }} disabled={uploadingImg}
                             className="flex items-center gap-1.5 rounded-lg border border-warm-300 bg-cream-100 px-3 py-2 text-xs text-ink-500 hover:border-terra-300 hover:bg-terra-50 transition-all disabled:opacity-50">
                             📷 拍照
                           </button>
@@ -803,7 +1017,7 @@ export default function CareerProfilePage() {
                         <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleImageFiles(e.target.files)} />
                       </>
                     )}
-                    {analyzingImg && <span className="text-xs text-terra-500 flex items-center gap-1 self-center"><svg className="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>AI 正在分析圖片...</span>}
+                    {analyzingImg && <span className="text-xs text-terra-500 flex items-center gap-1 self-center"><Spinner className="h-3 w-3" />AI 正在分析圖片...</span>}
                   </div>
                   {draft.images.length > 0 && (
                     <div className="mt-3 space-y-3">
@@ -811,12 +1025,12 @@ export default function CareerProfilePage() {
                         <div key={i} className="flex gap-3">
                           <img src={img.url} alt="" className="h-20 w-20 rounded-xl object-cover cursor-pointer border border-warm-200 shrink-0" onClick={() => setLightboxUrl(img.url)} />
                           <div className="flex-1 min-w-0">
-                            {img.aiDescription ? (
+                            {img.aiDescription && (
                               <div className="rounded-lg bg-cream-200 px-3 py-2 text-xs text-ink-600">
                                 <p className="font-medium text-terra-500 mb-1">📷 AI 圖片分析</p>
                                 <p>{img.aiDescription}</p>
                               </div>
-                            ) : null}
+                            )}
                             <button onClick={() => setDraft((p) => ({ ...p, images: p.images.filter((_, j) => j !== i) }))} className="mt-1 text-[10px] text-ink-400 hover:text-red-400">移除</button>
                           </div>
                         </div>
@@ -826,16 +1040,13 @@ export default function CareerProfilePage() {
                 </div>
 
                 <div className="flex gap-2 pt-1">
-                  <Button variant="primary" onClick={saveEntry}>
-                    {editingId ? '更新日誌' : '儲存日誌'}
-                  </Button>
+                  <Button variant="primary" onClick={saveEntry}>{editingId ? '更新日誌' : '儲存日誌'}</Button>
                   <Button variant="outline" onClick={() => { setShowForm(false); setEditingId(null); setDraft(emptyEntry()) }}>取消</Button>
                 </div>
               </CardContent>
             </Card>
           )}
 
-          {/* Entry list */}
           {filteredEntries.length === 0 && !showForm ? (
             <div className="flex flex-col items-center justify-center py-16">
               <p className="text-3xl mb-2">✍</p>
@@ -851,7 +1062,7 @@ export default function CareerProfilePage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-ink-700">{entry.title || '(AI 生成標題中...)'}</p>
                           <Badge variant="outline">{entry.template === 'star' ? '⭐ STAR' : '📝 自由'}</Badge>
-                          {taggingId === entry.id && <span className="text-[10px] text-terra-500 flex items-center gap-1"><svg className="h-2.5 w-2.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>AI 標記中</span>}
+                          {taggingId === entry.id && <span className="text-[10px] text-terra-500 flex items-center gap-1"><Spinner className="h-2.5 w-2.5" />AI 標記中</span>}
                         </div>
                         <p className="text-xs text-ink-400 mt-0.5">{entry.company && `${entry.company} · `}{fmtDate(entry.date)}</p>
                         {entry.tags.length > 0 && <div className="flex flex-wrap gap-1 mt-2">{entry.tags.map((t) => <Badge key={t} variant="terra">{t}</Badge>)}</div>}
