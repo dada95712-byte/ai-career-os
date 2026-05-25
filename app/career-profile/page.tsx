@@ -4,16 +4,11 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { ResumeEditor, type SavedResumeData } from '@/components/resume/resume-editor'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-const SKILL_CATEGORIES = ['專業技能', '工具與軟體', '核心職能', '軟實力', '語言能力', '證照與認證', '學習中'] as const
-type SkillCategory = typeof SKILL_CATEGORIES[number]
-
-interface TaggedSkill { name: string; category: SkillCategory }
 // Extended for WYSIWYG editor — all new fields are optional for backward compat
 interface Education {
   school: string; degree: string; major: string; year: string
@@ -56,19 +51,9 @@ interface JournalEntry {
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const TABS = ['resume', 'skills', 'journal'] as const
+const TABS = ['resume', 'journal'] as const
 type Tab = typeof TABS[number]
-const TAB_LABELS: Record<Tab, string> = { resume: '◈ Resume Lab', skills: '⚡ Skill Tags', journal: '✍ Work Journal' }
-
-const CATEGORY_COLORS: Record<SkillCategory, string> = {
-  '專業技能':   'bg-terra-50 border-terra-200 text-terra-600',
-  '工具與軟體': 'bg-sky-50 border-sky-200 text-sky-600',
-  '核心職能':   'bg-violet-50 border-violet-200 text-violet-600',
-  '軟實力':     'bg-sage-50 border-sage-200 text-sage-600',
-  '語言能力':   'bg-honey-50 border-amber-200 text-honey-500',
-  '證照與認證': 'bg-cream-200 border-warm-300 text-ink-600',
-  '學習中':     'bg-orange-50 border-orange-200 text-orange-500',
-}
+const TAB_LABELS: Record<Tab, string> = { resume: '◈ Resume Lab', journal: '✍ Work Journal' }
 
 const RESUME_TEMPLATES = [
   { id: 'freshman',     emoji: '🎓', label: '新鮮人', desc: '剛畢業，強調學習能力',    data: { name: '王小明', email: 'example@gmail.com',    phone: '0912-345-678', skills: ['Python', 'Microsoft Office', '數據分析', '快速學習', '英文溝通'],              experiences: [{ company: '某科技公司', title: '暑期實習生',     description: '協助開發內部工具，參與敏捷開發流程' }],                                                                        education: [{ school: '國立台灣大學', degree: '學士', major: '資訊管理學系', year: '2024' }], rawText: '' } },
@@ -136,18 +121,7 @@ export default function CareerProfilePage() {
   const [linkedinStep, setLinkedinStep] = useState<1 | 2>(1)
   const [linkedinParsing, setLinkedinParsing] = useState(false)
 
-  // ── Skills state ──────────────────────────────────────────────────────────────
-  const [skills, setSkills] = useState<TaggedSkill[]>([])
-  const [newSkill, setNewSkill] = useState('')
-  const [newSkillCat, setNewSkillCat] = useState<SkillCategory>('核心職能')
-  const [skillView, setSkillView] = useState<'category' | 'all'>('category')
-  const [collapsedCats, setCollapsedCats] = useState<Set<SkillCategory>>(new Set())
-  const [recommendedSkills, setRecommendedSkills] = useState<Array<{ name: string; category: SkillCategory }>>([])
-  const [checkedSkills, setCheckedSkills] = useState<Set<string>>(new Set())
-  const [loadingRecommend, setLoadingRecommend] = useState(false)
-  const [showRecommend, setShowRecommend] = useState(false)
-  const [dupAlert, setDupAlert] = useState('')
-  const [editingSkill, setEditingSkill] = useState<{ originalName: string; newName: string; newCat: SkillCategory; x: number; y: number } | null>(null)
+  // Skills are managed in /dashboard/skills — only needed here for localStorage merge on resume import
 
   // ── Journal state ─────────────────────────────────────────────────────────────
   const [entries, setEntries] = useState<JournalEntry[]>([])
@@ -172,15 +146,6 @@ export default function CareerProfilePage() {
   // Init from localStorage
   useEffect(() => {
     setIsMobile(window.innerWidth < 768)
-
-    const rawSkills = localStorage.getItem('career-skills')
-    if (rawSkills) {
-      const p = JSON.parse(rawSkills)
-      if (Array.isArray(p)) {
-        if (typeof p[0] === 'string') setSkills(p.map((s: string) => ({ name: s, category: '核心職能' as SkillCategory })))
-        else setSkills(p)
-      }
-    }
 
     const rawEntries = localStorage.getItem('career-journal')
     if (rawEntries) {
@@ -222,14 +187,16 @@ export default function CareerProfilePage() {
     setEditedResume(data); setEditingResumeId(null); setResumeName(name)
     setResumeError('')
     setResumeView('edit'); setCreateMode('none')
-    // Merge skills
-    const tagged = data.skills.map((s) => ({ name: s, category: '專業技能' as SkillCategory }))
-    setSkills((prev) => {
-      const existing = new Set(prev.map((t) => t.name))
-      const toAdd = tagged.filter((t) => !existing.has(t.name))
-      if (!toAdd.length) return prev
-      const next = [...prev, ...toAdd]; autoSave('career-skills', next); return next
-    })
+    // Merge parsed resume skills into the shared skill library in localStorage
+    try {
+      const raw = localStorage.getItem('career-skills')
+      const existing: { name: string; category: string }[] = raw ? JSON.parse(raw) : []
+      const existingNames = new Set(existing.map((t) => (typeof t === 'string' ? t : t.name)))
+      const toAdd = data.skills
+        .filter((s) => !existingNames.has(s))
+        .map((s) => ({ name: s, category: '專業技能' }))
+      if (toAdd.length) localStorage.setItem('career-skills', JSON.stringify([...existing, ...toAdd]))
+    } catch { /* quota or parse error */ }
     void source
   }
 
@@ -281,86 +248,6 @@ export default function CareerProfilePage() {
     if (!t) return
     goToEditor({ ...EMPTY_RESUME, ...t.data }, `${t.emoji} ${t.label}`, 'template')
     setSelectedTemplateId('')
-  }
-
-  // ── Skills handlers ───────────────────────────────────────────────────────────
-
-  function normSkill(name: string) { return name.toLowerCase().replace(/\s+/g, '') }
-
-  function addSkill() {
-    const t = newSkill.trim(); if (!t) return
-    if (skills.some((s) => normSkill(s.name) === normSkill(t))) {
-      setDupAlert('此技能已存在'); setTimeout(() => setDupAlert(''), 2500); return
-    }
-    const next = [...skills, { name: t, category: newSkillCat }]
-    setSkills(next); autoSave('career-skills', next); setNewSkill('')
-  }
-  function removeSkill(name: string) {
-    const next = skills.filter((s) => s.name !== name); setSkills(next); autoSave('career-skills', next)
-    if (editingSkill?.originalName === name) setEditingSkill(null)
-  }
-  function dedupSkills() {
-    const seen = new Set<string>()
-    const deduped = skills.filter((s) => {
-      const k = normSkill(s.name); if (seen.has(k)) return false; seen.add(k); return true
-    })
-    const removed = skills.length - deduped.length
-    setSkills(deduped); autoSave('career-skills', deduped)
-    setDupAlert(removed > 0 ? `已移除 ${removed} 個重複技能` : '沒有發現重複技能')
-    setTimeout(() => setDupAlert(''), 2500)
-  }
-  function openSkillEdit(s: TaggedSkill, rect: DOMRect) {
-    const x = Math.min(rect.left, window.innerWidth - 240)
-    const y = rect.bottom + 6
-    setEditingSkill({ originalName: s.name, newName: s.name, newCat: s.category, x, y })
-  }
-  function saveEditedSkill() {
-    if (!editingSkill) return
-    const trimmed = editingSkill.newName.trim(); if (!trimmed) return
-    const norm = normSkill(trimmed)
-    const conflict = skills.some((s) => normSkill(s.name) === norm && s.name !== editingSkill.originalName)
-    if (conflict) { setDupAlert('此技能名稱已存在'); setTimeout(() => setDupAlert(''), 2500); return }
-    const next = skills.map((s) => s.name === editingSkill.originalName ? { name: trimmed, category: editingSkill.newCat } : s)
-    setSkills(next); autoSave('career-skills', next); setEditingSkill(null)
-  }
-  function toggleCat(cat: SkillCategory) {
-    setCollapsedCats((p) => { const n = new Set(p); n.has(cat) ? n.delete(cat) : n.add(cat); return n })
-  }
-
-  async function handleRecommendSkills() {
-    const text = entries.map((e) => [e.title, e.content, e.situation, e.task, e.action, e.result].filter(Boolean).join(' ')).join('\n')
-    if (!text.trim()) { alert('請先新增一些工作日誌再進行分析'); return }
-    setLoadingRecommend(true); setRecommendedSkills([]); setCheckedSkills(new Set()); setShowRecommend(true)
-    try {
-      const res = await fetch('/api/skills/recommend-from-journal', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ journalText: text }) })
-      const data = await res.json()
-      setRecommendedSkills((data.skills ?? []).map((s: string) => ({ name: s, category: guessCategory(s) })))
-    } catch { setRecommendedSkills([]) }
-    finally { setLoadingRecommend(false) }
-  }
-
-  function guessCategory(skill: string): SkillCategory {
-    const l = skill.toLowerCase().replace(/\s+/g, '')
-    // 軟實力 — checked first to prevent misclassification
-    if (/溝通|協調|協作|跨部門|團隊合作|領導|表達|人際|問題解決|服務|軟實力|soft/.test(l)) return '軟實力'
-    // 語言能力
-    if (/英文|英語|english|日文|日語|korean|韓文|french|德文|語言|toeic|ielts|雅思|托福/.test(l)) return '語言能力'
-    // 證照與認證
-    if (/pmp|cfa|cpa|cpe|cissp|certified|certificate|認證|證照|技術士|乙級|甲級/.test(l)) return '證照與認證'
-    // 學習中
-    if (/學習中|進修中|studying|自學/.test(l)) return '學習中'
-    // 工具與軟體 — specific software / platform names
-    if (/python|react|node|sql|docker|git|aws|gcp|azure|figma|excel|powerpoint|office|javascript|typescript|java|c\+\+|ruby|php|swift|kotlin|golang|rust|vue|angular|tailwind|webpack|linux|photoshop|illustrator|premiere|notion|slack|jira|trello|confluence|hubspot|salesforce|googleanalytics|googleads|metaads|facebookads|sap|erp|crm|tableau|powerbi|looker|matlab|spss|stata|hadoop|spark|kubernetes|terraform|ansible/.test(l)) return '工具與軟體'
-    // 核心職能 — cross-functional capabilities
-    if (/管理|規劃|策略|行銷|業務|財務|設計|架構|分析|簡報|研究|開發|運營|專案|品管|採購|供應鏈|數據|報告|預算|成本/.test(l)) return '核心職能'
-    return '專業技能'
-  }
-
-  function addCheckedSkills() {
-    const existingNorm = new Set(skills.map((s) => normSkill(s.name)))
-    const toAdd = recommendedSkills.filter((s) => checkedSkills.has(s.name) && !existingNorm.has(normSkill(s.name)))
-    if (toAdd.length) { const next = [...skills, ...toAdd]; setSkills(next); autoSave('career-skills', next) }
-    setShowRecommend(false); setCheckedSkills(new Set())
   }
 
   // ── Journal handlers ──────────────────────────────────────────────────────────
@@ -433,8 +320,6 @@ export default function CareerProfilePage() {
   })
   const activeFilterCount = [filterDateFrom, filterDateTo, filterCompany].filter(Boolean).length + filterTags.length
   function clearFilters() { setFilterDateFrom(''); setFilterDateTo(''); setFilterCompany(''); setFilterTags([]) }
-
-  const groupedSkills = SKILL_CATEGORIES.reduce((acc, cat) => { acc[cat] = skills.filter((s) => s.category === cat); return acc }, {} as Record<SkillCategory, TaggedSkill[]>)
 
   // ── Card variant helper ───────────────────────────────────────────────────────
   const entryCardCls = (active: boolean) =>
@@ -712,181 +597,6 @@ export default function CareerProfilePage() {
               }}
               onBack={() => { setResumeView('list'); setResumeError('') }}
             />
-          )}
-        </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════════════
-          SKILLS TAB
-      ══════════════════════════════════════════════════════════════════════════ */}
-      {tab === 'skills' && (
-        <div className="space-y-4">
-          {/* Edit popover backdrop */}
-          {editingSkill && (
-            <div className="fixed inset-0 z-[90]" onClick={() => setEditingSkill(null)} />
-          )}
-          {/* Edit popover */}
-          {editingSkill && (
-            <div
-              style={{ top: editingSkill.y, left: editingSkill.x }}
-              className="fixed z-[91] w-56 rounded-2xl border border-warm-200 bg-white p-3 shadow-[var(--shadow-warm-md)] space-y-2">
-              <div>
-                <label className="block text-[10px] font-medium text-ink-400 mb-1">技能名稱</label>
-                <input
-                  autoFocus
-                  value={editingSkill.newName}
-                  onChange={(e) => setEditingSkill((p) => p && { ...p, newName: e.target.value })}
-                  onKeyDown={(e) => { if (e.key === 'Enter') saveEditedSkill(); if (e.key === 'Escape') setEditingSkill(null) }}
-                  className="w-full rounded-lg border border-warm-200 bg-cream-50 px-2.5 py-1.5 text-sm text-ink-800 focus:border-terra-400 focus:outline-none" />
-              </div>
-              <div>
-                <label className="block text-[10px] font-medium text-ink-400 mb-1">分類</label>
-                <select
-                  value={editingSkill.newCat}
-                  onChange={(e) => setEditingSkill((p) => p && { ...p, newCat: e.target.value as SkillCategory })}
-                  className="w-full rounded-lg border border-warm-200 bg-cream-50 px-2.5 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none">
-                  {SKILL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-              <div className="flex gap-1.5 pt-1">
-                <button onClick={saveEditedSkill}
-                  className="flex-1 rounded-lg bg-terra-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-terra-700 transition-colors">
-                  儲存
-                </button>
-                <button onClick={() => { removeSkill(editingSkill.originalName) }}
-                  className="rounded-lg border border-warm-200 px-2.5 py-1.5 text-xs text-red-400 hover:border-red-200 hover:bg-red-50 transition-colors">
-                  刪除
-                </button>
-              </div>
-            </div>
-          )}
-
-          <Card>
-            <CardContent className="pt-5 space-y-3">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <Input placeholder="例如：React、Python、專案管理" value={newSkill}
-                  onChange={(e) => setNewSkill(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') addSkill() }}
-                  className="flex-1" />
-                <select value={newSkillCat} onChange={(e) => setNewSkillCat(e.target.value as SkillCategory)}
-                  className="rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-700 focus:border-terra-400 focus:outline-none">
-                  {SKILL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <Button onClick={addSkill}>新增</Button>
-              </div>
-              {dupAlert && (
-                <p className="text-xs text-terra-600 bg-terra-50 border border-terra-200 rounded-lg px-3 py-1.5">{dupAlert}</p>
-              )}
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" onClick={handleRecommendSkills} loading={loadingRecommend}>🤖 AI 分析日誌推薦技能</Button>
-                <button onClick={dedupSkills}
-                  className="rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-xs text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
-                  🔧 清除重複技能
-                </button>
-                <div className="flex gap-1 rounded-lg border border-warm-200 bg-white p-0.5 ml-auto">
-                  {(['category', 'all'] as const).map((v) => (
-                    <button key={v} onClick={() => setSkillView(v)}
-                      className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${skillView === v ? 'bg-cream-200 text-ink-700' : 'text-ink-400'}`}>
-                      {v === 'category' ? '分類視圖' : '全部顯示'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {showRecommend && (
-            <Card className="border-terra-100">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>AI 推薦技能</CardTitle>
-                  <button onClick={() => setShowRecommend(false)} className="text-ink-400 hover:text-ink-600">×</button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {loadingRecommend ? (
-                  <div className="flex items-center gap-2 text-sm text-terra-500 py-4 justify-center"><Spinner />AI 分析日誌中...</div>
-                ) : recommendedSkills.length === 0 ? (
-                  <p className="text-sm text-ink-400 py-2">無法取得推薦，請確認日誌有足夠內容。</p>
-                ) : (
-                  <>
-                    <div className="flex flex-wrap gap-2">
-                      {recommendedSkills.map((s) => (
-                        <label key={s.name} className={`flex items-center gap-1.5 cursor-pointer rounded-full border px-3 py-1 text-sm transition-all ${checkedSkills.has(s.name) ? 'border-terra-400 bg-terra-50 text-terra-600' : 'border-warm-200 text-ink-500 hover:border-warm-300'}`}>
-                          <input type="checkbox" className="hidden" checked={checkedSkills.has(s.name)}
-                            onChange={(e) => setCheckedSkills((p) => { const n = new Set(p); e.target.checked ? n.add(s.name) : n.delete(s.name); return n })} />
-                          {checkedSkills.has(s.name) ? '✓ ' : ''}{s.name}
-                          <span className="text-[10px] text-ink-400">· {s.category}</span>
-                        </label>
-                      ))}
-                    </div>
-                    <Button variant="primary" size="sm" disabled={checkedSkills.size === 0} onClick={addCheckedSkills}>
-                      一鍵新增 {checkedSkills.size > 0 ? `(${checkedSkills.size})` : ''}
-                    </Button>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {skillView === 'all' ? (
-            <Card>
-              <CardHeader><CardTitle>所有技能 <span className="text-ink-400 font-normal">({skills.length})</span></CardTitle></CardHeader>
-              <CardContent>
-                {skills.length === 0 ? (
-                  <div className="py-8 text-center"><p className="text-2xl mb-2">⚡</p><p className="text-sm text-ink-500">尚未新增技能</p></div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {skills.map((s) => (
-                      <button key={s.name}
-                        onClick={(e) => openSkillEdit(s, e.currentTarget.getBoundingClientRect())}
-                        className={`flex items-center gap-1 rounded-full border pl-3 pr-2 py-1 transition-all hover:opacity-80 ${CATEGORY_COLORS[s.category]} ${editingSkill?.originalName === s.name ? 'ring-2 ring-terra-400 ring-offset-1' : ''}`}>
-                        <span className="text-sm">{s.name}</span>
-                        <span className="text-[10px] opacity-60">· {s.category}</span>
-                        <span className="ml-1 opacity-40 text-xs">✎</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {SKILL_CATEGORIES.map((cat) => {
-                const catSkills = groupedSkills[cat]
-                if (!catSkills.length) return null
-                const collapsed = collapsedCats.has(cat)
-                return (
-                  <Card key={cat}>
-                    <button className="w-full" onClick={() => toggleCat(cat)}>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="text-sm">{cat} <span className="text-ink-400 font-normal">({catSkills.length})</span></CardTitle>
-                          <span className="text-ink-300 text-xs">{collapsed ? '▶' : '▼'}</span>
-                        </div>
-                      </CardHeader>
-                    </button>
-                    {!collapsed && (
-                      <CardContent className="pt-0">
-                        <div className="flex flex-wrap gap-2">
-                          {catSkills.map((s) => (
-                            <button key={s.name}
-                              onClick={(e) => { e.stopPropagation(); openSkillEdit(s, e.currentTarget.getBoundingClientRect()) }}
-                              className={`flex items-center gap-1 rounded-full border pl-3 pr-2 py-1 transition-all hover:opacity-80 ${CATEGORY_COLORS[cat]} ${editingSkill?.originalName === s.name ? 'ring-2 ring-terra-400 ring-offset-1' : ''}`}>
-                              <span className="text-sm">{s.name}</span>
-                              <span className="ml-1 opacity-40 text-xs">✎</span>
-                            </button>
-                          ))}
-                        </div>
-                      </CardContent>
-                    )}
-                  </Card>
-                )
-              })}
-              {skills.length === 0 && (
-                <div className="py-10 text-center"><p className="text-2xl mb-2">⚡</p><p className="text-sm text-ink-500">尚未新增技能</p></div>
-              )}
-            </div>
           )}
         </div>
       )}

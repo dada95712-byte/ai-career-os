@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import jsPDF from 'jspdf'
 import {
@@ -676,6 +677,17 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack }: Resum
                 </div>
               ))}
               {resume.skills.length === 0 && <p className="text-sm text-ink-300">{resume.lang === 'zh' ? '尚未新增技能' : 'No skills added yet'}</p>}
+            </div>
+            {/* ── Skills library link ── */}
+            <div className="mt-4 rounded-xl border border-warm-200 bg-cream-50 px-4 py-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-ink-700">⚡ 管理我的技能庫</p>
+                <p className="text-[11px] text-ink-400 mt-0.5">你的技能清單會同步用於：職缺匹配 · 技能落差分析 · 面試題目生成</p>
+              </div>
+              <Link href="/dashboard/skills"
+                className="shrink-0 rounded-lg border border-warm-300 bg-white px-3 py-1.5 text-xs font-medium text-terra-600 hover:border-terra-300 hover:bg-terra-50 transition-all whitespace-nowrap">
+                前往技能管理 →
+              </Link>
             </div>
           </>
         )}

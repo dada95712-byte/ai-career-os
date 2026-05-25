@@ -253,6 +253,19 @@ export function Sidebar() {
           {navItems.map((item) => (
             <li key={item.href}>
               <NavItem item={item} active={isActive(item.href)} collapsed={collapsed} />
+              {/* Skills sub-item under Resume Lab */}
+              {item.href === '/career-profile' && !collapsed && (
+                <Link href="/dashboard/skills"
+                  className={cn(
+                    'ml-6 mt-0.5 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-all',
+                    pathname === '/dashboard/skills'
+                      ? 'bg-terra-50 text-terra-600 font-medium border border-terra-100'
+                      : 'text-ink-400 hover:bg-cream-300 hover:text-ink-600'
+                  )}>
+                  <span className="text-[10px]">⚡</span>
+                  <span>技能庫</span>
+                </Link>
+              )}
             </li>
           ))}
         </ul>

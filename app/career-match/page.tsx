@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -233,6 +234,12 @@ export default function CareerMatchPage() {
                           </svg>
                           AI 分析匹配度中...
                         </div>
+                      )}
+                      {selected.matchScore !== undefined && (
+                        <Link href="/dashboard/skills" className="flex items-center gap-1.5 text-[11px] text-ink-400 hover:text-terra-500 transition-colors mb-1">
+                          <span>📊 匹配分數來自你的技能庫，前往更新</span>
+                          <span className="text-terra-400">→</span>
+                        </Link>
                       )}
                       {selected.matchScore !== undefined && (
                         <div className="grid grid-cols-2 gap-4">

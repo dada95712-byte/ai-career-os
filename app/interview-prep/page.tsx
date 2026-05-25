@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -302,6 +303,10 @@ export default function InterviewPrepPage() {
                       🤖 AI 生成面試題目
                     </Button>
                     <p className="text-center text-xs text-ink-300">AI 將根據職位與公司背景生成客製化題目</p>
+                    <p className="text-center text-[11px] text-ink-400">
+                      🎤 題目將根據你的技能庫個人化生成 ·{' '}
+                      <Link href="/dashboard/skills" className="text-terra-500 hover:text-terra-600 transition-colors">前往管理技能庫</Link>
+                    </p>
                   </CardContent>
                 </Card>
               </div>

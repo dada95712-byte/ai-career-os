@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +25,7 @@ export default function CareerGrowthPage() {
   const [gaps, setGaps] = useState<SkillGap[]>([])
   const [analyzing, setAnalyzing] = useState(false)
   const [skillsAutoLoaded, setSkillsAutoLoaded] = useState(false)
+  const [skillCount, setSkillCount] = useState(0)
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'assistant', content: '你好！我是你的 AI 職涯教練。\n\n今天想聊什麼職涯話題？無論是轉職、升職、求職策略，或任何職場困惑，我都在。' }
   ])
@@ -47,6 +49,7 @@ export default function CareerGrowthPage() {
         : parsed.map((s: { name: string }) => s.name)
       setCurrentSkills(names.join('、'))
       setSkillsAutoLoaded(true)
+      setSkillCount(names.length)
     } catch { /* ignore */ }
   }, [])
 
@@ -108,7 +111,10 @@ export default function CareerGrowthPage() {
               <div>
                 <Textarea label="目前技能（選填）" placeholder="例如：React、3 年前端經驗、基本 SQL" rows={2} value={currentSkills} onChange={(e) => setCurrentSkills(e.target.value)} />
                 {skillsAutoLoaded && (
-                  <p className="text-[11px] text-sage-600 mt-1">✓ 已從你的 Skill Tags 自動帶入</p>
+                  <p className="text-[11px] text-sage-600 mt-1">
+                    📊 已自動載入你的技能庫（共 {skillCount} 項技能）·{' '}
+                    <Link href="/dashboard/skills" className="underline hover:text-terra-500 transition-colors">前往更新 →</Link>
+                  </p>
                 )}
               </div>
               <Button variant="primary" onClick={analyzeGap} loading={analyzing} disabled={!targetRole.trim()}>
