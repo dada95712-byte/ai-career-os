@@ -152,10 +152,12 @@ export default function CareerProfilePage() {
   const [draft, setDraft] = useState<JournalEntry>(emptyEntry())
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [sortBy, setSortBy] = useState<'date' | 'company'>('date')
+  const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'company-asc' | 'company-desc'>('date-desc')
   const [filterDateFrom, setFilterDateFrom] = useState('')
   const [filterDateTo, setFilterDateTo] = useState('')
   const [filterCompany, setFilterCompany] = useState('')
+  const [filterTags, setFilterTags] = useState<string[]>([])
+  const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [companyHistory, setCompanyHistory] = useState<string[]>([])
   const [showCompanyDD, setShowCompanyDD] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -377,13 +379,21 @@ export default function CareerProfilePage() {
   function deleteEntry(id: string) { const next = entries.filter((e) => e.id !== id); setEntries(next); autoSave('career-journal', next) }
   function editEntry(e: JournalEntry) { setDraft({ ...e }); setEditingId(e.id); setShowForm(true) }
 
-  const sortedEntries = [...entries].sort((a, b) => sortBy === 'date' ? b.date.localeCompare(a.date) : a.company.localeCompare(b.company))
+  const sortedEntries = [...entries].sort((a, b) => {
+    if (sortBy === 'date-desc') return b.date.localeCompare(a.date)
+    if (sortBy === 'date-asc')  return a.date.localeCompare(b.date)
+    if (sortBy === 'company-asc')  return a.company.localeCompare(b.company)
+    return b.company.localeCompare(a.company)
+  })
   const filteredEntries = sortedEntries.filter((e) => {
     if (filterDateFrom && e.date < filterDateFrom) return false
-    if (filterDateTo && e.date > filterDateTo) return false
-    if (filterCompany && !e.company.toLowerCase().includes(filterCompany.toLowerCase())) return false
+    if (filterDateTo   && e.date > filterDateTo)   return false
+    if (filterCompany  && !e.company.toLowerCase().includes(filterCompany.toLowerCase())) return false
+    if (filterTags.length > 0 && !filterTags.every((t) => e.tags.includes(t))) return false
     return true
   })
+  const activeFilterCount = [filterDateFrom, filterDateTo, filterCompany].filter(Boolean).length + filterTags.length
+  function clearFilters() { setFilterDateFrom(''); setFilterDateTo(''); setFilterCompany(''); setFilterTags([]) }
 
   const groupedSkills = SKILL_CATEGORIES.reduce((acc, cat) => { acc[cat] = skills.filter((s) => s.category === cat); return acc }, {} as Record<SkillCategory, TaggedSkill[]>)
 
@@ -796,28 +806,90 @@ export default function CareerProfilePage() {
       ══════════════════════════════════════════════════════════════════════════ */}
       {tab === 'journal' && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="primary" size="sm" onClick={() => { setDraft(emptyEntry()); setEditingId(null); setShowForm(true) }}>+ 新增日誌</Button>
-            <div className="flex gap-1 rounded-lg border border-warm-200 bg-white p-0.5">
-              {(['date', 'company'] as const).map((s) => (
-                <button key={s} onClick={() => setSortBy(s)} className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${sortBy === s ? 'bg-cream-200 text-ink-700' : 'text-ink-400'}`}>
-                  {s === 'date' ? '依日期' : '依公司'}
-                </button>
-              ))}
+          {/* ── Operation bar ── */}
+          <div className="flex items-center gap-2">
+            <Button variant="primary" size="sm" onClick={() => { setDraft(emptyEntry()); setEditingId(null); setShowForm(true) }}>＋ 新增日誌</Button>
+            <div className="flex-1" />
+            {/* Sort dropdown */}
+            <div className="relative">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                className="appearance-none rounded-lg border border-warm-200 bg-white pl-3 pr-7 py-1.5 text-xs text-ink-600 focus:border-terra-400 focus:outline-none cursor-pointer hover:border-warm-300 transition-colors">
+                <option value="date-desc">最新日期優先</option>
+                <option value="date-asc">最舊日期優先</option>
+                <option value="company-asc">公司名稱 A→Z</option>
+                <option value="company-desc">公司名稱 Z→A</option>
+              </select>
+              <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-ink-400 text-[10px]">↕</span>
             </div>
+            {/* Filter button */}
+            <button
+              onClick={() => setShowFilterPanel((v) => !v)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${showFilterPanel || activeFilterCount > 0 ? 'border-terra-300 bg-terra-50 text-terra-600' : 'border-warm-200 bg-white text-ink-500 hover:border-warm-300'}`}>
+              ⚙ 篩選
+              {activeFilterCount > 0 && (
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-terra-500 text-[9px] font-bold text-white">{activeFilterCount}</span>
+              )}
+            </button>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
-              className="rounded-lg border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" />
-            <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
-              className="rounded-lg border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" />
-            <input placeholder="篩選公司..." value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)}
-              className="rounded-lg border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" />
-            {(filterDateFrom || filterDateTo || filterCompany) && (
-              <button onClick={() => { setFilterDateFrom(''); setFilterDateTo(''); setFilterCompany('') }} className="text-xs text-ink-400 hover:text-ink-600 px-2">清除篩選</button>
-            )}
-          </div>
+          {/* ── Filter panel ── */}
+          {showFilterPanel && (
+            <div className="rounded-xl border border-warm-200 bg-white p-4 space-y-4 shadow-[var(--shadow-warm-xs)]">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-ink-600">篩選條件</p>
+                <div className="flex items-center gap-2">
+                  {activeFilterCount > 0 && (
+                    <span className="text-[10px] font-medium text-terra-600 bg-terra-50 border border-terra-200 rounded-full px-2 py-0.5">
+                      已套用 {activeFilterCount} 個篩選
+                    </span>
+                  )}
+                  {activeFilterCount > 0 && (
+                    <button onClick={clearFilters} className="text-xs text-ink-400 hover:text-ink-700 transition-colors">清除篩選</button>
+                  )}
+                </div>
+              </div>
+
+              {/* Date range */}
+              <div>
+                <p className="text-[10px] font-medium text-ink-400 uppercase tracking-wide mb-2">日期範圍</p>
+                <div className="flex items-center gap-2">
+                  <input type="date" value={filterDateFrom} onChange={(e) => setFilterDateFrom(e.target.value)}
+                    className="flex-1 rounded-lg border border-warm-300 bg-cream-50 px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" />
+                  <span className="text-xs text-ink-400 shrink-0">～</span>
+                  <input type="date" value={filterDateTo} onChange={(e) => setFilterDateTo(e.target.value)}
+                    className="flex-1 rounded-lg border border-warm-300 bg-cream-50 px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none" />
+                </div>
+              </div>
+
+              {/* Company */}
+              <div>
+                <p className="text-[10px] font-medium text-ink-400 uppercase tracking-wide mb-2">公司</p>
+                <select value={filterCompany} onChange={(e) => setFilterCompany(e.target.value)}
+                  className="w-full rounded-lg border border-warm-300 bg-cream-50 px-3 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none">
+                  <option value="">全部公司</option>
+                  {companyHistory.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <p className="text-[10px] font-medium text-ink-400 uppercase tracking-wide mb-2">標籤類別（可多選）</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {['問題解決', '領導力', '跨部門協作', '技術實作', '客戶關係', '數據分析'].map((tag) => {
+                    const active = filterTags.includes(tag)
+                    return (
+                      <button key={tag} onClick={() => setFilterTags((prev) => active ? prev.filter((t) => t !== tag) : [...prev, tag])}
+                        className={`rounded-full border px-2.5 py-1 text-xs transition-all ${active ? 'border-terra-400 bg-terra-50 text-terra-700 font-medium' : 'border-warm-200 text-ink-500 hover:border-warm-400'}`}>
+                        {tag}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
 
           {showForm && (
             <Card className="border-terra-100">
