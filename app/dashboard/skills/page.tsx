@@ -21,12 +21,50 @@ const CAT_DOT: Record<SkillCategory, string> = {
   '學習中':     'bg-orange-400',
 }
 
+const CAT_GUIDE: Record<SkillCategory, { emoji: string; desc: string; examples: string }> = {
+  '專業技能':   { emoji: '🔴', desc: '特定職位才需要的硬技能',        examples: 'Python、財務分析、供應鏈管理、AutoCAD' },
+  '工具與軟體': { emoji: '🔵', desc: '你使用過的軟體、平台、系統',    examples: 'Excel、Figma、Salesforce、SAP、Notion' },
+  '核心職能':   { emoji: '🟣', desc: '可跨職位應用的工作能力',         examples: '專案管理、數據分析、簡報製作、流程優化' },
+  '軟實力':     { emoji: '🟠', desc: '人際互動與工作態度相關能力',     examples: '溝通協調、團隊合作、問題解決、領導力' },
+  '語言能力':   { emoji: '🟢', desc: '語言與溝通能力',                 examples: '英文（流利）、日文（中等）、TOEIC 660' },
+  '證照與認證': { emoji: '🟡', desc: '已取得的資格證書',               examples: 'PMP、CFA、乙級技術士、AWS Certified' },
+  '學習中':     { emoji: '⚪', desc: '正在培養、尚未精通的技能',       examples: 'Rust、機器學習、韓文' },
+}
+
 function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
   return (
     <svg className={`animate-spin ${className}`} fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
     </svg>
+  )
+}
+
+// ── CategoryTooltip ───────────────────────────────────────────────────────────
+
+function CategoryTooltip({ cat }: { cat: SkillCategory }) {
+  const [visible, setVisible] = useState(false)
+  const g = CAT_GUIDE[cat]
+  return (
+    <div className="relative inline-flex items-center">
+      <button
+        type="button"
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onFocus={() => setVisible(true)}
+        onBlur={() => setVisible(false)}
+        className="text-ink-300 hover:text-ink-500 transition-colors text-[13px] leading-none ml-1 focus:outline-none"
+        aria-label={`${cat} 說明`}
+      >
+        ⓘ
+      </button>
+      <div className={`absolute left-1/2 -translate-x-1/2 bottom-full mb-2 z-50 w-[220px] rounded-lg bg-ink-900 text-white text-xs px-3 py-2 shadow-lg pointer-events-none transition-opacity duration-150 ${visible ? 'opacity-100' : 'opacity-0'}`}>
+        <p className="font-semibold mb-1">{g.emoji} {cat}</p>
+        <p className="text-white/80 mb-1">{g.desc}</p>
+        <p className="text-white/60">範例：{g.examples}</p>
+        <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-ink-900" />
+      </div>
+    </div>
   )
 }
 
@@ -109,6 +147,9 @@ export default function SkillsPage() {
   const [checkedSkills, setCheckedSkills] = useState<Set<string>>(new Set())
   const [loadingRecommend, setLoadingRecommend] = useState(false)
   const [showRecommend, setShowRecommend] = useState(false)
+  const [showGuideModal, setShowGuideModal] = useState(false)
+  const [aiReclassifying, setAiReclassifying] = useState(false)
+  const [reclassifyPreview, setReclassifyPreview] = useState<{ skill: TaggedSkill; newCat: SkillCategory; reason: string }[] | null>(null)
 
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -215,6 +256,60 @@ export default function SkillsPage() {
     finally { setLoadingRecommend(false) }
   }
 
+  async function handleAiReclassify() {
+    if (skills.length === 0) return
+    setAiReclassifying(true)
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{
+            role: 'user',
+            content: `你是技能分類專家。請根據以下分類規則，判斷每個技能是否在正確的分類，只列出需要調整的項目。
+
+分類規則：
+- 專業技能：特定職位的硬技能（如 Python、財務分析）
+- 工具與軟體：具體工具/軟體/平台名稱（如 Excel、Figma、Jira、SAP）
+- 核心職能：跨職位的工作能力（如專案管理能力、數據分析能力、簡報製作）
+- 軟實力：人際與態度（如溝通協調、領導力、問題解決、團隊合作、跨部門協作）
+- 語言能力：語言相關（英文、日文、TOEIC）
+- 證照與認證：取得的資格證書（PMP、CFA、AWS Certified）
+- 學習中：正在學習的技能
+
+用 JSON 格式回覆，只列需調整項目（若無需調整任何技能回傳 {"adjustments":[]}）：
+{"adjustments":[{"name":"技能名稱","currentCat":"目前分類","suggestedCat":"建議分類","reason":"原因10字內"}]}
+
+技能列表：
+${skills.map((s) => `${s.name}（${s.category}）`).join('、')}
+
+只回傳 JSON。`,
+          }],
+        }),
+      })
+      const data = await res.json()
+      const m = data.reply?.match(/\{[\s\S]*\}/)
+      const parsed = m ? JSON.parse(m[0]) : {}
+      const adjustments: { name: string; currentCat: string; suggestedCat: string; reason: string }[] = parsed.adjustments ?? []
+      const preview = adjustments
+        .filter((a) => (SKILL_CATEGORIES as readonly string[]).includes(a.suggestedCat) && a.suggestedCat !== a.currentCat)
+        .map((a) => {
+          const skill = skills.find((s) => s.name === a.name)
+          return skill ? { skill, newCat: a.suggestedCat as SkillCategory, reason: a.reason } : null
+        })
+        .filter(Boolean) as { skill: TaggedSkill; newCat: SkillCategory; reason: string }[]
+      setReclassifyPreview(preview)
+    } catch {
+      setReclassifyPreview([])
+    } finally { setAiReclassifying(false) }
+  }
+
+  function applyReclassify() {
+    if (!reclassifyPreview) return
+    const updates = new Map(reclassifyPreview.map((p) => [p.skill.name, p.newCat]))
+    persist(skills.map((s) => updates.has(s.name) ? { ...s, category: updates.get(s.name)! } : s))
+    setReclassifyPreview(null)
+  }
+
   function addCheckedSkills() {
     const existingNorm = new Set(skills.map((s) => norm(s.name)))
     const toAdd = recommendedSkills.filter((s) => checkedSkills.has(s.name) && !existingNorm.has(norm(s.name)))
@@ -302,12 +397,27 @@ export default function SkillsPage() {
           >
             {loadingRecommend ? <Spinner /> : '🤖'} AI 推薦
           </button>
+          {/* AI reclassify */}
+          <button
+            onClick={handleAiReclassify}
+            disabled={aiReclassifying || skills.length === 0}
+            className="h-9 flex items-center gap-1.5 rounded-xl border border-warm-200 bg-white px-3 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors disabled:opacity-50"
+          >
+            {aiReclassifying ? <Spinner /> : '🤖'} AI 重新分類
+          </button>
           {/* Dedup */}
           <button
             onClick={dedupSkills}
             className="h-9 rounded-xl border border-warm-200 bg-white px-3 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors"
           >
             清除重複
+          </button>
+          {/* Guide */}
+          <button
+            onClick={() => setShowGuideModal(true)}
+            className="h-9 flex items-center gap-1.5 rounded-xl bg-cream-200 px-3 text-sm text-ink-600 hover:bg-cream-300 transition-colors"
+          >
+            📖 分類指引
           </button>
 
           {/* View toggle — pushed to right */}
@@ -416,14 +526,17 @@ export default function SkillsPage() {
             const collapsed = collapsedCats.has(cat)
             return (
               <div key={cat} className="rounded-2xl border border-warm-200 bg-white overflow-hidden">
-                <button className="w-full flex items-center justify-between px-5 py-3 hover:bg-cream-50 transition-colors" onClick={() => toggleCat(cat)}>
-                  <div className="flex items-center gap-2">
+                <div className="w-full flex items-center justify-between px-5 py-3 hover:bg-cream-50 transition-colors">
+                  <button className="flex items-center gap-2 flex-1 text-left" onClick={() => toggleCat(cat)}>
                     <span className={`h-2 w-2 rounded-full shrink-0 ${CAT_DOT[cat]}`} />
                     <span className="text-sm font-semibold text-ink-700">{cat}</span>
                     <span className="text-xs text-ink-400 font-normal">({catSkills.length})</span>
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <CategoryTooltip cat={cat} />
+                    <button onClick={() => toggleCat(cat)} className="text-ink-300 text-xs ml-1">{collapsed ? '▶' : '▼'}</button>
                   </div>
-                  <span className="text-ink-300 text-xs">{collapsed ? '▶' : '▼'}</span>
-                </button>
+                </div>
                 {!collapsed && (
                   <div className="px-5 pb-4 pt-1 flex flex-wrap gap-2">
                     {catSkills.map((s) => renderChip(s))}
@@ -437,6 +550,124 @@ export default function SkillsPage() {
           )}
         </div>
       )}
+
+      {/* ── Guide Modal ── */}
+      {showGuideModal && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setShowGuideModal(false)}>
+          <div className="bg-white rounded-2xl shadow-[var(--shadow-warm-lg)] max-w-[560px] w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 space-y-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-ink-900">分類指引</h2>
+                  <p className="text-sm text-ink-400 mt-0.5">如何正確分類你的技能？</p>
+                </div>
+                <button onClick={() => setShowGuideModal(false)} className="text-ink-300 hover:text-ink-600 transition-colors text-xl leading-none ml-4">✕</button>
+              </div>
+
+              <div className="space-y-2">
+                {SKILL_CATEGORIES.map((cat) => {
+                  const g = CAT_GUIDE[cat]
+                  return (
+                    <div key={cat} className="flex gap-3 p-3 rounded-xl border border-warm-100 bg-cream-50">
+                      <span className="text-lg shrink-0 mt-0.5">{g.emoji}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className={`h-2 w-2 rounded-full shrink-0 ${CAT_DOT[cat]}`} />
+                          <p className="text-sm font-semibold text-ink-800">{cat}</p>
+                        </div>
+                        <p className="text-xs text-ink-500 mt-0.5">{g.desc}</p>
+                        <p className="text-xs text-ink-400 mt-0.5">範例：{g.examples}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+                <p className="text-sm font-semibold text-ink-800">🔴 專業技能 vs 🟣 核心職能 最容易搞混：</p>
+                <div className="space-y-1 text-xs text-ink-600">
+                  <p>→ 「專案管理工具（Jira）」屬於<strong>工具與軟體</strong></p>
+                  <p>→ 「專案管理能力」屬於<strong>核心職能</strong></p>
+                  <p>→ 「Python 程式設計」屬於<strong>專業技能</strong></p>
+                </div>
+                <p className="text-sm font-semibold text-ink-800 mt-3">🟠 軟實力 常見錯誤分類：</p>
+                <div className="space-y-1 text-xs text-ink-600">
+                  <p>→ 「溝通協調、團隊合作、跨部門協作」→ 應歸<strong>軟實力</strong>，不是核心職能</p>
+                  <p>→ 「領導力、問題解決」→ 應歸<strong>軟實力</strong></p>
+                </div>
+              </div>
+
+              <div className="bg-sage-50 border border-sage-200 rounded-xl p-4 space-y-1.5">
+                <p className="text-sm font-semibold text-sage-700">💡 小技巧：</p>
+                <p className="text-xs text-ink-600">→ 如果是「工具或軟體名稱」→ <strong>工具與軟體</strong></p>
+                <p className="text-xs text-ink-600">→ 如果是「一種能力或方法」→ <strong>核心職能或軟實力</strong></p>
+                <p className="text-xs text-ink-600">→ 如果是「考取的證書」→ <strong>證照與認證</strong></p>
+              </div>
+
+              <button
+                onClick={() => setShowGuideModal(false)}
+                className="w-full rounded-xl bg-terra-500 py-3 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                了解了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── AI Reclassify Preview Modal ── */}
+      {reclassifyPreview !== null && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setReclassifyPreview(null)}>
+          <div className="bg-white rounded-2xl shadow-[var(--shadow-warm-lg)] max-w-[560px] w-full max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 space-y-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-ink-900">🤖 AI 重新分類預覽</h2>
+                  {reclassifyPreview.length > 0
+                    ? <p className="text-sm text-ink-400 mt-0.5">以下技能分類將被調整（共 {reclassifyPreview.length} 項）</p>
+                    : <p className="text-sm text-sage-600 mt-0.5">✓ 所有技能分類都已正確，無需調整！</p>
+                  }
+                </div>
+                <button onClick={() => setReclassifyPreview(null)} className="text-ink-300 hover:text-ink-600 transition-colors text-xl leading-none ml-4">✕</button>
+              </div>
+
+              {reclassifyPreview.length > 0 ? (
+                <>
+                  <div className="space-y-2">
+                    {reclassifyPreview.map((p, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3 rounded-xl border border-warm-100 bg-cream-50 text-sm flex-wrap">
+                        <span className="font-medium text-ink-800 flex-1 min-w-[80px]">{p.skill.name}</span>
+                        <span className="text-ink-400 text-xs">{p.skill.category}</span>
+                        <span className="text-ink-300 text-xs">→</span>
+                        <span className="text-terra-600 text-xs font-semibold">{p.newCat}</span>
+                        {p.reason && <span className="text-ink-400 text-[10px] w-full sm:w-auto">（{p.reason}）</span>}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={applyReclassify}
+                      className="flex-1 rounded-xl bg-terra-500 py-3 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                      確認更新 {reclassifyPreview.length} 項
+                    </button>
+                    <button
+                      onClick={() => setReclassifyPreview(null)}
+                      className="rounded-xl border border-warm-200 bg-cream-100 px-5 py-3 text-sm text-ink-500 hover:bg-cream-200 transition-colors">
+                      取消
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button
+                  onClick={() => setReclassifyPreview(null)}
+                  className="w-full rounded-xl bg-terra-500 py-3 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                  了解了
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
