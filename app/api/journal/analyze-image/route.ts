@@ -15,7 +15,7 @@ export async function POST(req: Request) {
 
     const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1' })
     const res = await client.chat.completions.create({
-      model: 'meta-llama/llama-3.2-11b-vision-instruct:free',
+      model: 'nvidia/nemotron-nano-12b-v2-vl:free',
       messages: [
         {
           role: 'user',
