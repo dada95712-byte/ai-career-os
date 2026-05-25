@@ -27,7 +27,8 @@ model User {
   jobApplications JobApplication[]
   interviewQAs    InterviewQA[]
   learningGoals   LearningGoal[]
-  chatSessions    ChatSession[]
+  chatSessions      ChatSession[]
+  interviewSessions InterviewSession[]
 }
 
 model Account {
@@ -157,6 +158,18 @@ model ChatSession {
   userId    String
   context   String?
   messages  Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model InterviewSession {
+  id        String   @id @default(uuid())
+  userId    String
+  jobTitle  String
+  company   String?
+  language  String   @default("zh-TW")
+  questions Json
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -20,6 +20,15 @@ interface Question {
 interface QAQuestion {
   zh: string; en: string; type: 'behavioral' | 'technical' | 'situational' | 'general'
 }
+interface SessionQuestion {
+  id: string; question: string; questionEn?: string
+  type: 'behavioral' | 'technical' | 'situational' | 'general'
+  userAnswer?: string; aiScore?: number; aiFeedback?: string
+}
+interface InterviewSession {
+  id: string; jobTitle: string; company?: string; language: string
+  questions: SessionQuestion[]; createdAt: string; updatedAt: string
+}
 interface RealRecord {
   id: string; question: string; answer: string; score?: number; feedback?: string; date: string
 }
@@ -260,10 +269,13 @@ declare global {
 export default function InterviewPrepPage() {
   const [tab, setTab] = useState<'mock' | 'qa' | 'record'>('mock')
 
-  // Mock interview — 3-step flow
-  const [mockStep, setMockStep] = useState<'setup' | 'list' | 'practice'>('setup')
+  // Mock interview — session flow
+  const [mockStep, setMockStep] = useState<'loading' | 'sessions' | 'setup' | 'list' | 'practice'>('loading')
+  const [sessions, setSessions]               = useState<InterviewSession[]>([])
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [role, setRole]         = useState('')
   const [company, setCompany]   = useState('')
+  const [questionCount, setQuestionCount] = useState<10 | 15 | 20>(15)
   const [questions, setQuestions]     = useState<Question[]>([])
   const [generating, setGenerating]   = useState(false)
   const [selectedQ, setSelectedQ]     = useState<Question | null>(null)
@@ -304,9 +316,21 @@ export default function InterviewPrepPage() {
     if (saved) setRecords(JSON.parse(saved))
   }, [])
 
+  useEffect(() => {
+    const saved = localStorage.getItem('interview-mock-sessions')
+    const parsed: InterviewSession[] = saved ? JSON.parse(saved) : []
+    setSessions(parsed)
+    setMockStep(parsed.length > 0 ? 'sessions' : 'setup')
+  }, [])
+
   const saveRecords = useCallback((next: RealRecord[]) => {
     setRecords(next)
     localStorage.setItem('interview-records', JSON.stringify(next))
+  }, [])
+
+  const saveSessions = useCallback((next: InterviewSession[]) => {
+    setSessions(next)
+    localStorage.setItem('interview-mock-sessions', JSON.stringify(next))
   }, [])
 
   // ── Computed (QA bank) ────────────────────────────────────────────────────
@@ -342,6 +366,33 @@ export default function InterviewPrepPage() {
     saveRecords([rec, ...records])
   }
 
+  function loadSession(session: InterviewSession) {
+    setRole(session.jobTitle)
+    setCompany(session.company ?? '')
+    setCurrentSessionId(session.id)
+    const qs: Question[] = session.questions.map((q) => ({
+      id: q.id, question: q.question, questionEn: q.questionEn,
+      type: q.type, userAnswer: q.userAnswer, aiScore: q.aiScore, aiFeedback: q.aiFeedback,
+    }))
+    setQuestions(qs)
+    setSelectedQ(null); setAnswer(''); setMockPracticeIdx(0)
+    setMockStep('list')
+  }
+
+  function restartWithSetup(session: InterviewSession) {
+    setRole(session.jobTitle)
+    setCompany(session.company ?? '')
+    setCurrentSessionId(null)
+    setQuestions([]); setSelectedQ(null); setAnswer('')
+    setMockStep('setup')
+  }
+
+  function deleteSession(id: string) {
+    const next = sessions.filter((s) => s.id !== id)
+    saveSessions(next)
+    if (next.length === 0) setMockStep('setup')
+  }
+
   // ── Voice ──────────────────────────────────────────────────────────────────
   function startVoice(target: typeof voiceTarget) {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition
@@ -368,9 +419,22 @@ export default function InterviewPrepPage() {
     setGenerating(true); setQuestions([]); setSelectedQ(null); setAnswer('')
     setMockStep('list')
     try {
-      const res  = await fetch('/api/interview/questions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, company }) })
+      const res  = await fetch('/api/interview/questions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role, company, questionCount }),
+      })
       const data = await res.json()
-      setQuestions(data.questions ?? [])
+      const qs: Question[] = data.questions ?? []
+      setQuestions(qs)
+      // Save new session
+      const newSession: InterviewSession = {
+        id: genId(), jobTitle: role, company: company || undefined,
+        language: answerLang === 'en' ? 'en-US' : 'zh-TW',
+        questions: qs.map((q) => ({ id: q.id, question: q.question, questionEn: q.questionEn, type: q.type })),
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+      }
+      setCurrentSessionId(newSession.id)
+      saveSessions([newSession, ...sessions])
     } catch { /* silent */ }
     finally { setGenerating(false) }
   }
@@ -402,6 +466,19 @@ export default function InterviewPrepPage() {
         }
         setQuestions((p) => p.map((qu) => qu.id === selectedQ?.id ? { ...qu, ...updates } : qu))
         setSelectedQ((p) => p && { ...p, ...updates })
+        // Persist answer to session
+        if (currentSessionId && selectedQ) {
+          setSessions((prev) => {
+            const next = prev.map((s) => s.id !== currentSessionId ? s : {
+              ...s, updatedAt: new Date().toISOString(),
+              questions: s.questions.map((sq) => sq.id !== selectedQ.id ? sq : {
+                ...sq, userAnswer: a, aiScore: data.score ?? 0, aiFeedback: data.feedback ?? '',
+              }),
+            })
+            localStorage.setItem('interview-mock-sessions', JSON.stringify(next))
+            return next
+          })
+        }
       }
     } catch { /* silent */ }
     finally { if (forPractice) setPracticeEval(false); else setEvaluating(false) }
@@ -453,17 +530,102 @@ export default function InterviewPrepPage() {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
-          MOCK INTERVIEW — 3-step flow
+          MOCK INTERVIEW
       ══════════════════════════════════════════════════════════════════════ */}
       {tab === 'mock' && (
         <>
-          {/* ── Step 1: Setup ── */}
+          {/* ── Loading ── */}
+          {mockStep === 'loading' && (
+            <div className="flex items-center justify-center py-20">
+              <svg className="h-5 w-5 animate-spin text-terra-400" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            </div>
+          )}
+
+          {/* ── Sessions list ── */}
+          {mockStep === 'sessions' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-ink-800">我的模擬面試</h2>
+                  <p className="text-xs text-ink-400 mt-0.5">共 {sessions.length} 個面試情境</p>
+                </div>
+                <button
+                  onClick={() => { setRole(''); setCompany(''); setCurrentSessionId(null); setQuestions([]); setMockStep('setup') }}
+                  className="flex items-center gap-1.5 rounded-xl bg-terra-500 px-4 py-2 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                  ＋ 新增面試
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                {sessions.map((s) => {
+                  const answered = s.questions.filter((q) => q.userAnswer).length
+                  const total    = s.questions.length
+                  const pct      = total > 0 ? Math.round((answered / total) * 100) : 0
+                  return (
+                    <Card key={s.id}>
+                      <CardContent className="pt-4 pb-4">
+                        <div className="flex items-start justify-between gap-4 flex-wrap">
+                          <div className="flex-1 min-w-0 space-y-2">
+                            <div>
+                              <p className="font-semibold text-ink-800">{s.jobTitle}</p>
+                              {s.company && <p className="text-xs text-ink-400">{s.company}</p>}
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-ink-400 flex-wrap">
+                              <span>📋 {total} 道題目</span>
+                              <span>📅 {new Date(s.createdAt).toLocaleDateString('zh-TW')}</span>
+                              <span className={answered === total && total > 0 ? 'text-sage-600 font-medium' : ''}>
+                                {answered === total && total > 0 ? '✓ ' : ''}已完成 {answered}/{total} 題
+                              </span>
+                            </div>
+                            <div className="relative h-1.5 rounded-full bg-cream-200 overflow-hidden w-full max-w-[300px]">
+                              <div
+                                className={`absolute left-0 top-0 h-full rounded-full transition-all ${pct === 100 ? 'bg-sage-500' : 'bg-terra-400'}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => loadSession(s)}
+                              className="rounded-xl border border-terra-300 bg-terra-50 px-3 py-1.5 text-xs font-medium text-terra-600 hover:bg-terra-100 transition-colors whitespace-nowrap">
+                              {answered > 0 ? '繼續練習' : '開始練習'}
+                            </button>
+                            <button
+                              onClick={() => restartWithSetup(s)}
+                              className="rounded-xl border border-warm-200 bg-white px-3 py-1.5 text-xs font-medium text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors whitespace-nowrap">
+                              重新開始
+                            </button>
+                            <button
+                              onClick={() => deleteSession(s.id)}
+                              className="rounded-xl border border-warm-200 px-2.5 py-1.5 text-xs text-ink-400 hover:border-red-200 hover:text-red-400 transition-all whitespace-nowrap">
+                              刪除
+                            </button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Setup form ── */}
           {mockStep === 'setup' && (
             <div className="flex justify-center pt-4">
               <div className="w-full max-w-[600px] space-y-5">
+                {sessions.length > 0 && (
+                  <button onClick={() => setMockStep('sessions')}
+                    className="flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-700 transition-colors">
+                    ← 返回面試列表
+                  </button>
+                )}
                 <div className="text-center space-y-1">
                   <h2 className="text-xl font-bold text-ink-900">設定你的面試情境</h2>
-                  <p className="text-sm text-ink-400">AI 將根據職位生成 5–8 道針對性題目</p>
+                  <p className="text-sm text-ink-400">AI 將根據職位與題數生成客製化題目</p>
                 </div>
                 <Card>
                   <CardContent className="pt-6 space-y-4">
@@ -472,6 +634,22 @@ export default function InterviewPrepPage() {
                       onKeyDown={(e) => e.key === 'Enter' && generateQuestions()} />
                     <Input label="公司名稱（選填）" placeholder="例如：LINE、台積電、Shopee" value={company}
                       onChange={(e) => setCompany(e.target.value)} />
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-ink-500">題目數量</label>
+                      <div className="flex gap-2">
+                        {([
+                          [10, '10 題', '快速練習'],
+                          [15, '15 題', '標準'],
+                          [20, '20 題', '完整練習'],
+                        ] as const).map(([n, label, sub]) => (
+                          <button key={n} onClick={() => setQuestionCount(n)}
+                            className={`flex-1 rounded-xl border py-2.5 text-center transition-all ${questionCount === n ? 'border-terra-400 bg-terra-50 text-terra-700' : 'border-warm-200 bg-white text-ink-500 hover:border-warm-300'}`}>
+                            <p className={`text-sm font-semibold ${questionCount === n ? 'text-terra-700' : 'text-ink-700'}`}>{label}</p>
+                            <p className="text-[10px] text-ink-400 mt-0.5">{sub}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div className="space-y-1.5">
                       <label className="block text-xs font-medium text-ink-500">回答語言</label>
                       <div className="flex gap-1 rounded-lg border border-warm-200 bg-cream-50 p-0.5 w-fit">
@@ -509,9 +687,9 @@ export default function InterviewPrepPage() {
                   {company && <p className="text-xs text-ink-400 mt-0.5">{company}</p>}
                 </div>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setMockStep('setup')}
+                  <button onClick={() => setMockStep(sessions.length > 0 ? 'sessions' : 'setup')}
                     className="text-sm text-ink-400 hover:text-ink-700 transition-colors">
-                    ← 重新設定
+                    ← {sessions.length > 0 ? '返回列表' : '重新設定'}
                   </button>
                   <Button variant="outline" size="sm" onClick={generateQuestions} loading={generating}>
                     重新生成
