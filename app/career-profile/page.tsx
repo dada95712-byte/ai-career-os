@@ -43,7 +43,7 @@ interface ResumeEntry {
 interface JournalImage { url: string; aiDescription?: string; uploadedAt: string }
 interface JournalEntry {
   id: string; title: string; company: string; date: string
-  template: 'star' | 'free'
+  template: 'star' | 'free' | 'ai'
   situation?: string; task?: string; action?: string; result?: string
   content?: string
   tags: string[]; images: JournalImage[]; createdAt: string
@@ -71,6 +71,44 @@ function fmtDate(d: string) { try { return new Date(d).toLocaleDateString('zh-TW
 function detectLang(text: string): 'zh' | 'en' { return /[一-鿿]/.test(text) ? 'zh' : 'en' }
 function emptyEntry(): JournalEntry {
   return { id: '', title: '', company: '', date: todayStr(), template: 'free', content: '', tags: [], images: [], createdAt: '' }
+}
+
+const AI_TOPICS = [
+  { id: 'achievement', icon: '🏆', label: '工作成就', desc: '記錄一件最近完成的成果' },
+  { id: 'problem',     icon: '💡', label: '問題解決', desc: '記錄一個你解決的難題' },
+  { id: 'teamwork',    icon: '🤝', label: '團隊協作', desc: '記錄一次與他人合作的經歷' },
+  { id: 'growth',      icon: '📈', label: '技能成長', desc: '記錄你學到的新技能或知識' },
+]
+
+const AI_QUESTIONS: Record<string, string[]> = {
+  achievement: [
+    '這件事情發生在什麼時候？在哪家公司？',
+    '你負責的是什麼任務或目標？',
+    '你具體做了哪些行動或決策？',
+    '最後的結果是什麼？有沒有具體的數字或成效？',
+    '這件事對你來說有什麼意義或學習？',
+  ],
+  problem: [
+    '遇到的是什麼問題？當時的工作背景是什麼？',
+    '這個問題對工作造成了哪些影響？',
+    '你是如何分析問題的？有哪些可能的解決方向？',
+    '你最後採取了什麼行動？過程中遇到哪些挑戰？',
+    '問題解決後，結果如何？你從中學到了什麼？',
+  ],
+  teamwork: [
+    '這次合作的背景是什麼？有哪些人一起參與？',
+    '你在這個團隊中扮演什麼角色？',
+    '合作過程中遇到了哪些困難或意見分歧？',
+    '你如何促進團隊溝通或化解衝突？',
+    '最後的成果是什麼？這次合作對你有什麼啟發？',
+  ],
+  growth: [
+    '你學到的是什麼技能或知識？是什麼契機讓你開始學習？',
+    '學習的過程是怎樣的？有遇到哪些挑戰或困難？',
+    '你使用了哪些方法或資源來學習？',
+    '學會之後，你在工作中如何實際應用這個技能？',
+    '這項技能對你的職涯發展有什麼幫助或影響？',
+  ],
 }
 
 // ── Spinner ────────────────────────────────────────────────────────────────────
@@ -142,6 +180,15 @@ export default function CareerProfilePage() {
   const [taggingId, setTaggingId] = useState<string | null>(null)
   const [isMobile, setIsMobile] = useState(false)
   const uploadRef = useRef<HTMLInputElement>(null)
+
+  // AI guided journal state
+  const [aiStep, setAiStep] = useState<1 | 2 | 3>(1)
+  const [aiTopic, setAiTopic] = useState('')
+  const [aiQaIdx, setAiQaIdx] = useState(0)
+  const [aiAnswers, setAiAnswers] = useState<string[]>([])
+  const [aiCurrentAnswer, setAiCurrentAnswer] = useState('')
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [isListening, setIsListening] = useState(false)
 
   // Init from localStorage
   useEffect(() => {
@@ -301,9 +348,51 @@ export default function CareerProfilePage() {
       .catch(() => {}).finally(() => setTaggingId(null))
   }
 
-  function closeJournalForm() { setJournalView('list'); setEditingId(null); setDraft(emptyEntry()) }
+  function closeJournalForm() {
+    setJournalView('list'); setEditingId(null); setDraft(emptyEntry())
+    setAiStep(1); setAiTopic(''); setAiQaIdx(0); setAiAnswers([]); setAiCurrentAnswer('')
+  }
   function deleteEntry(id: string) { const next = entries.filter((e) => e.id !== id); setEntries(next); autoSave('career-journal', next) }
   function editEntry(e: JournalEntry) { setDraft({ ...e }); setEditingId(e.id); setJournalView('form') }
+
+  async function generateAiDraft(answers: string[]) {
+    const topic = AI_TOPICS.find(t => t.id === aiTopic)
+    const questions = AI_QUESTIONS[aiTopic] || []
+    const qaPairs = questions.map((q, i) => `問題 ${i + 1}：${q}\n回答 ${i + 1}：${answers[i] || '（未填寫）'}`).join('\n\n')
+    const prompt = `你是一個職涯日誌撰寫助手。以下是使用者針對「${topic?.label}」主題的問答記錄：\n\n${qaPairs}\n\n請根據以上內容，撰寫一篇結構清晰的工作日誌，要求：\n- 標題：15字以內，吸引人\n- 內容：以第一人稱，約200-300字，語氣自然真實，條理清晰\n\n只回傳以下 JSON，不要其他文字：\n{\n  "title": "日誌標題",\n  "content": "日誌完整內容"\n}`
+    setAiGenerating(true)
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [{ role: 'user', content: prompt }], context: 'journal_writer' }),
+      })
+      const data = await res.json()
+      const match = data.reply?.match(/\{[\s\S]*\}/)
+      if (match) {
+        const parsed = JSON.parse(match[0])
+        updateDraft('title', parsed.title || '')
+        updateDraft('content', parsed.content || '')
+      }
+      setAiStep(3)
+    } catch { /* silent */ }
+    finally { setAiGenerating(false) }
+  }
+
+  function startListening(append: (t: string) => void) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SR) { alert('您的瀏覽器不支援語音輸入，請手動輸入'); return }
+    const recognition = new SR()
+    recognition.lang = 'zh-TW'
+    recognition.continuous = false
+    recognition.interimResults = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (e: any) => { append(e.results[0][0].transcript) }
+    recognition.onend = () => setIsListening(false)
+    recognition.onerror = () => setIsListening(false)
+    setIsListening(true)
+    recognition.start()
+  }
 
   const sortedEntries = [...entries].sort((a, b) => {
     if (sortBy === 'date-desc') return b.date.localeCompare(a.date)
@@ -742,7 +831,7 @@ export default function CareerProfilePage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-ink-700">{entry.title || '(AI 生成標題中...)'}</p>
-                          <Badge variant="outline">{entry.template === 'star' ? '⭐ STAR' : '📝 自由'}</Badge>
+                          <Badge variant="outline">{entry.template === 'star' ? '⭐ STAR' : entry.template === 'ai' ? '🤖 AI引導' : '📝 自由'}</Badge>
                           {taggingId === entry.id && <span className="text-[10px] text-terra-500 flex items-center gap-1"><Spinner className="h-2.5 w-2.5" />AI 標記中</span>}
                         </div>
                         <p className="text-xs text-ink-400 mt-0.5">{entry.company && `${entry.company} · `}{fmtDate(entry.date)}</p>
@@ -788,12 +877,20 @@ export default function CareerProfilePage() {
           <div className="max-w-[800px] mx-auto space-y-5 pb-24">
 
             {/* Template selector */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-medium text-ink-400 shrink-0">記錄格式：</span>
-              {(['star', 'free'] as const).map((t) => (
-                <button key={t} onClick={() => updateDraft('template', t)}
-                  className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${draft.template === t ? 'bg-terra-50 border-terra-400 text-terra-600' : 'bg-white border-warm-200 text-ink-400 hover:border-warm-300 hover:text-ink-600'}`}>
-                  {t === 'star' ? '⭐ STAR 格式' : '📝 自由記錄'}
+              {([
+                { id: 'star', label: '⭐ STAR 格式' },
+                { id: 'free', label: '📝 自由記錄' },
+                { id: 'ai',   label: '🤖 AI 引導' },
+              ] as { id: 'star' | 'free' | 'ai'; label: string }[]).map((t) => (
+                <button key={t.id}
+                  onClick={() => {
+                    updateDraft('template', t.id)
+                    if (t.id !== 'ai') { setAiStep(1); setAiTopic(''); setAiQaIdx(0); setAiAnswers([]); setAiCurrentAnswer('') }
+                  }}
+                  className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${draft.template === t.id ? 'bg-terra-50 border-terra-400 text-terra-600' : 'bg-white border-warm-200 text-ink-400 hover:border-warm-300 hover:text-ink-600'}`}>
+                  {t.label}
                 </button>
               ))}
             </div>
@@ -833,7 +930,7 @@ export default function CareerProfilePage() {
                 onChange={(e) => updateDraft('title', e.target.value)} />
             </div>
 
-            {/* Content — STAR or free */}
+            {/* Content — STAR / free / AI guided */}
             {draft.template === 'star' ? (
               <div className="space-y-3">
                 {([
@@ -852,6 +949,155 @@ export default function CareerProfilePage() {
                       className="w-full rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none resize-none leading-relaxed" />
                   </div>
                 ))}
+              </div>
+            ) : draft.template === 'ai' ? (
+              <div className="space-y-5">
+                {/* ── Step 1: Choose topic ── */}
+                {aiStep === 1 && (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-sage-200 bg-sage-50 px-4 py-3">
+                      <p className="text-sm font-medium text-sage-700">選擇今天想記錄的主題</p>
+                      <p className="text-xs text-sage-500 mt-0.5">AI 將根據主題引導你回答 5 個問題，幫你整理成完整日誌</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {AI_TOPICS.map((topic) => (
+                        <button key={topic.id}
+                          onClick={() => { setAiTopic(topic.id); setAiStep(2); setAiQaIdx(0); setAiAnswers([]); setAiCurrentAnswer('') }}
+                          className="flex items-start gap-3 rounded-xl border-2 border-warm-200 bg-white p-4 text-left hover:border-terra-300 hover:bg-terra-50/50 transition-all">
+                          <span className="text-2xl shrink-0">{topic.icon}</span>
+                          <div>
+                            <p className="text-sm font-semibold text-ink-700">{topic.label}</p>
+                            <p className="text-xs text-ink-400 mt-0.5">{topic.desc}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Step 2: Q&A ── */}
+                {aiStep === 2 && !aiGenerating && (
+                  <div className="space-y-4">
+                    {/* Progress */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-ink-500">問題 {aiQaIdx + 1} / 5</span>
+                      <div className="flex gap-1">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <div key={i} className={`h-1.5 w-7 rounded-full transition-colors ${i <= aiQaIdx ? 'bg-terra-400' : 'bg-warm-200'}`} />
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Previous Q&As */}
+                    {aiQaIdx > 0 && (
+                      <div className="space-y-2">
+                        {Array.from({ length: aiQaIdx }).map((_, i) => (
+                          <div key={i} className="opacity-60 space-y-1">
+                            <div className="bg-sage-50 border-l-4 border-sage-400 p-3 rounded-r-lg">
+                              <p className="text-xs text-sage-700">{AI_QUESTIONS[aiTopic]?.[i]}</p>
+                            </div>
+                            <div className="ml-4 bg-white border border-warm-200 rounded-lg px-3 py-2 text-xs text-ink-600 whitespace-pre-line">{aiAnswers[i]}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Current question */}
+                    <div className="bg-sage-50 border-l-4 border-sage-400 p-3 rounded-r-lg">
+                      <p className="text-[10px] text-sage-500 font-medium uppercase tracking-wide mb-1">AI 提問</p>
+                      <p className="text-sm text-ink-700 font-medium leading-relaxed">{AI_QUESTIONS[aiTopic]?.[aiQaIdx]}</p>
+                    </div>
+
+                    {/* Answer textarea */}
+                    <div className="relative">
+                      <textarea
+                        rows={4}
+                        placeholder="請輸入你的回答..."
+                        value={aiCurrentAnswer}
+                        onChange={(e) => setAiCurrentAnswer(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && e.metaKey) e.currentTarget.blur() }}
+                        className="w-full rounded-xl border border-warm-200 bg-white px-4 py-2.5 pr-12 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none resize-none leading-relaxed"
+                        style={{ minHeight: '100px' }} />
+                      <button
+                        type="button"
+                        onClick={() => startListening((t) => setAiCurrentAnswer((p) => p ? p + ' ' + t : t))}
+                        title="語音輸入"
+                        className={`absolute bottom-3 right-3 flex items-center justify-center w-8 h-8 rounded-full border transition-colors ${isListening ? 'bg-red-50 border-red-300 text-red-400 animate-pulse' : 'bg-cream-100 border-warm-200 text-ink-400 hover:border-terra-300 hover:text-terra-500'}`}>
+                        🎙
+                      </button>
+                    </div>
+
+                    {/* Navigation */}
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => {
+                          if (aiQaIdx > 0) {
+                            setAiQaIdx(aiQaIdx - 1)
+                            setAiCurrentAnswer(aiAnswers[aiQaIdx - 1] || '')
+                          } else {
+                            setAiStep(1)
+                          }
+                        }}
+                        className="text-sm text-ink-400 hover:text-ink-600 transition-colors">
+                        ← {aiQaIdx > 0 ? '上一題' : '重新選擇主題'}
+                      </button>
+                      <button
+                        disabled={!aiCurrentAnswer.trim()}
+                        onClick={() => {
+                          const newAnswers = [...aiAnswers]
+                          newAnswers[aiQaIdx] = aiCurrentAnswer
+                          setAiAnswers(newAnswers)
+                          if (aiQaIdx < 4) {
+                            setAiQaIdx(aiQaIdx + 1)
+                            setAiCurrentAnswer(newAnswers[aiQaIdx + 1] || '')
+                          } else {
+                            generateAiDraft(newAnswers)
+                          }
+                        }}
+                        className="flex items-center gap-1.5 rounded-lg bg-terra-500 px-4 py-2 text-sm font-medium text-white hover:bg-terra-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        {aiQaIdx < 4 ? '下一題 →' : '生成日誌 →'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Generating state ── */}
+                {aiGenerating && (
+                  <div className="flex flex-col items-center py-16 gap-4">
+                    <Spinner className="h-7 w-7 text-terra-500" />
+                    <p className="text-sm text-ink-500">AI 正在整理你的回答，生成日誌草稿…</p>
+                  </div>
+                )}
+
+                {/* ── Step 3: Edit draft ── */}
+                {aiStep === 3 && !aiGenerating && (
+                  <div className="space-y-4">
+                    <div className="rounded-xl border border-sage-200 bg-sage-50 px-4 py-3 flex items-center gap-2">
+                      <span className="text-lg">✨</span>
+                      <p className="text-sm text-sage-700">AI 已生成日誌草稿，可以直接修改後儲存</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-ink-500 mb-1.5">標題</label>
+                      <input
+                        className="w-full rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-800 focus:border-terra-400 focus:outline-none"
+                        value={draft.title}
+                        onChange={(e) => updateDraft('title', e.target.value)} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-ink-500 mb-1.5">內容</label>
+                      <textarea
+                        rows={10}
+                        value={draft.content ?? ''}
+                        onChange={(e) => updateDraft('content', e.target.value)}
+                        className="w-full min-h-[280px] rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-800 focus:border-terra-400 focus:outline-none resize-y leading-relaxed" />
+                    </div>
+                    <button
+                      onClick={() => { setAiStep(2); setAiQaIdx(4); setAiCurrentAnswer(aiAnswers[4] || '') }}
+                      className="text-xs text-ink-400 hover:text-ink-600 transition-colors">
+                      ← 返回修改回答
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div>
@@ -943,8 +1189,9 @@ export default function CareerProfilePage() {
             </button>
             <button
               onClick={saveEntry}
-              className="rounded-xl bg-terra-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
-              {editingId ? '更新日誌' : '儲存日誌'}
+              disabled={draft.template === 'ai' && aiStep !== 3}
+              className="rounded-xl bg-terra-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)] disabled:opacity-40 disabled:cursor-not-allowed">
+              {editingId ? '更新日誌' : '✓ 儲存日誌'}
             </button>
           </div>
         </div>
