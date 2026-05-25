@@ -1,6 +1,6 @@
 import OpenAI from 'openai'
 import { NextResponse } from 'next/server'
-import { VISION_MODELS } from '@/lib/ai-client'
+import { VISION_MODEL } from '@/lib/ai-client'
 
 export async function POST(req: Request) {
   try {
@@ -23,18 +23,15 @@ export async function POST(req: Request) {
       },
     ]
 
-    for (const model of VISION_MODELS) {
-      try {
-        const res = await client.chat.completions.create({
-          model,
-          messages: [{ role: 'user', content }],
-        })
-        const description = res.choices[0]?.message?.content ?? ''
-        return NextResponse.json({ description })
-      } catch (err) {
-        const e = err as { status?: number; message?: string }
-        console.warn(`[analyze-image] Model ${model} failed: ${e.status ?? ''} ${e.message ?? ''}`)
-      }
+    try {
+      const res = await client.chat.completions.create({
+        model: VISION_MODEL,
+        messages: [{ role: 'user', content }],
+      })
+      return NextResponse.json({ description: res.choices[0]?.message?.content ?? '' })
+    } catch (err) {
+      const e = err as { status?: number; message?: string }
+      console.warn(`[analyze-image] ${VISION_MODEL} failed: ${e.status ?? ''} ${e.message ?? ''}`)
     }
 
     return NextResponse.json({ description: '' }, { status: 500 })

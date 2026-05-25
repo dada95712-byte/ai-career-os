@@ -1,15 +1,8 @@
 import OpenAI from 'openai'
 
-const FREE_MODELS = [
-  'google/gemma-4-31b-it:free',
-  'meta-llama/llama-3.3-70b-instruct:free',
-  'nvidia/nemotron-3-super-120b-a12b:free',
-]
+const FREE_MODEL = 'openrouter/free'
 
-export const VISION_MODELS = [
-  'nvidia/nemotron-nano-12b-v2-vl:free',
-  'google/gemma-4-26b-a4b-it:free',
-]
+export const VISION_MODEL = 'meta-llama/llama-3.2-11b-vision-instruct:free'
 
 const DEFAULT_SYSTEM = '你是一個專業的台灣職涯顧問，請用繁體中文回答。'
 
@@ -30,39 +23,28 @@ function getClient(): OpenAI {
   return _client
 }
 
-// ── Internal helper ───────────────────────────────────────────────────────────
-
-async function tryModels(
-  models: string[],
-  messages: OpenAI.Chat.ChatCompletionMessageParam[]
-): Promise<string> {
-  for (const model of models) {
-    try {
-      const res = await getClient().chat.completions.create({ model, messages })
-      return res.choices[0]?.message?.content ?? ''
-    } catch (err) {
-      const e = err as { status?: number; message?: string }
-      console.warn(`[AI] Model ${model} failed: ${e.status ?? ''} ${e.message ?? ''}`)
-    }
-  }
-  throw new Error('所有 AI 服務目前無法使用，請稍後再試')
-}
-
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Single-turn AI call. Rotates through FREE_MODELS until one succeeds.
+ * Single-turn AI call using openrouter/free auto-routing.
  */
 export async function callAI(prompt: string, systemPrompt?: string): Promise<string> {
   const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt ?? DEFAULT_SYSTEM },
     { role: 'user',   content: prompt },
   ]
-  return tryModels(FREE_MODELS, messages)
+  try {
+    const res = await getClient().chat.completions.create({ model: FREE_MODEL, messages })
+    return res.choices[0]?.message?.content ?? ''
+  } catch (err) {
+    const e = err as { status?: number; message?: string }
+    console.warn(`[AI] ${FREE_MODEL} failed: ${e.status ?? ''} ${e.message ?? ''}`)
+    throw new Error('所有 AI 服務目前無法使用，請稍後再試')
+  }
 }
 
 /**
- * Multi-turn chat call. Rotates through FREE_MODELS until one succeeds.
+ * Multi-turn chat call using openrouter/free auto-routing.
  */
 export async function callAIChat(
   messages: { role: 'user' | 'assistant'; content: string }[],
@@ -73,5 +55,12 @@ export async function callAIChat(
     { role: 'system', content: systemPrompt ?? DEFAULT_SYSTEM },
     ...messages,
   ]
-  return tryModels(FREE_MODELS, openaiMessages)
+  try {
+    const res = await getClient().chat.completions.create({ model: FREE_MODEL, messages: openaiMessages })
+    return res.choices[0]?.message?.content ?? ''
+  } catch (err) {
+    const e = err as { status?: number; message?: string }
+    console.warn(`[AI] ${FREE_MODEL} failed: ${e.status ?? ''} ${e.message ?? ''}`)
+    throw new Error('所有 AI 服務目前無法使用，請稍後再試')
+  }
 }
