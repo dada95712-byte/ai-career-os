@@ -27,13 +27,13 @@ interface ParsedResume {
   languages?: { name: string; level: string }[]
   rawText: string
 }
-interface ResumeScore { score: number; atsScore: number; suggestions: string[]; keywords: string[] }
 interface ResumeEntry {
   id: string
   name: string
   language: 'zh' | 'en'
   score: number | null
   atsScore: number | null
+  scoredAt: string | null
   isPrimary: boolean
   source: 'upload' | 'template' | 'linkedin' | 'manual'
   createdAt: string
@@ -165,7 +165,7 @@ export default function CareerProfilePage() {
         const r: ParsedResume = JSON.parse(rawResume)
         const migrated: ResumeEntry = {
           id: genId(), name: r.name || '我的履歷',
-          language: detectLang(r.rawText), score: null, atsScore: null,
+          language: detectLang(r.rawText), score: null, atsScore: null, scoredAt: null,
           isPrimary: true, source: 'manual',
           createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
           data: r,
@@ -383,51 +383,79 @@ export default function CareerProfilePage() {
 
               {/* Resume cards */}
               <div className="space-y-3">
-                {resumes.map((r) => (
-                  <Card key={r.id}>
-                    <CardContent className="pt-4 pb-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center flex-wrap gap-2 mb-1">
-                            <p className="font-semibold text-ink-700 text-sm">{r.name}</p>
-                            {r.isPrimary && <Badge variant="success">主要履歷</Badge>}
-                            <Badge variant="outline">{r.language === 'zh' ? '中文' : 'English'}</Badge>
-                            <Badge variant="outline">{r.source === 'upload' ? '上傳' : r.source === 'template' ? '範本' : r.source === 'linkedin' ? 'LinkedIn' : '手動'}</Badge>
-                          </div>
-                          <p className="text-xs text-ink-400">更新於 {fmtDate(r.updatedAt)}</p>
-                          {r.score !== null ? (
-                            <div className="mt-2 flex items-center gap-2">
-                              <div className="relative h-2 w-28 rounded-full bg-cream-200 overflow-hidden">
-                                <div className="absolute left-0 top-0 h-2 rounded-full bg-terra-500 transition-all duration-700" style={{ width: `${r.score}%` }} />
-                              </div>
-                              <span className="text-xs font-medium text-terra-500">AI 評分 {r.score}</span>
-                              {r.atsScore !== null && <span className="text-xs text-ink-400">· ATS {r.atsScore}</span>}
-                            </div>
-                          ) : (
-                            <p className="text-xs text-ink-300 mt-1.5">尚未評分</p>
-                          )}
-                        </div>
+                {resumes.map((r) => {
+                  const scoreColor =
+                    r.score === null ? '' :
+                    r.score >= 90 ? 'text-sage-600' :
+                    r.score >= 75 ? 'text-honey-500' :
+                    r.score >= 60 ? 'text-terra-400' : 'text-red-500'
+                  const scoreDot =
+                    r.score === null ? '' :
+                    r.score >= 90 ? '🟢' :
+                    r.score >= 75 ? '🟡' :
+                    r.score >= 60 ? '🟠' : '🔴'
 
-                        <div className="flex flex-col sm:flex-row gap-1.5 shrink-0">
-                          {!r.isPrimary && (
-                            <button onClick={() => setPrimaryResume(r.id)}
-                              className="rounded-lg border border-warm-200 bg-white px-2.5 py-1 text-xs text-ink-400 hover:border-sage-300 hover:text-sage-600 transition-all whitespace-nowrap">
-                              設為主要
+                  return (
+                    <Card key={r.id}>
+                      <CardContent className="pt-4 pb-4">
+                        <div className="flex items-start justify-between gap-4">
+                          {/* ── Left: name + badges ── */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center flex-wrap gap-2 mb-1.5">
+                              <p className="font-semibold text-ink-700 text-sm">{r.name}</p>
+                              {r.isPrimary && <Badge variant="success">主要履歷</Badge>}
+                              <Badge variant="outline">{r.language === 'zh' ? '中文' : 'English'}</Badge>
+                              <Badge variant="outline">{r.source === 'upload' ? '上傳' : r.source === 'template' ? '範本' : r.source === 'linkedin' ? 'LinkedIn' : '手動'}</Badge>
+                            </div>
+                            {/* ── Second row: date · score ── */}
+                            <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-ink-400">
+                              <span>更新於 {fmtDate(r.updatedAt)}</span>
+                              {r.score !== null ? (
+                                <>
+                                  <span className="text-warm-300">·</span>
+                                  <span className={`font-medium ${scoreColor}`}>
+                                    {scoreDot} AI 評分：{r.score} 分
+                                  </span>
+                                  {r.scoredAt && (
+                                    <span className="text-ink-300">（{fmtDate(r.scoredAt)} 評分）</span>
+                                  )}
+                                </>
+                              ) : (
+                                <>
+                                  <span className="text-warm-300">·</span>
+                                  <span className="text-ink-300">尚未評分</span>
+                                  <button
+                                    onClick={() => startEdit(r)}
+                                    className="rounded-md border border-warm-200 bg-cream-100 px-2 py-0.5 text-[11px] text-ink-500 hover:border-terra-300 hover:text-terra-600 transition-all">
+                                    立即評分
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ── Right: action buttons ── */}
+                          <div className="flex flex-col sm:flex-row gap-1.5 shrink-0">
+                            {!r.isPrimary && (
+                              <button onClick={() => setPrimaryResume(r.id)}
+                                className="rounded-lg border border-warm-200 bg-white px-2.5 py-1 text-xs text-ink-400 hover:border-sage-300 hover:text-sage-600 transition-all whitespace-nowrap">
+                                設為主要
+                              </button>
+                            )}
+                            <button onClick={() => startEdit(r)}
+                              className="rounded-lg border border-warm-200 bg-white px-2.5 py-1 text-xs text-ink-400 hover:border-terra-300 hover:text-terra-600 transition-all">
+                              編輯
                             </button>
-                          )}
-                          <button onClick={() => startEdit(r)}
-                            className="rounded-lg border border-warm-200 bg-white px-2.5 py-1 text-xs text-ink-400 hover:border-terra-300 hover:text-terra-600 transition-all">
-                            編輯
-                          </button>
-                          <button onClick={() => deleteResume(r.id)}
-                            className="rounded-lg border border-warm-200 bg-white px-2.5 py-1 text-xs text-ink-400 hover:border-red-200 hover:text-red-400 transition-all">
-                            刪除
-                          </button>
+                            <button onClick={() => deleteResume(r.id)}
+                              className="rounded-lg border border-warm-200 bg-white px-2.5 py-1 text-xs text-ink-400 hover:border-red-200 hover:text-red-400 transition-all">
+                              刪除
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -583,6 +611,7 @@ export default function CareerProfilePage() {
                   language: detectLang(data.rawText),
                   score: existing?.score ?? null,
                   atsScore: existing?.atsScore ?? null,
+                  scoredAt: existing?.scoredAt ?? null,
                   isPrimary: existing?.isPrimary ?? resumes.length === 0,
                   source: existing?.source ?? 'manual',
                   createdAt: existing?.createdAt ?? now,
@@ -596,6 +625,14 @@ export default function CareerProfilePage() {
                 if (!editingResumeId) setEditingResumeId(newId)
               }}
               onBack={() => { setResumeView('list'); setResumeError('') }}
+              onScoreUpdate={(score, atsScore, scoredAt) => {
+                const id = editingResumeId ?? resumes[resumes.length - 1]?.id
+                if (!id) return
+                const next = resumes.map((r) =>
+                  r.id === id ? { ...r, score, atsScore, scoredAt } : r
+                )
+                persistResumes(next)
+              }}
             />
           )}
         </div>

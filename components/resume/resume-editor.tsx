@@ -66,6 +66,7 @@ interface ResumeEditorProps {
   initialName: string
   onSave: (data: SavedResumeData, name: string) => void
   onBack: () => void
+  onScoreUpdate?: (score: number, atsScore: number, scoredAt: string) => void
 }
 
 interface ScoreSuggestion {
@@ -335,7 +336,7 @@ function SortableActRow({ act, lang, onUpdate, onRemove }: { act: ResActivity; l
 
 const A4_WIDTH = 794
 
-export function ResumeEditor({ initialData, initialName, onSave, onBack }: ResumeEditorProps) {
+export function ResumeEditor({ initialData, initialName, onSave, onBack, onScoreUpdate }: ResumeEditorProps) {
   const [resume, setResume]           = useState<ResData>(() => fromSaved(initialData))
   const [resumeName, setResumeName]   = useState(initialName)
   const [editingName, setEditingName] = useState(false)
@@ -497,6 +498,8 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack }: Resum
       if (!data.error) {
         setScoreResult(data as ScoreReport)
         setShowScoreDrawer(true)
+        const scoredAt = new Date().toISOString()
+        onScoreUpdate?.(data.score, data.atsScore, scoredAt)
       }
     } catch { /* silent */ }
     finally { setScoring(false) }

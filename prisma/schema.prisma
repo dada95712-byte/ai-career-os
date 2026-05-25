@@ -65,17 +65,19 @@ model VerificationToken {
 }
 
 model Resume {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   userId      String
   title       String
   contentJson Json?
-  rawText     String?  @db.Text
+  rawText     String?   @db.Text
   fileUrl     String?
   aiScore     Int?
-  language    String   @default("zh-TW")
-  isPrimary   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  atsScore    Int?
+  scoredAt    DateTime?
+  language    String    @default("zh-TW")
+  isPrimary   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Skill {
