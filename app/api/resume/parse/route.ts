@@ -1,6 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callAI } from '@/lib/ai-client'
 
+async function parsePDF(buffer: Buffer): Promise<string> {
+  const PDFParser = (await import('pdf2json')).default
+  return new Promise((resolve, reject) => {
+    const parser = new PDFParser()
+    parser.on('pdfParser_dataReady', (pdfData: { Pages: { Texts: { R: { T: string }[] }[] }[] }) => {
+      const text = pdfData.Pages
+        .flatMap(page => page.Texts)
+        .map(t => decodeURIComponent(t.R.map((r) => r.T).join('')))
+        .join(' ')
+      resolve(text)
+    })
+    parser.on('pdfParser_dataError', reject)
+    parser.parseBuffer(buffer)
+  })
+}
+
+async function parseDOCX(buffer: Buffer): Promise<string> {
+  const mammoth = await import('mammoth')
+  const result = await mammoth.extractRawText({ buffer })
+  return result.value
+}
+
 export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
@@ -8,17 +30,13 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: '未收到檔案' }, { status: 400 })
 
     const buffer = Buffer.from(await file.arrayBuffer())
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
     let rawText = ''
 
-    if (file.name.endsWith('.pdf')) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfParse = require('pdf-parse')
-      const parsed = await (typeof pdfParse === 'function' ? pdfParse : pdfParse.default)(buffer)
-      rawText = parsed.text
-    } else if (file.name.endsWith('.docx')) {
-      const mammoth = await import('mammoth')
-      const result = await mammoth.extractRawText({ buffer })
-      rawText = result.value
+    if (ext === 'pdf') {
+      rawText = await parsePDF(buffer)
+    } else if (ext === 'docx' || ext === 'doc') {
+      rawText = await parseDOCX(buffer)
     } else {
       return NextResponse.json({ error: '僅支援 PDF 或 DOCX 格式' }, { status: 400 })
     }
