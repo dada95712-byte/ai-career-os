@@ -910,6 +910,7 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack }: Resum
           report={scoreResult}
           lang={resume.lang}
           scoring={scoring}
+          resumeText={toSaved(resume).rawText}
           onClose={() => setShowScoreDrawer(false)}
           onNavigate={(s) => { setShowScoreDrawer(false); setSection(s); if (fullPreview) setFullPreview(false) }}
           onRescore={() => { setShowScoreDrawer(false); handleScore() }}
@@ -928,10 +929,10 @@ const PRIORITY_META = {
 } as const
 
 function gradeOf(score: number, lang: 'zh' | 'en') {
-  if (score >= 90) return { icon: '🟢', text: lang === 'zh' ? '優秀，競爭力強' : 'Excellent — highly competitive',          color: 'text-sage-700 bg-sage-50 border-sage-200' }
-  if (score >= 75) return { icon: '🟡', text: lang === 'zh' ? '良好，小幅優化可提升' : 'Good — minor tweaks will help',     color: 'text-honey-700 bg-honey-50 border-honey-200' }
-  if (score >= 60) return { icon: '🟠', text: lang === 'zh' ? '待改善，建議優化後再投遞' : 'Fair — optimize before applying', color: 'text-terra-700 bg-terra-50 border-terra-200' }
-  return           { icon: '🔴', text: lang === 'zh' ? '需大幅改善，建議重新整理' : 'Needs work — consider restructuring',  color: 'text-red-700 bg-red-50 border-red-200' }
+  if (score >= 90) return { icon: '🟢', text: lang === 'zh' ? '優秀，競爭力強'           : 'Excellent',                   color: 'text-sage-700 bg-sage-50 border-sage-200' }
+  if (score >= 75) return { icon: '🟡', text: lang === 'zh' ? '良好，小幅優化可提升'     : 'Good — minor tweaks will help', color: 'text-honey-700 bg-honey-50 border-honey-200' }
+  if (score >= 60) return { icon: '🟠', text: lang === 'zh' ? '待改善，建議優化後再投遞' : 'Needs Improvement',            color: 'text-terra-700 bg-terra-50 border-terra-200' }
+  return           { icon: '🔴', text: lang === 'zh' ? '需大幅改善，建議重新整理'       : 'Needs Major Revision',          color: 'text-red-700 bg-red-50 border-red-200' }
 }
 
 function dimColor(score: number) {
@@ -955,17 +956,49 @@ function DimBar({ label, score }: { label: string; score: number }) {
 }
 
 function ScoreDrawer({
-  report, lang, scoring, onClose, onNavigate, onRescore,
+  report, lang, scoring, resumeText, onClose, onNavigate, onRescore,
 }: {
   report: ScoreReport
   lang: 'zh' | 'en'
   scoring: boolean
+  resumeText: string
   onClose: () => void
   onNavigate: (s: SectionId) => void
   onRescore: () => void
 }) {
-  const grade = gradeOf(report.score, lang)
-  const isZh = lang === 'zh'
+  const [reportLang, setReportLang] = useState<'zh' | 'en'>(lang)
+  const [visible, setVisible] = useState(true)
+  const [suggestions, setSuggestions] = useState<ScoreSuggestion[]>(report.suggestions)
+  const [keywords, setKeywords] = useState<string[]>(report.keywords)
+  const [suggestionsLang, setSuggestionsLang] = useState<'zh' | 'en'>(lang)
+  const [regenerating, setRegenerating] = useState(false)
+
+  const isZh = reportLang === 'zh'
+  const grade = gradeOf(report.score, reportLang)
+
+  async function switchLang(newLang: 'zh' | 'en') {
+    if (newLang === reportLang) return
+    setVisible(false)
+    await new Promise<void>(r => setTimeout(r, 150))
+    setReportLang(newLang)
+    setVisible(true)
+    if (newLang !== suggestionsLang) {
+      setRegenerating(true)
+      try {
+        const res = await fetch('/api/resume/score', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resumeText, lang: newLang }),
+        })
+        const data = await res.json()
+        if (!data.error) {
+          setSuggestions(data.suggestions ?? [])
+          setKeywords(data.keywords ?? [])
+          setSuggestionsLang(newLang)
+        }
+      } catch { /* silent */ }
+      finally { setRegenerating(false) }
+    }
+  }
 
   function downloadReport() {
     const doc = new jsPDF({ unit: 'mm', format: 'a4' })
@@ -987,29 +1020,29 @@ function ScoreDrawer({
     line(`${grade.icon} ${grade.text}`, 11); y += 6
 
     line(isZh ? '── 分項評分 ──' : '── Dimension Scores ──', 12, true); y += 2
-    const dims = [
-      [isZh ? '內容完整度' : 'Content', report.dimensions.content],
-      [isZh ? 'ATS 關鍵字密度' : 'Keywords', report.dimensions.keywords],
-      [isZh ? '格式與可讀性' : 'Format', report.dimensions.format],
-      [isZh ? '成就量化程度' : 'Impact', report.dimensions.impact],
-    ] as [string, number][]
+    const dims: [string, number][] = [
+      [isZh ? '內容完整度' : 'Content Completeness',  report.dimensions.content],
+      [isZh ? 'ATS 關鍵字密度' : 'ATS Keyword Density', report.dimensions.keywords],
+      [isZh ? '格式與可讀性' : 'Format & Readability', report.dimensions.format],
+      [isZh ? '成就量化程度' : 'Quantified Impact',    report.dimensions.impact],
+    ]
     dims.forEach(([k, v]) => { line(`  ${k}: ${v}`, 11) })
     y += 6
 
-    line(isZh ? '── 優化建議 ──' : '── Suggestions ──', 12, true); y += 2
-    report.suggestions.forEach((s, i) => {
+    line(isZh ? '── 優化建議 ──' : '── Optimization Suggestions ──', 12, true); y += 2
+    suggestions.forEach((s, i) => {
       const p = PRIORITY_META[s.priority as 'high' | 'medium' | 'low']
       if (y > 260) { doc.addPage(); y = 20 }
-      line(`${i + 1}. [${p.label[lang]}] ${s.issue}`, 11, true)
+      line(`${i + 1}. [${p.label[reportLang]}] ${s.issue}`, 11, true)
       line(`   → ${s.fix}`, 10)
       y += 2
     })
 
-    if (report.keywords.length) {
+    if (keywords.length) {
       if (y > 250) { doc.addPage(); y = 20 }
       y += 4
       line(isZh ? '── 建議關鍵字 ──' : '── Suggested Keywords ──', 12, true); y += 2
-      line(report.keywords.join('  ·  '), 10)
+      line(keywords.join('  ·  '), 10)
     }
 
     doc.save(isZh ? '履歷評分報告.pdf' : 'resume-score-report.pdf')
@@ -1022,17 +1055,31 @@ function ScoreDrawer({
 
       {/* Drawer panel */}
       <div className="fixed right-0 top-0 bottom-0 z-[61] w-full max-w-[480px] bg-white shadow-2xl flex flex-col overflow-hidden">
+
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-warm-200 shrink-0">
-          <h2 className="text-base font-bold text-ink-800">
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-warm-200 shrink-0">
+          <h2 className="text-base font-bold text-ink-800 flex-1">
             {isZh ? '📊 AI 評分報告' : '📊 AI Score Report'}
           </h2>
-          <button onClick={onClose} className="text-ink-400 hover:text-ink-700 transition-colors text-lg leading-none">✕</button>
+          {/* Language toggle */}
+          <div className="flex rounded-lg overflow-hidden border border-warm-200 shrink-0">
+            {(['zh', 'en'] as const).map(l => (
+              <button
+                key={l}
+                onClick={() => switchLang(l)}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${reportLang === l ? 'bg-terra-500 text-white' : 'bg-cream-200 text-ink-400 hover:text-ink-600'}`}
+              >
+                {l === 'zh' ? '中文' : 'EN'}
+              </button>
+            ))}
+          </div>
+          <button onClick={onClose} className="text-ink-400 hover:text-ink-700 transition-colors text-lg leading-none shrink-0">✕</button>
         </div>
 
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-
+        {/* Scrollable body — fades on lang switch */}
+        <div
+          className={`flex-1 overflow-y-auto px-6 py-5 space-y-6 transition-opacity duration-150 ${visible ? 'opacity-100' : 'opacity-0'}`}
+        >
           {/* ── Total score ── */}
           <div className="flex items-end gap-5">
             <div className="text-center">
@@ -1045,7 +1092,7 @@ function ScoreDrawer({
               </div>
               <div className="flex items-center gap-2 text-sm text-ink-500">
                 <span className="font-medium text-ink-700">{report.atsScore}</span>
-                <span>/ 100  ATS</span>
+                <span>/ 100  {isZh ? 'ATS 分數' : 'ATS Score'}</span>
               </div>
             </div>
           </div>
@@ -1056,32 +1103,39 @@ function ScoreDrawer({
               {isZh ? '分項評分' : 'Dimension Scores'}
             </h3>
             <div className="space-y-3">
-              <DimBar label={isZh ? '內容完整度' : 'Content Completeness'} score={report.dimensions.content} />
-              <DimBar label={isZh ? 'ATS 關鍵字密度' : 'ATS Keyword Density'} score={report.dimensions.keywords} />
-              <DimBar label={isZh ? '格式與可讀性' : 'Format & Readability'} score={report.dimensions.format} />
-              <DimBar label={isZh ? '成就量化程度' : 'Quantified Impact'} score={report.dimensions.impact} />
+              <DimBar label={isZh ? '內容完整度'    : 'Content Completeness'} score={report.dimensions.content} />
+              <DimBar label={isZh ? 'ATS 關鍵字密度' : 'ATS Keyword Density'}  score={report.dimensions.keywords} />
+              <DimBar label={isZh ? '格式與可讀性'   : 'Format & Readability'} score={report.dimensions.format} />
+              <DimBar label={isZh ? '成就量化程度'   : 'Quantified Impact'}    score={report.dimensions.impact} />
             </div>
           </div>
 
           {/* ── Suggestions ── */}
           <div>
-            <h3 className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-3">
-              {isZh ? '具體優化建議' : 'Optimization Suggestions'}
-            </h3>
+            <div className="flex items-center gap-2 mb-3">
+              <h3 className="text-xs font-semibold text-ink-500 uppercase tracking-wide flex-1">
+                {isZh ? '具體優化建議' : 'Optimization Suggestions'}
+              </h3>
+              {regenerating && (
+                <span className="flex items-center gap-1 text-[10px] text-terra-500">
+                  <SpinSm />{isZh ? 'AI 重新生成中...' : 'Regenerating...'}
+                </span>
+              )}
+            </div>
             <div className="space-y-3">
-              {report.suggestions.map((s, i) => {
+              {suggestions.map((s, i) => {
                 const meta = PRIORITY_META[s.priority as 'high' | 'medium' | 'low'] ?? PRIORITY_META.medium
                 return (
                   <div key={i} className="rounded-xl border border-warm-200 bg-cream-50 p-4">
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-1.5 shrink-0">
                         <span className="text-sm">{meta.dot}</span>
-                        <span className="text-[10px] font-semibold text-ink-500 uppercase">{meta.label[lang]}</span>
+                        <span className="text-[10px] font-semibold text-ink-500 uppercase">{meta.label[reportLang]}</span>
                       </div>
                       {s.section && (
                         <button onClick={() => onNavigate(s.section as SectionId)}
                           className="shrink-0 text-[10px] font-medium text-terra-600 border border-terra-200 bg-terra-50 rounded-md px-2 py-0.5 hover:bg-terra-100 transition-colors whitespace-nowrap">
-                          {isZh ? '一鍵修正 →' : 'Go to fix →'}
+                          {isZh ? '前往修正 →' : 'Go to fix →'}
                         </button>
                       )}
                     </div>
@@ -1094,13 +1148,13 @@ function ScoreDrawer({
           </div>
 
           {/* ── Suggested keywords ── */}
-          {report.keywords.length > 0 && (
+          {keywords.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-2">
                 {isZh ? '建議加入的關鍵字' : 'Suggested Keywords'}
               </h3>
               <div className="flex flex-wrap gap-1.5">
-                {report.keywords.map((kw, i) => (
+                {keywords.map((kw, i) => (
                   <span key={i} className="rounded-full border border-warm-300 bg-cream-100 px-2.5 py-1 text-xs text-ink-600">{kw}</span>
                 ))}
               </div>
@@ -1112,7 +1166,7 @@ function ScoreDrawer({
         <div className="shrink-0 border-t border-warm-200 px-6 py-4 flex gap-2">
           <button onClick={onClose}
             className="flex-1 rounded-lg bg-terra-500 py-2.5 text-sm font-medium text-white hover:bg-terra-600 transition-colors">
-            {isZh ? '開始優化' : 'Start Editing'}
+            {isZh ? '開始編輯' : 'Start Editing'}
           </button>
           <button onClick={downloadReport}
             className="flex-1 rounded-lg border border-warm-300 bg-white py-2.5 text-sm font-medium text-ink-600 hover:bg-cream-100 transition-colors">
@@ -1120,7 +1174,9 @@ function ScoreDrawer({
           </button>
           <button onClick={onRescore} disabled={scoring}
             className="flex-1 rounded-lg border border-warm-300 bg-white py-2.5 text-sm font-medium text-ink-600 hover:bg-cream-100 transition-colors disabled:opacity-50">
-            {scoring ? <span className="flex items-center justify-center gap-1"><SpinSm />{isZh ? '評分中' : 'Scoring'}</span> : (isZh ? '重新評分' : 'Re-score')}
+            {scoring
+              ? <span className="flex items-center justify-center gap-1"><SpinSm />{isZh ? '評分中' : 'Scoring'}</span>
+              : (isZh ? '重新評分' : 'Re-score')}
           </button>
         </div>
       </div>
