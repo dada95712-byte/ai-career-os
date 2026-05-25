@@ -23,7 +23,7 @@ export interface ResEdu {
   id: string; school: string; major: string; degree: string
   startDate: string; endDate: string
 }
-export interface ResLang { id: string; name: string; level: string }
+export interface ResLang { id: string; name: string; level: string; customName?: string }
 export interface ResConference {
   id: string; name: string; organizer: string; date: string; role: string; description: string
 }
@@ -116,9 +116,42 @@ const CONF_ROLES: Record<'zh' | 'en', string[]> = {
   en: ['Attendee', 'Speaker', 'Moderator'],
 }
 
+const LANGUAGE_OPTIONS = [
+  { key: 'zh_trad', zh: '中文（繁體）', en: 'Mandarin (Traditional Chinese)' },
+  { key: 'zh_simp', zh: '中文（簡體）', en: 'Mandarin (Simplified Chinese)' },
+  { key: 'en',      zh: '英文',         en: 'English' },
+  { key: 'ja',      zh: '日文',         en: 'Japanese' },
+  { key: 'ko',      zh: '韓文',         en: 'Korean' },
+  { key: 'de',      zh: '德文',         en: 'German' },
+  { key: 'fr',      zh: '法文',         en: 'French' },
+  { key: 'es',      zh: '西班牙文',     en: 'Spanish' },
+  { key: 'yue',     zh: '粵語',         en: 'Cantonese' },
+  { key: 'tw',      zh: '台語',         en: 'Taiwanese' },
+  { key: 'vi',      zh: '越南文',       en: 'Vietnamese' },
+  { key: 'th',      zh: '泰文',         en: 'Thai' },
+  { key: 'id',      zh: '印尼文',       en: 'Indonesian' },
+] as const
+
+const OTHER_LANG = '__other__'
+
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }
+
+function getLangDropValue(l: ResLang, rl: 'zh' | 'en'): string {
+  if (l.customName !== undefined) return OTHER_LANG
+  if (!l.name) return ''
+  const opt = LANGUAGE_OPTIONS.find(o => o.zh === l.name || o.en === l.name)
+  return opt ? opt[rl] : OTHER_LANG
+}
+
+function convertLangNames(langs: ResLang[], to: 'zh' | 'en'): ResLang[] {
+  return langs.map(l => {
+    if (l.customName !== undefined || !l.name) return l
+    const opt = LANGUAGE_OPTIONS.find(o => o.zh === l.name || o.en === l.name)
+    return opt ? { ...l, name: opt[to] } : l
+  })
+}
 
 function detectLang(text: string): 'zh' | 'en' {
   const cjk = (text.match(/[一-鿿]/g) ?? []).length
@@ -146,9 +179,11 @@ function fromSaved(p: SavedResumeData): ResData {
       degree: e.degree || '', startDate: e.startDate || '',
       endDate: e.endDate || e.year || '',
     })),
-    languages: (p.languages || []).map(l => ({
-      id: genId(), name: l.name || '', level: l.level || '',
-    })),
+    languages: (p.languages || []).map(l => {
+      const name = l.name || ''
+      const isCustom = name !== '' && !LANGUAGE_OPTIONS.some(o => o.zh === name || o.en === name)
+      return { id: genId(), name, level: l.level || '', customName: isCustom ? name : undefined }
+    }),
     conferences: (p.conferences || []).map(c => ({ id: genId(), ...c })),
     activities: (p.activities || []).map(a => ({ id: genId(), ...a })),
     sectionOrder: p.sectionOrder ?? DEFAULT_SECTION_ORDER,
@@ -358,8 +393,24 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack }: Resum
   function updLang(id: string, f: keyof ResLang, v: string) {
     upd('languages', resume.languages.map(l => l.id === id ? { ...l, [f]: v } : l))
   }
-  function addLang() { upd('languages', [...resume.languages, { id: genId(), name: '', level: LANG_LEVELS[resume.lang][2] }]) }
+  function addLang() {
+    const defaultName = resume.lang === 'zh' ? LANGUAGE_OPTIONS[0].zh : LANGUAGE_OPTIONS[0].en
+    upd('languages', [...resume.languages, { id: genId(), name: defaultName, level: LANG_LEVELS[resume.lang][2], customName: undefined }])
+  }
   function removeLang(id: string) { upd('languages', resume.languages.filter(l => l.id !== id)) }
+
+  function handleLangDropdown(id: string, value: string) {
+    if (value === OTHER_LANG) {
+      const existing = resume.languages.find(l => l.id === id)
+      const prev = existing?.customName ?? ''
+      upd('languages', resume.languages.map(l => l.id === id ? { ...l, name: prev, customName: prev } : l))
+    } else {
+      upd('languages', resume.languages.map(l => l.id === id ? { ...l, name: value, customName: undefined } : l))
+    }
+  }
+  function handleCustomLangName(id: string, value: string) {
+    upd('languages', resume.languages.map(l => l.id === id ? { ...l, name: value, customName: value } : l))
+  }
 
   function updConf(id: string, f: keyof ResConference, v: string) {
     upd('conferences', resume.conferences.map(c => c.id === id ? { ...c, [f]: v } : c))
@@ -632,21 +683,47 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack }: Resum
         {/* ── Languages ── */}
         {section === 'languages' && (
           <div className="space-y-3">
-            {resume.languages.map((lang, idx) => (
-              <div key={lang.id} className="flex items-end gap-2">
-                <div className="flex-1">
-                  {idx === 0 && <label className={LBL}>{resume.lang === 'zh' ? '語言' : 'Language'}</label>}
-                  <input className={INP} value={lang.name} onChange={e => updLang(lang.id, 'name', e.target.value)} />
+            {resume.languages.map((lang, idx) => {
+              const dropValue = getLangDropValue(lang, resume.lang)
+              const isCustom = lang.customName !== undefined
+              return (
+                <div key={lang.id} className="space-y-2">
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      {idx === 0 && <label className={LBL}>{resume.lang === 'zh' ? '語言' : 'Language'}</label>}
+                      <select
+                        className={INP}
+                        value={dropValue}
+                        onChange={e => handleLangDropdown(lang.id, e.target.value)}
+                      >
+                        <option value="">{resume.lang === 'zh' ? '-- 請選擇 --' : '-- Select --'}</option>
+                        {LANGUAGE_OPTIONS.map(opt => (
+                          <option key={opt.key} value={resume.lang === 'zh' ? opt.zh : opt.en}>
+                            {resume.lang === 'zh' ? `${opt.zh} / ${opt.en}` : opt.en}
+                          </option>
+                        ))}
+                        <option value={OTHER_LANG}>{resume.lang === 'zh' ? '其他 / Other' : 'Other'}</option>
+                      </select>
+                    </div>
+                    <div className="w-32">
+                      {idx === 0 && <label className={LBL}>{resume.lang === 'zh' ? '熟練度' : 'Proficiency'}</label>}
+                      <select className={INP} value={lang.level} onChange={e => updLang(lang.id, 'level', e.target.value)}>
+                        {langLevels.map(l => <option key={l} value={l}>{l}</option>)}
+                      </select>
+                    </div>
+                    <button onClick={() => removeLang(lang.id)} className="mb-0.5 pb-2 text-ink-300 hover:text-red-400 transition-colors">✕</button>
+                  </div>
+                  {isCustom && (
+                    <input
+                      className={INP}
+                      placeholder={resume.lang === 'zh' ? '請輸入語言名稱...' : 'Enter language name...'}
+                      value={lang.name}
+                      onChange={e => handleCustomLangName(lang.id, e.target.value)}
+                    />
+                  )}
                 </div>
-                <div className="w-32">
-                  {idx === 0 && <label className={LBL}>{resume.lang === 'zh' ? '熟練度' : 'Proficiency'}</label>}
-                  <select className={INP} value={lang.level} onChange={e => updLang(lang.id, 'level', e.target.value)}>
-                    {langLevels.map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
-                </div>
-                <button onClick={() => removeLang(lang.id)} className="mb-0.5 pb-2 text-ink-300 hover:text-red-400 transition-colors">✕</button>
-              </div>
-            ))}
+              )
+            })}
             <button onClick={addLang} className="w-full rounded-xl border-2 border-dashed border-warm-300 py-3 text-sm text-ink-400 hover:border-terra-300 hover:text-terra-500 transition-all">
               ＋ {resume.lang === 'zh' ? '新增語言' : 'Add Language'}
             </button>
@@ -749,7 +826,17 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack }: Resum
         {!fullPreview && (
           <div className="flex gap-0.5 rounded-lg border border-warm-200 bg-white p-0.5 shrink-0">
             {(['zh', 'en'] as const).map(l => (
-              <button key={l} onClick={() => { upd('lang', l); if (!SUMMARY_TYPES[l].includes(resume.summaryType)) upd('summaryType', SUMMARY_TYPES[l][0]) }}
+              <button key={l} onClick={() => {
+                setResume(prev => {
+                  const updates: Partial<ResData> = {
+                    lang: l,
+                    languages: convertLangNames(prev.languages, l),
+                  }
+                  if (!SUMMARY_TYPES[l].includes(prev.summaryType)) updates.summaryType = SUMMARY_TYPES[l][0]
+                  return { ...prev, ...updates }
+                })
+                setSaved(false)
+              }}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium transition-all ${resume.lang === l ? 'bg-terra-50 text-terra-700' : 'text-ink-400 hover:text-ink-600'}`}>
                 {l === 'zh' ? '中' : 'EN'}
               </button>
