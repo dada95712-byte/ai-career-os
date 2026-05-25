@@ -891,111 +891,7 @@ export default function CareerProfilePage() {
             </div>
           )}
 
-          {showForm && (
-            <Card className="border-terra-100">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>{editingId ? '編輯日誌' : '新增日誌'}</CardTitle>
-                  <button onClick={() => { setShowForm(false); setEditingId(null); setDraft(emptyEntry()) }} className="text-ink-400 hover:text-ink-600">×</button>
-                </div>
-                <div className="flex gap-1 mt-2">
-                  {(['star', 'free'] as const).map((t) => (
-                    <button key={t} onClick={() => updateDraft('template', t)}
-                      className={`rounded-lg px-3 py-1 text-xs font-medium border transition-all ${draft.template === t ? 'bg-terra-50 text-terra-600 border-terra-300' : 'text-ink-400 border-transparent hover:text-ink-600'}`}>
-                      {t === 'star' ? '⭐ STAR 格式' : '📝 自由記錄'}
-                    </button>
-                  ))}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="relative">
-                    <label className="block text-xs text-ink-400 mb-1">公司</label>
-                    <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
-                      placeholder="任職公司" value={draft.company}
-                      onChange={(e) => updateDraft('company', e.target.value)}
-                      onFocus={() => setShowCompanyDD(true)}
-                      onBlur={() => setTimeout(() => setShowCompanyDD(false), 150)} />
-                    {showCompanyDD && companyHistory.length > 0 && (
-                      <div className="absolute top-full mt-1 w-full rounded-xl border border-warm-200 bg-white shadow-[var(--shadow-warm-md)] z-10">
-                        {companyHistory.filter((c) => c.toLowerCase().includes(draft.company.toLowerCase())).map((c) => (
-                          <button key={c} className="w-full text-left px-3 py-2 text-sm text-ink-600 hover:bg-cream-100 first:rounded-t-xl last:rounded-b-xl" onClick={() => { updateDraft('company', c); setShowCompanyDD(false) }}>{c}</button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs text-ink-400 mb-1">日期</label>
-                    <input type="date" value={draft.date} onChange={(e) => updateDraft('date', e.target.value)}
-                      className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 focus:border-terra-400 focus:outline-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs text-ink-400 mb-1">標題（選填，留空由 AI 自動生成）</label>
-                  <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
-                    placeholder="AI 將根據內容自動生成標題..." value={draft.title} onChange={(e) => updateDraft('title', e.target.value)} />
-                </div>
-
-                {draft.template === 'star' ? (
-                  <div className="space-y-3">
-                    {([['situation', '🔲 Situation — 情境'], ['task', '🎯 Task — 任務'], ['action', '⚡ Action — 行動'], ['result', '✅ Result — 結果']] as [keyof JournalEntry, string][]).map(([f, label]) => (
-                      <Textarea key={f} label={label} rows={2} placeholder={`描述${label.split('—')[1].trim()}...`}
-                        value={(draft[f] as string) ?? ''} onChange={(e) => updateDraft(f, e.target.value)} />
-                    ))}
-                  </div>
-                ) : (
-                  <Textarea label="內容" rows={6} placeholder="記錄這次的工作故事、心得或成就..." value={draft.content ?? ''} onChange={(e) => updateDraft('content', e.target.value)} />
-                )}
-
-                <div>
-                  <p className="text-xs text-ink-400 mb-2">圖片（最多 3 張）</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {draft.images.length < 3 && (
-                      <>
-                        <button onClick={() => uploadRef.current?.click()} disabled={uploadingImg}
-                          className="flex items-center gap-1.5 rounded-lg border border-warm-300 bg-cream-100 px-3 py-2 text-xs text-ink-500 hover:border-terra-300 hover:bg-terra-50 transition-all disabled:opacity-50">
-                          {uploadingImg ? <Spinner className="h-3 w-3" /> : '📎'} 上傳圖片
-                        </button>
-                        {isMobile && (
-                          <button onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = (e) => handleImageFiles((e.target as HTMLInputElement).files); i.click() }} disabled={uploadingImg}
-                            className="flex items-center gap-1.5 rounded-lg border border-warm-300 bg-cream-100 px-3 py-2 text-xs text-ink-500 hover:border-terra-300 hover:bg-terra-50 transition-all disabled:opacity-50">
-                            📷 拍照
-                          </button>
-                        )}
-                        <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleImageFiles(e.target.files)} />
-                      </>
-                    )}
-                    {analyzingImg && <span className="text-xs text-terra-500 flex items-center gap-1 self-center"><Spinner className="h-3 w-3" />AI 正在分析圖片...</span>}
-                  </div>
-                  {draft.images.length > 0 && (
-                    <div className="mt-3 space-y-3">
-                      {draft.images.map((img, i) => (
-                        <div key={i} className="flex gap-3">
-                          <img src={img.url} alt="" className="h-20 w-20 rounded-xl object-cover cursor-pointer border border-warm-200 shrink-0" onClick={() => setLightboxUrl(img.url)} />
-                          <div className="flex-1 min-w-0">
-                            {img.aiDescription && (
-                              <div className="rounded-lg bg-cream-200 px-3 py-2 text-xs text-ink-600">
-                                <p className="font-medium text-terra-500 mb-1">📷 AI 圖片分析</p>
-                                <p>{img.aiDescription}</p>
-                              </div>
-                            )}
-                            <button onClick={() => setDraft((p) => ({ ...p, images: p.images.filter((_, j) => j !== i) }))} className="mt-1 text-[10px] text-ink-400 hover:text-red-400">移除</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex gap-2 pt-1">
-                  <Button variant="primary" onClick={saveEntry}>{editingId ? '更新日誌' : '儲存日誌'}</Button>
-                  <Button variant="outline" onClick={() => { setShowForm(false); setEditingId(null); setDraft(emptyEntry()) }}>取消</Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {filteredEntries.length === 0 && !showForm ? (
+          {filteredEntries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16">
               <p className="text-3xl mb-2">✍</p>
               <p className="text-sm text-ink-500">{entries.length > 0 ? '沒有符合篩選條件的日誌' : '尚未新增日誌'}</p>
@@ -1034,6 +930,125 @@ export default function CareerProfilePage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Journal Drawer ── */}
+      {showForm && (
+        <>
+          {/* Backdrop */}
+          <div className="fixed inset-0 z-[59] bg-black/30" onClick={() => { setShowForm(false); setEditingId(null); setDraft(emptyEntry()) }} />
+
+          {/* Panel */}
+          <div className="fixed right-0 top-0 bottom-0 z-[60] flex w-full max-w-[480px] flex-col bg-white shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-warm-200 px-6 py-4 shrink-0">
+              <div>
+                <h2 className="text-base font-bold text-ink-800">{editingId ? '編輯日誌' : '新增日誌'}</h2>
+                <div className="flex gap-1 mt-2">
+                  {(['star', 'free'] as const).map((t) => (
+                    <button key={t} onClick={() => updateDraft('template', t)}
+                      className={`rounded-lg px-3 py-1 text-xs font-medium border transition-all ${draft.template === t ? 'bg-terra-50 text-terra-600 border-terra-300' : 'text-ink-400 border-transparent hover:text-ink-600'}`}>
+                      {t === 'star' ? '⭐ STAR 格式' : '📝 自由記錄'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => { setShowForm(false); setEditingId(null); setDraft(emptyEntry()) }}
+                className="self-start text-xl leading-none text-ink-400 hover:text-ink-700 transition-colors">✕</button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="relative">
+                  <label className="block text-xs text-ink-400 mb-1">公司</label>
+                  <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
+                    placeholder="任職公司" value={draft.company}
+                    onChange={(e) => updateDraft('company', e.target.value)}
+                    onFocus={() => setShowCompanyDD(true)}
+                    onBlur={() => setTimeout(() => setShowCompanyDD(false), 150)} />
+                  {showCompanyDD && companyHistory.length > 0 && (
+                    <div className="absolute top-full mt-1 w-full rounded-xl border border-warm-200 bg-white shadow-[var(--shadow-warm-md)] z-10">
+                      {companyHistory.filter((c) => c.toLowerCase().includes(draft.company.toLowerCase())).map((c) => (
+                        <button key={c} className="w-full text-left px-3 py-2 text-sm text-ink-600 hover:bg-cream-100 first:rounded-t-xl last:rounded-b-xl"
+                          onClick={() => { updateDraft('company', c); setShowCompanyDD(false) }}>{c}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-xs text-ink-400 mb-1">日期</label>
+                  <input type="date" value={draft.date} onChange={(e) => updateDraft('date', e.target.value)}
+                    className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 focus:border-terra-400 focus:outline-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-ink-400 mb-1">標題（選填，留空由 AI 自動生成）</label>
+                <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
+                  placeholder="AI 將根據內容自動生成標題..." value={draft.title} onChange={(e) => updateDraft('title', e.target.value)} />
+              </div>
+
+              {draft.template === 'star' ? (
+                <div className="space-y-3">
+                  {([['situation', '🔲 Situation — 情境'], ['task', '🎯 Task — 任務'], ['action', '⚡ Action — 行動'], ['result', '✅ Result — 結果']] as [keyof JournalEntry, string][]).map(([f, label]) => (
+                    <Textarea key={f} label={label} rows={2} placeholder={`描述${label.split('—')[1].trim()}...`}
+                      value={(draft[f] as string) ?? ''} onChange={(e) => updateDraft(f, e.target.value)} />
+                  ))}
+                </div>
+              ) : (
+                <Textarea label="內容" rows={7} placeholder="記錄這次的工作故事、心得或成就..." value={draft.content ?? ''} onChange={(e) => updateDraft('content', e.target.value)} />
+              )}
+
+              <div>
+                <p className="text-xs text-ink-400 mb-2">圖片（最多 3 張）</p>
+                <div className="flex gap-2 flex-wrap">
+                  {draft.images.length < 3 && (
+                    <>
+                      <button onClick={() => uploadRef.current?.click()} disabled={uploadingImg}
+                        className="flex items-center gap-1.5 rounded-lg border border-warm-300 bg-cream-100 px-3 py-2 text-xs text-ink-500 hover:border-terra-300 hover:bg-terra-50 transition-all disabled:opacity-50">
+                        {uploadingImg ? <Spinner className="h-3 w-3" /> : '📎'} 上傳圖片
+                      </button>
+                      {isMobile && (
+                        <button onClick={() => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = (e) => handleImageFiles((e.target as HTMLInputElement).files); i.click() }} disabled={uploadingImg}
+                          className="flex items-center gap-1.5 rounded-lg border border-warm-300 bg-cream-100 px-3 py-2 text-xs text-ink-500 hover:border-terra-300 hover:bg-terra-50 transition-all disabled:opacity-50">
+                          📷 拍照
+                        </button>
+                      )}
+                      <input ref={uploadRef} type="file" accept="image/*" multiple className="hidden" onChange={(e) => handleImageFiles(e.target.files)} />
+                    </>
+                  )}
+                  {analyzingImg && <span className="text-xs text-terra-500 flex items-center gap-1 self-center"><Spinner className="h-3 w-3" />AI 正在分析圖片...</span>}
+                </div>
+                {draft.images.length > 0 && (
+                  <div className="mt-3 space-y-3">
+                    {draft.images.map((img, i) => (
+                      <div key={i} className="flex gap-3">
+                        <img src={img.url} alt="" className="h-20 w-20 rounded-xl object-cover cursor-pointer border border-warm-200 shrink-0" onClick={() => setLightboxUrl(img.url)} />
+                        <div className="flex-1 min-w-0">
+                          {img.aiDescription && (
+                            <div className="rounded-lg bg-cream-200 px-3 py-2 text-xs text-ink-600">
+                              <p className="font-medium text-terra-500 mb-1">📷 AI 圖片分析</p>
+                              <p>{img.aiDescription}</p>
+                            </div>
+                          )}
+                          <button onClick={() => setDraft((p) => ({ ...p, images: p.images.filter((_, j) => j !== i) }))}
+                            className="mt-1 text-[10px] text-ink-400 hover:text-red-400">移除</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="shrink-0 border-t border-warm-200 px-6 py-4 flex gap-2">
+              <Button variant="primary" onClick={saveEntry}>{editingId ? '更新日誌' : '儲存日誌'}</Button>
+              <Button variant="outline" onClick={() => { setShowForm(false); setEditingId(null); setDraft(emptyEntry()) }}>取消</Button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Lightbox */}
