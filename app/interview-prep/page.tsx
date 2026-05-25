@@ -16,6 +16,17 @@ interface Question {
   type: 'behavioral' | 'technical' | 'situational' | 'general'
   userAnswer?: string; aiFeedback?: string; aiScore?: number
   strengths?: string[]; suggestions?: string[]; optimizedAnswer?: string
+  followUpQ?: string; followUpAnswer?: string
+  weaknessLabels?: string[]; improved?: boolean
+}
+type InterviewerStyle = 'friendly' | 'strict' | 'technical' | 'hr'
+type InterviewMode = 'practice' | 'simulation'
+interface SummaryReport {
+  avgScore: number
+  questionScores: { idx: number; score: number; type: string }[]
+  bestType: string; worstType: string
+  overallSuggestions: string[]
+  dimensions: { content: number; clarity: number; concrete: number; star: number }
 }
 interface QAQuestion {
   zh: string; en: string; type: 'behavioral' | 'technical' | 'situational' | 'general'
@@ -245,8 +256,15 @@ const QA_BANK: { category: string; questions: QAQuestion[] }[] = [
   ]},
 ]
 
+const INTERVIEWER_STYLES: { id: InterviewerStyle; emoji: string; label: string; desc: string; prompt: string }[] = [
+  { id: 'friendly',  emoji: '😊', label: '友善型', desc: '引導式提問，氣氛輕鬆，適合練習新手',  prompt: '用鼓勵、友善的語氣提問和追問，適時給予正面回饋' },
+  { id: 'strict',    emoji: '🎯', label: '嚴格型', desc: '追問犀利，標準高，模擬高壓面試',       prompt: '用嚴格、直接的語氣，深入追問細節，對模糊回答提出質疑' },
+  { id: 'technical', emoji: '💻', label: '技術型', desc: '深入技術細節，適合工程師、數據職位',   prompt: '著重技術細節、系統設計、問題解決邏輯，追問技術決策原因' },
+  { id: 'hr',        emoji: '👔', label: 'HR 型',  desc: '著重軟實力、價值觀、文化契合度',       prompt: '著重團隊合作、職涯動機、公司文化契合，追問個人特質和價值觀' },
+]
+
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }
-const scoreCol   = (s: number) => s >= 8 ? 'text-sage-600' : s >= 6 ? 'text-honey-500' : 'text-red-400'
+const scoreCol   = (s: number) => s >= 8 ? 'text-sage-600' : s >= 5 ? 'text-honey-500' : 'text-terra-500'
 const scoreLabel = (s: number) => s >= 8 ? '表現優異' : s >= 6 ? '表現良好' : s >= 4 ? '尚可改善' : '需要加強'
 function scoreStars(score: number) {
   const filled = Math.round(score / 2)
@@ -270,7 +288,7 @@ export default function InterviewPrepPage() {
   const [tab, setTab] = useState<'mock' | 'qa' | 'record'>('mock')
 
   // Mock interview — session flow
-  const [mockStep, setMockStep] = useState<'loading' | 'sessions' | 'setup' | 'list' | 'practice'>('loading')
+  const [mockStep, setMockStep] = useState<'loading' | 'sessions' | 'setup' | 'list' | 'practice' | 'report'>('loading')
   const [sessions, setSessions]               = useState<InterviewSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [role, setRole]         = useState('')
@@ -285,6 +303,26 @@ export default function InterviewPrepPage() {
   const [evaluating, setEvaluating]   = useState(false)
   const [showEn, setShowEn]           = useState(false)
   const [showMockOptimized, setShowMockOptimized] = useState(false)
+
+  // Interviewer style + mode
+  const [interviewerStyle, setInterviewerStyle] = useState<InterviewerStyle>('friendly')
+  const [interviewMode, setInterviewMode] = useState<InterviewMode>('practice')
+
+  // Timer
+  const [timerPhase, setTimerPhase] = useState<'idle' | 'thinking' | 'answering' | 'expired'>('idle')
+  const [timerSec, setTimerSec] = useState(0)
+
+  // Follow-up
+  const [followUpQ, setFollowUpQ] = useState('')
+  const [followUpAnswer, setFollowUpAnswer] = useState('')
+  const [followUpStep, setFollowUpStep] = useState<'none' | 'followup' | 'scored'>('none')
+  const [generatingFollowUp, setGeneratingFollowUp] = useState(false)
+
+  // Summary report
+  const [report, setReport] = useState<SummaryReport | null>(null)
+  const [generatingReport, setGeneratingReport] = useState(false)
+  const [improvedMap, setImprovedMap] = useState<Record<string, boolean>>({})
+  const [expandedReview, setExpandedReview] = useState<Record<string, boolean>>({})
 
   // QA bank
   const [selectedCat, setSelectedCat]   = useState('通用')
@@ -323,6 +361,22 @@ export default function InterviewPrepPage() {
     setMockStep(parsed.length > 0 ? 'sessions' : 'setup')
   }, [])
 
+  // Timer countdown
+  useEffect(() => {
+    if (timerPhase === 'idle' || timerPhase === 'expired') return
+    if (timerSec <= 0) {
+      if (timerPhase === 'thinking') {
+        setTimerPhase('answering')
+        setTimerSec(120)
+      } else {
+        setTimerPhase('expired')
+      }
+      return
+    }
+    const id = setTimeout(() => setTimerSec((s) => s - 1), 1000)
+    return () => clearTimeout(id)
+  }, [timerSec, timerPhase])
+
   const saveRecords = useCallback((next: RealRecord[]) => {
     setRecords(next)
     localStorage.setItem('interview-records', JSON.stringify(next))
@@ -354,6 +408,13 @@ export default function InterviewPrepPage() {
     setAnswer(q.userAnswer ?? '')
     setShowEn(false)
     setShowMockOptimized(false)
+    setFollowUpQ(q.followUpQ ?? '')
+    setFollowUpAnswer(q.followUpAnswer ?? '')
+    setFollowUpStep(q.aiScore !== undefined ? 'scored' : 'none')
+    stopTimer()
+    if (interviewMode === 'simulation' && !q.userAnswer) {
+      startSimTimer()
+    }
   }
 
   function saveMockAnswer() {
@@ -498,6 +559,132 @@ export default function InterviewPrepPage() {
   }
 
   function deleteRecord(id: string) { saveRecords(records.filter((r) => r.id !== id)) }
+
+  // ── Timer helpers ─────────────────────────────────────────────────────────
+  function stopTimer() { setTimerPhase('idle'); setTimerSec(0) }
+
+  function startSimTimer() { setTimerPhase('thinking'); setTimerSec(30) }
+
+  // ── Follow-up + evaluation ─────────────────────────────────────────────────
+  async function generateFollowUp() {
+    if (!selectedQ || !answer.trim()) return
+    const style = INTERVIEWER_STYLES.find((s) => s.id === interviewerStyle)
+    setGeneratingFollowUp(true)
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{
+            role: 'user',
+            content: `你是一位面試官。${style?.prompt ?? ''}
+根據以下面試題目和使用者的回答，生成一道深入追問，目的是讓使用者補充具體細節或數據。追問要簡短（一句話），用繁體中文，語氣像真實面試官。
+題目：${selectedQ.question}
+使用者回答：${answer}
+只輸出追問本身，不要加任何前綴或解釋。`,
+          }],
+        }),
+      })
+      const data = await res.json()
+      setFollowUpQ(data.reply?.trim() ?? '你能提供更具體的例子或數據嗎？')
+      setFollowUpStep('followup')
+    } catch {
+      setFollowUpQ('你能提供更具體的例子或數據嗎？')
+      setFollowUpStep('followup')
+    } finally { setGeneratingFollowUp(false) }
+  }
+
+  async function evaluateMockWithFollowUp(fAnswer: string, incompleteTime = false) {
+    if (!selectedQ) return
+    setEvaluating(true)
+    const combined = fAnswer.trim()
+      ? `${answer}\n\n[追問] ${followUpQ}\n[回答] ${fAnswer}`
+      : answer
+    const note = incompleteTime ? '\n（使用者因計時到而自動提交，回答可能不完整）' : ''
+    try {
+      const res = await fetch('/api/interview/evaluate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: selectedQ.question, answer: combined + note }),
+      })
+      const data = await res.json()
+      const suggText = (data.suggestions ?? []).join(' ')
+      const weaknessLabels: string[] = []
+      if (/具體|數據|數字|量化/.test(suggText)) weaknessLabels.push('缺乏數據')
+      if (/STAR|結構|情境|任務/.test(suggText)) weaknessLabels.push('STAR 結構不完整')
+      if (/籠統|模糊|不夠清楚|太簡短/.test(suggText)) weaknessLabels.push('內容太籠統')
+      const updates = {
+        userAnswer: answer, aiFeedback: data.feedback ?? '', aiScore: data.score ?? 0,
+        strengths: Array.isArray(data.strengths) ? data.strengths : [],
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+        optimizedAnswer: data.optimizedAnswer ?? data.feedback ?? '',
+        followUpQ, followUpAnswer: fAnswer, weaknessLabels,
+      }
+      setQuestions((p) => p.map((qu) => qu.id === selectedQ?.id ? { ...qu, ...updates } : qu))
+      setSelectedQ((p) => p && { ...p, ...updates })
+      setFollowUpStep('scored')
+      if (currentSessionId && selectedQ) {
+        setSessions((prev) => {
+          const next = prev.map((s) => s.id !== currentSessionId ? s : {
+            ...s, updatedAt: new Date().toISOString(),
+            questions: s.questions.map((sq) => sq.id !== selectedQ.id ? sq : {
+              ...sq, userAnswer: answer, aiScore: data.score ?? 0, aiFeedback: data.feedback ?? '',
+            }),
+          })
+          localStorage.setItem('interview-mock-sessions', JSON.stringify(next))
+          return next
+        })
+      }
+    } catch { /* silent */ }
+    finally { setEvaluating(false) }
+  }
+
+  // ── Summary report ─────────────────────────────────────────────────────────
+  async function generateReport() {
+    const answered = questions.filter((q) => q.aiScore !== undefined)
+    if (answered.length === 0) return
+    setMockStep('report')
+    setReport(null)
+    setGeneratingReport(true)
+    const avg = answered.reduce((s, q) => s + (q.aiScore ?? 0), 0) / answered.length
+    const typeMap: Record<string, number[]> = {}
+    answered.forEach((q) => { if (!typeMap[q.type]) typeMap[q.type] = []; typeMap[q.type].push(q.aiScore ?? 0) })
+    const typeAvgs = Object.entries(typeMap)
+      .map(([t, scores]) => ({ type: t, avg: scores.reduce((a, b) => a + b, 0) / scores.length }))
+      .sort((a, b) => b.avg - a.avg)
+    const bestType = typeAvgs[0]?.type ?? 'behavioral'
+    const worstType = typeAvgs[typeAvgs.length - 1]?.type ?? 'general'
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{
+            role: 'user',
+            content: `請分析以下面試表現，用 JSON 格式回覆（只回傳 JSON，不要其他文字）：
+{"dimensions":{"content":1到10的分數,"clarity":1到10的分數,"concrete":1到10的分數,"star":1到10的分數},"overallSuggestions":["具體建議1","具體建議2","具體建議3"]}
+面試紀錄：
+${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question}\n分數：${q.aiScore}\n回答摘要：${(q.userAnswer ?? '').slice(0, 200)}`).join('\n\n')}`,
+          }],
+        }),
+      })
+      const data = await res.json()
+      const m = data.reply?.match(/\{[\s\S]*\}/)
+      const parsed = m ? JSON.parse(m[0]) : {}
+      setReport({
+        avgScore: avg,
+        questionScores: answered.map((q, i) => ({ idx: i, score: q.aiScore ?? 0, type: q.type })),
+        bestType, worstType,
+        overallSuggestions: parsed.overallSuggestions ?? ['持續練習，累積具體工作案例', '使用 STAR 結構讓回答更有層次', '多準備數字化成果以增加說服力'],
+        dimensions: parsed.dimensions ?? { content: 7, clarity: 7, concrete: 6, star: 7 },
+      })
+    } catch {
+      setReport({
+        avgScore: avg,
+        questionScores: answered.map((q, i) => ({ idx: i, score: q.aiScore ?? 0, type: q.type })),
+        bestType, worstType,
+        overallSuggestions: ['持續練習，累積具體工作案例', '使用 STAR 結構讓回答更有層次', '多準備數字化成果以增加說服力'],
+        dimensions: { content: 7, clarity: 7, concrete: 6, star: 7 },
+      })
+    } finally { setGeneratingReport(false) }
+  }
 
   // ── Shared UI pieces ──────────────────────────────────────────────────────
   const voiceBtn = (target: typeof voiceTarget) => (
@@ -661,6 +848,34 @@ export default function InterviewPrepPage() {
                         ))}
                       </div>
                     </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-ink-500">面試官風格</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {INTERVIEWER_STYLES.map((s) => (
+                          <button key={s.id} onClick={() => setInterviewerStyle(s.id)}
+                            className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-center transition-all ${interviewerStyle === s.id ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                            <span className="text-xl">{s.emoji}</span>
+                            <span className={`text-xs font-semibold ${interviewerStyle === s.id ? 'text-terra-700' : 'text-ink-700'}`}>{s.label}</span>
+                            <span className="text-[10px] text-ink-400 leading-tight">{s.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-ink-500">練習模式</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {([
+                          ['practice',   '🎯 練習模式', '無時間限制，可隨時修改回答'],
+                          ['simulation', '⏱ 模擬模式', '思考 30 秒 + 回答 2 分鐘，貼近真實面試'],
+                        ] as const).map(([mode, label, desc]) => (
+                          <button key={mode} onClick={() => setInterviewMode(mode)}
+                            className={`flex flex-col items-start gap-0.5 rounded-xl border p-3 text-left transition-all ${interviewMode === mode ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                            <span className={`text-sm font-semibold ${interviewMode === mode ? 'text-terra-700' : 'text-ink-700'}`}>{label}</span>
+                            <span className="text-[10px] text-ink-400">{desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <Button variant="primary" onClick={generateQuestions} loading={generating} disabled={!role.trim()} className="w-full">
                       🤖 AI 生成面試題目
                     </Button>
@@ -739,7 +954,7 @@ export default function InterviewPrepPage() {
                           </div>
                           {/* Action button */}
                           <button
-                            onClick={() => { setSelectedQ(q); setAnswer(q.userAnswer ?? ''); setMockPracticeIdx(i); setMockStep('practice'); setShowEn(false); setShowMockOptimized(false) }}
+                            onClick={() => { setMockStep('practice'); goToMockQuestion(i) }}
                             className="print:hidden shrink-0 rounded-xl border border-terra-300 bg-terra-50 px-4 py-2 text-sm font-medium text-terra-600 hover:bg-terra-100 transition-colors whitespace-nowrap">
                             {q.userAnswer ? '重新練習' : '開始練習'}
                           </button>
@@ -750,12 +965,20 @@ export default function InterviewPrepPage() {
                 </div>
               )}
 
-              {/* PDF export */}
+              {/* PDF export + finish interview */}
               {!generating && questions.length > 0 && (
-                <button onClick={() => handleMockPrint()}
-                  className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
-                  📥 匯出所有題目 PDF
-                </button>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button onClick={() => handleMockPrint()}
+                    className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
+                    📥 匯出所有題目 PDF
+                  </button>
+                  {questions.filter((q) => q.aiScore !== undefined).length > 0 && (
+                    <button onClick={generateReport}
+                      className="flex items-center gap-2 rounded-xl bg-terra-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                      📊 查看面試表現報告（{questions.filter((q) => q.aiScore !== undefined).length}/{questions.length} 題已完成）
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}
@@ -763,9 +986,37 @@ export default function InterviewPrepPage() {
           {/* ── Step 3: Practice ── */}
           {mockStep === 'practice' && selectedQ && (
             <div className="space-y-5 max-w-[800px]">
+              {/* Timer bar - simulation mode only */}
+              {interviewMode === 'simulation' && timerPhase !== 'idle' && (
+                <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${
+                  timerPhase === 'thinking' ? 'bg-honey-50 border-honey-300' :
+                  timerPhase === 'expired'  ? 'bg-terra-50 border-terra-300' :
+                  timerSec > 60 ? 'bg-sage-50 border-sage-300' :
+                  timerSec > 30 ? 'bg-honey-50 border-honey-300' :
+                  'bg-terra-50 border-terra-300'
+                }`}>
+                  <span className="text-sm font-medium text-ink-700">
+                    {timerPhase === 'thinking' ? '🧠 思考時間' : timerPhase === 'expired' ? '⏰ 時間到！' : '⏱ 回答時間'}
+                  </span>
+                  {timerPhase !== 'expired' && (
+                    <span className={`text-2xl font-bold tabular-nums ml-auto ${
+                      timerPhase === 'thinking' ? 'text-honey-500' :
+                      timerSec > 60 ? 'text-sage-600' :
+                      timerSec > 30 ? 'text-honey-500' :
+                      'text-terra-500 animate-pulse'
+                    }`}>
+                      {Math.floor(timerSec / 60).toString().padStart(2, '0')}:{(timerSec % 60).toString().padStart(2, '0')}
+                    </span>
+                  )}
+                  {timerPhase === 'expired' && (
+                    <span className="text-sm text-terra-600 ml-auto font-medium">請提交你的回答</span>
+                  )}
+                </div>
+              )}
+
               {/* Top nav */}
               <div className="flex items-center gap-3 flex-wrap">
-                <button onClick={() => setMockStep('list')}
+                <button onClick={() => { stopTimer(); setMockStep('list') }}
                   className="flex items-center gap-1.5 text-sm text-ink-400 hover:text-ink-700 transition-colors">
                   ← 返回題目列表
                 </button>
@@ -774,13 +1025,13 @@ export default function InterviewPrepPage() {
                 </span>
                 <div className="flex gap-1">
                   <button
-                    onClick={() => goToMockQuestion(Math.max(0, mockPracticeIdx - 1))}
+                    onClick={() => { stopTimer(); goToMockQuestion(Math.max(0, mockPracticeIdx - 1)) }}
                     disabled={mockPracticeIdx === 0}
                     className="rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-xs text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                     上一題
                   </button>
                   <button
-                    onClick={() => goToMockQuestion(Math.min(questions.length - 1, mockPracticeIdx + 1))}
+                    onClick={() => { stopTimer(); goToMockQuestion(Math.min(questions.length - 1, mockPracticeIdx + 1)) }}
                     disabled={mockPracticeIdx === questions.length - 1}
                     className="rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-xs text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
                     下一題
@@ -812,19 +1063,56 @@ export default function InterviewPrepPage() {
                   placeholder={answerLang === 'en' ? 'Use STAR method: Situation → Task → Action → Result' : '建議用 STAR 方法：情境 → 任務 → 行動 → 結果'}
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
-                  className="w-full min-h-[200px] rounded-xl border border-warm-300 bg-white px-4 py-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none resize-y leading-relaxed" />
-                <div className="flex items-center gap-3">
-                  {voiceBtn('mock')}
-                  <button
-                    onClick={() => evaluate(false)}
-                    disabled={!answer.trim() || evaluating}
-                    className="flex items-center gap-2 rounded-xl bg-terra-500 px-5 py-2 text-sm font-semibold text-white hover:bg-terra-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[var(--shadow-warm-sm)]">
-                    {evaluating ? (
-                      <><svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>評分中...</>
-                    ) : '✨ AI 評分與建議'}
-                  </button>
-                </div>
+                  disabled={timerPhase === 'thinking' || followUpStep === 'followup' || followUpStep === 'scored'}
+                  className="w-full min-h-[200px] rounded-xl border border-warm-300 bg-white px-4 py-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none resize-y leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed" />
+                {followUpStep === 'none' && (
+                  <div className="flex items-center gap-3">
+                    {voiceBtn('mock')}
+                    <button
+                      onClick={() => { stopTimer(); void generateFollowUp() }}
+                      disabled={!answer.trim() || generatingFollowUp || timerPhase === 'thinking'}
+                      className="flex items-center gap-2 rounded-xl bg-terra-500 px-5 py-2 text-sm font-semibold text-white hover:bg-terra-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[var(--shadow-warm-sm)]">
+                      {generatingFollowUp
+                        ? <><svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>生成追問中…</>
+                        : timerPhase === 'expired' ? '⏰ 提交回答（時間已到）' : '提交回答 →'}
+                    </button>
+                  </div>
+                )}
               </div>
+
+              {/* Follow-up question block */}
+              {followUpStep === 'followup' && followUpQ && (
+                <div className="space-y-3">
+                  <div className="bg-sage-50 border-l-4 border-sage-400 p-3 rounded-r-lg">
+                    <p className="text-xs font-semibold text-sage-700 mb-1">🤖 追問：</p>
+                    <p className="text-sm text-ink-800 leading-relaxed">{followUpQ}</p>
+                  </div>
+                  <textarea
+                    rows={4}
+                    placeholder="回答追問..."
+                    value={followUpAnswer}
+                    onChange={(e) => setFollowUpAnswer(e.target.value)}
+                    className="w-full rounded-xl border border-warm-300 bg-white px-4 py-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none resize-y leading-relaxed" />
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                      onClick={() => evaluateMockWithFollowUp(followUpAnswer)}
+                      disabled={!followUpAnswer.trim() || evaluating}
+                      className="flex items-center gap-2 rounded-xl bg-terra-500 px-5 py-2 text-sm font-semibold text-white hover:bg-terra-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[var(--shadow-warm-sm)]">
+                      {evaluating
+                        ? <><svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>評分中…</>
+                        : '✨ AI 評分與建議'}
+                    </button>
+                    {interviewMode === 'practice' && (
+                      <button
+                        onClick={() => evaluateMockWithFollowUp('')}
+                        disabled={evaluating}
+                        className="text-sm text-ink-400 hover:text-ink-600 transition-colors">
+                        跳過，直接評分
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* AI feedback */}
               {selectedQ.aiScore !== undefined && (
@@ -895,6 +1183,205 @@ export default function InterviewPrepPage() {
                   </button>
                 </div>
               )}
+            </div>
+          )}
+          {/* ── Report ── */}
+          {mockStep === 'report' && (
+            <div className="space-y-6 max-w-[900px]">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setMockStep('list')}
+                  className="flex items-center gap-1.5 rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
+                  ← 返回題目列表
+                </button>
+                <h2 className="text-lg font-bold text-ink-900">面試表現報告</h2>
+              </div>
+
+              {generatingReport ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-3">
+                  <svg className="h-8 w-8 animate-spin text-terra-400" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                  </svg>
+                  <p className="text-sm text-ink-400">AI 正在分析你的面試表現…</p>
+                </div>
+              ) : report ? (
+                <>
+                  {/* Overall score */}
+                  <Card>
+                    <CardContent className="pt-6 pb-6">
+                      <div className="flex items-center gap-6 flex-wrap">
+                        <div className="text-center">
+                          <div className={`text-6xl font-bold tabular-nums ${scoreCol(report.avgScore)}`}>
+                            {report.avgScore.toFixed(1)}
+                          </div>
+                          <p className="text-xs text-ink-400 mt-1">/ 10 整體平均</p>
+                        </div>
+                        <div className={`text-2xl font-bold border-l border-warm-200 pl-6 ${scoreCol(report.avgScore)}`}>
+                          {report.avgScore >= 8 ? '優秀 🎉' : report.avgScore >= 6 ? '良好 👍' : '待改善 💪'}
+                        </div>
+                        <div className="ml-auto text-right text-xs text-ink-400 space-y-1">
+                          <p>已完成 <span className="font-semibold text-ink-700">{report.questionScores.length}</span> 題</p>
+                          <p>最強題型：<span className="font-semibold text-sage-600">{TYPE[report.bestType]?.label}</span></p>
+                          <p>重點加強：<span className="font-semibold text-terra-500">{TYPE[report.worstType]?.label}</span></p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Score bar chart */}
+                  <Card>
+                    <CardHeader><CardTitle>各題得分</CardTitle></CardHeader>
+                    <CardContent>
+                      <div className="flex items-end gap-2 h-40 pb-6 relative">
+                        {[2, 4, 6, 8, 10].map((v) => (
+                          <div key={v} className="absolute left-0 right-0 flex items-center gap-1" style={{ bottom: `${(v / 10) * 120}px` }}>
+                            <span className="text-[9px] text-ink-300 w-3">{v}</span>
+                            <div className="flex-1 border-t border-dashed border-warm-100" />
+                          </div>
+                        ))}
+                        <div className="flex items-end gap-2 w-full pl-4">
+                          {report.questionScores.map((qs, i) => (
+                            <div key={i} className="flex flex-col items-center gap-1 flex-1">
+                              <span className={`text-[10px] font-semibold ${scoreCol(qs.score)}`}>{qs.score}</span>
+                              <div className="w-full rounded-t-md min-h-[4px] transition-all"
+                                style={{
+                                  height: `${(qs.score / 10) * 120}px`,
+                                  backgroundColor: qs.score >= 8 ? '#5a7a60' : qs.score >= 5 ? '#c49a35' : '#b85048',
+                                }} />
+                              <span className="text-[9px] text-ink-400">Q{qs.idx + 1}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* 4-dimension analysis */}
+                  <Card>
+                    <CardHeader><CardTitle>能力維度分析</CardTitle></CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        {([
+                          ['content', '內容完整度'],
+                          ['clarity', '表達清晰度'],
+                          ['concrete', '具體程度'],
+                          ['star', 'STAR 結構'],
+                        ] as const).map(([key, label]) => {
+                          const score = report.dimensions[key]
+                          return (
+                            <div key={key}>
+                              <div className="flex justify-between text-sm mb-2">
+                                <span className="text-ink-700 font-medium">{label}</span>
+                                <span className={`font-bold ${scoreCol(score)}`}>{score}/10</span>
+                              </div>
+                              <div className="h-2.5 rounded-full bg-cream-200 overflow-hidden">
+                                <div className="h-full rounded-full transition-all duration-700"
+                                  style={{
+                                    width: `${score * 10}%`,
+                                    backgroundColor: score >= 8 ? '#5a7a60' : score >= 5 ? '#c49a35' : '#b85048',
+                                  }} />
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* AI overall suggestions */}
+                  <Card>
+                    <CardHeader><CardTitle>整體改善建議</CardTitle></CardHeader>
+                    <CardContent className="space-y-3">
+                      {report.overallSuggestions.map((s, i) => (
+                        <div key={i} className="flex gap-3 p-3 rounded-xl bg-sage-50 border border-sage-200">
+                          <span className="text-sage-600 font-bold text-sm shrink-0 mt-0.5">{i + 1}</span>
+                          <p className="text-sm text-ink-700 leading-relaxed">{s}</p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+
+                  {/* Review cards */}
+                  <div>
+                    <h3 className="text-base font-semibold text-ink-800 mb-3">複盤區塊</h3>
+                    <div className="space-y-3">
+                      {questions.filter((q) => q.aiScore !== undefined).map((q, i) => (
+                        <div key={q.id} className="bg-white border border-warm-200 shadow-[var(--shadow-warm-xs)] rounded-2xl p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                <Badge variant={TYPE[q.type]?.color ?? 'default'}>{TYPE[q.type]?.label}</Badge>
+                                <span className={`text-sm font-bold ${scoreCol(q.aiScore ?? 0)}`}>{q.aiScore}/10</span>
+                                {(q.weaknessLabels ?? []).map((wl) => (
+                                  <span key={wl} className="bg-terra-50 text-terra-600 text-xs px-2 py-0.5 rounded-full">{wl}</span>
+                                ))}
+                              </div>
+                              <p className="text-sm font-medium text-ink-800 leading-relaxed">
+                                {i + 1}. {q.question}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                const next = { ...improvedMap, [q.id]: !improvedMap[q.id] }
+                                setImprovedMap(next)
+                                setQuestions((prev) => prev.map((qu) => qu.id === q.id ? { ...qu, improved: !improvedMap[q.id] } : qu))
+                              }}
+                              className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-all whitespace-nowrap ${improvedMap[q.id] ? 'bg-sage-50 border-sage-400 text-sage-600' : 'border-warm-200 text-ink-400 hover:border-warm-300'}`}>
+                              {improvedMap[q.id] ? '✓ 已改善' : '標記改善'}
+                            </button>
+                          </div>
+                          <div className="mt-3 space-y-2 border-t border-warm-100 pt-2">
+                            <button
+                              onClick={() => setExpandedReview((p) => ({ ...p, [q.id + 'a']: !p[q.id + 'a'] }))}
+                              className="text-xs text-ink-400 hover:text-ink-600 transition-colors">
+                              {expandedReview[q.id + 'a'] ? '▲ 收起你的回答' : '▼ 查看你的回答'}
+                            </button>
+                            {expandedReview[q.id + 'a'] && (
+                              <div className="bg-cream-50 border border-warm-200 rounded-xl p-3">
+                                <p className="text-xs text-ink-600 whitespace-pre-line leading-relaxed">{q.userAnswer}</p>
+                              </div>
+                            )}
+                            {q.optimizedAnswer && (
+                              <>
+                                <button
+                                  onClick={() => setExpandedReview((p) => ({ ...p, [q.id + 'o']: !p[q.id + 'o'] }))}
+                                  className="text-xs text-terra-500 hover:text-terra-700 transition-colors">
+                                  {expandedReview[q.id + 'o'] ? '▲ 收起 AI 建議回答' : '✨ 查看 AI 建議優化回答'}
+                                </button>
+                                {expandedReview[q.id + 'o'] && (
+                                  <div className="bg-sage-50 border border-sage-200 rounded-xl p-3">
+                                    <p className="text-xs font-semibold text-sage-600 mb-1">AI 建議回答</p>
+                                    <p className="text-xs text-ink-600 whitespace-pre-line leading-relaxed">{q.optimizedAnswer}</p>
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bottom actions */}
+                  <div className="flex items-center gap-3 flex-wrap border-t border-warm-200 pt-4">
+                    <button
+                      onClick={() => handleMockPrint()}
+                      className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
+                      📥 下載報告 PDF
+                    </button>
+                    <button
+                      onClick={() => { setRole(''); setCompany(''); setCurrentSessionId(null); setQuestions([]); setReport(null); setMockStep('setup') }}
+                      className="flex items-center gap-2 rounded-xl border border-terra-200 bg-terra-50 px-4 py-2.5 text-sm font-medium text-terra-600 hover:bg-terra-100 transition-colors">
+                      🔄 重新練習
+                    </button>
+                    <button
+                      onClick={() => setTab('qa')}
+                      className="flex items-center gap-2 rounded-xl border border-warm-200 bg-cream-50 px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
+                      📚 查看常見題庫
+                    </button>
+                  </div>
+                </>
+              ) : null}
             </div>
           )}
         </>
