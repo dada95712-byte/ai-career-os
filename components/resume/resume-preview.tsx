@@ -4,7 +4,7 @@ import { forwardRef, type Ref } from 'react'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type SectionId = 'personal' | 'summary' | 'experience' | 'education' | 'skills' | 'languages' | 'conferences' | 'activities'
+export type SectionId = 'personal' | 'summary' | 'experience' | 'education' | 'skills' | 'languages' | 'certifications' | 'conferences' | 'activities'
 export type TemplateId = 'classic' | 'modern' | 'minimal' | 'professional' | 'creative'
 
 export interface PreviewData {
@@ -16,17 +16,20 @@ export interface PreviewData {
   experiences: { company: string; title: string; description: string; startDate: string; endDate: string; current: boolean }[]
   education: { school: string; major: string; degree: string; startDate: string; endDate: string }[]
   languages: { id: string; name: string; level: string }[]
+  certifications: { id: string; name: string; issuer: string; issueDate: string; expiryDate: string; neverExpires: boolean; credentialId: string; credentialUrl: string }[]
   conferences: { id: string; name: string; organizer: string; date: string; role: string; description: string }[]
   activities: { id: string; name: string; organization: string; date: string; role: string; description: string }[]
   lang: 'zh' | 'en'
   sectionOrder: SectionId[]
+  photoUrl?: string
+  showPhoto?: boolean
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const SECTION_TITLE: Record<'zh' | 'en', Partial<Record<SectionId, string>>> = {
-  zh: { summary: '個人摘要', experience: '工作經歷', education: '學歷', skills: '技能', languages: '語言', conferences: '會議', activities: '活動' },
-  en: { summary: 'Summary', experience: 'Work Experience', education: 'Education', skills: 'Skills', languages: 'Languages', conferences: 'Conferences', activities: 'Activities' },
+  zh: { summary: '個人摘要', experience: '工作經歷', education: '學歷', skills: '技能', languages: '語言', certifications: '證照', conferences: '會議', activities: '活動' },
+  en: { summary: 'Summary', experience: 'Work Experience', education: 'Education', skills: 'Skills', languages: 'Languages', certifications: 'Certifications', conferences: 'Conferences', activities: 'Activities' },
 }
 
 function secTitle(data: PreviewData, id: SectionId): string {
@@ -41,9 +44,9 @@ function dateRange(s: string, e: string, current: boolean, lang: 'zh' | 'en') {
 const FONT = '"Noto Sans TC","Microsoft JhengHei",system-ui,-apple-system,sans-serif'
 const SIDEBAR_SECTIONS: SectionId[] = ['skills', 'languages']
 
-// ── Section renderers (shared across templates via style injection) ─────────────
+// ── Section renderers ─────────────────────────────────────────────────────────
 
-interface SS { /* section styling */ hdr: React.CSSProperties; company: React.CSSProperties; role: React.CSSProperties; body: React.CSSProperties; date: React.CSSProperties }
+interface SS { hdr: React.CSSProperties; company: React.CSSProperties; role: React.CSSProperties; body: React.CSSProperties; date: React.CSSProperties }
 
 function renderSectionBody(id: SectionId, data: PreviewData, ss: SS): React.ReactNode {
   const lang = data.lang
@@ -79,6 +82,23 @@ function renderSectionBody(id: SectionId, data: PreviewData, ss: SS): React.Reac
       return data.languages.filter(l => l.name).map((l, i) => (
         <p key={i} style={{ ...ss.body, margin: '2px 0' }}>{l.name}{l.level ? ` — ${l.level}` : ''}</p>
       ))
+    case 'certifications':
+      return (data.certifications ?? []).filter(c => c.name).map((c, i) => {
+        const dateText = c.neverExpires
+          ? (lang === 'zh' ? '永久有效' : 'No Expiry')
+          : [c.issueDate, c.expiryDate].filter(Boolean).join(' – ')
+        return (
+          <div key={i} style={{ marginBottom: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={ss.company}>{c.name}</span>
+              <span style={ss.date}>{dateText}</span>
+            </div>
+            {(c.issuer || c.credentialId) && (
+              <p style={{ ...ss.body, margin: '2px 0 0' }}>{[c.issuer, c.credentialId].filter(Boolean).join(' · ')}</p>
+            )}
+          </div>
+        )
+      })
     case 'conferences':
       return (data.conferences ?? []).filter(c => c.name).map((c, i) => (
         <div key={i} style={{ marginBottom: '10px' }}>
@@ -107,13 +127,14 @@ function renderSectionBody(id: SectionId, data: PreviewData, ss: SS): React.Reac
 
 function isSectionEmpty(id: SectionId, data: PreviewData): boolean {
   switch (id) {
-    case 'summary':     return !data.summary
-    case 'experience':  return !data.experiences.some(e => e.company || e.title)
-    case 'education':   return !data.education.some(e => e.school)
-    case 'skills':      return data.skills.filter(Boolean).length === 0
-    case 'languages':   return !data.languages.some(l => l.name)
-    case 'conferences': return !(data.conferences ?? []).some(c => c.name)
-    case 'activities':  return !(data.activities ?? []).some(a => a.name)
+    case 'summary':        return !data.summary
+    case 'experience':     return !data.experiences.some(e => e.company || e.title)
+    case 'education':      return !data.education.some(e => e.school)
+    case 'skills':         return data.skills.filter(Boolean).length === 0
+    case 'languages':      return !data.languages.some(l => l.name)
+    case 'certifications': return !(data.certifications ?? []).some(c => c.name)
+    case 'conferences':    return !(data.conferences ?? []).some(c => c.name)
+    case 'activities':     return !(data.activities ?? []).some(a => a.name)
     default: return true
   }
 }
@@ -131,9 +152,13 @@ const CLASSIC_SS: SS = {
 function ClassicTemplate({ data, pdfRef }: { data: PreviewData; pdfRef: Ref<HTMLDivElement> }) {
   const contact = [data.email, data.phone, data.location, data.linkedin, data.website].filter(Boolean)
   const body = data.sectionOrder.filter(id => id !== 'personal')
+  const hasPhoto = data.showPhoto && data.photoUrl
   return (
     <div ref={pdfRef} style={{ width: '794px', minHeight: '1122px', backgroundColor: '#fff', padding: '60px 64px', boxSizing: 'border-box', fontFamily: FONT }}>
-      <div style={{ textAlign: 'center', marginBottom: '22px' }}>
+      <div style={{ position: 'relative', textAlign: 'center', marginBottom: '22px', paddingRight: hasPhoto ? '88px' : 0 }}>
+        {hasPhoto && (
+          <img src={data.photoUrl} alt="" style={{ position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)', width: '72px', height: '72px', borderRadius: '8px', objectFit: 'cover' }} />
+        )}
         <h1 style={{ fontSize: '28px', fontWeight: 700, color: '#111', margin: 0 }}>{data.name || '您的姓名'}</h1>
         {data.jobTitle && <p style={{ fontSize: '13px', color: '#666', margin: '4px 0 0' }}>{data.jobTitle}</p>}
         {contact.length > 0 && (
@@ -166,10 +191,13 @@ const MODERN_SS: SS = {
 function ModernTemplate({ data, pdfRef }: { data: PreviewData; pdfRef: Ref<HTMLDivElement> }) {
   const contact = [data.email, data.phone, data.location, data.linkedin, data.website].filter(Boolean)
   const body = data.sectionOrder.filter(id => id !== 'personal' && !SIDEBAR_SECTIONS.includes(id))
+  const hasPhoto = data.showPhoto && data.photoUrl
   return (
     <div ref={pdfRef} style={{ width: '794px', minHeight: '1122px', backgroundColor: '#fff', display: 'flex', fontFamily: FONT, boxSizing: 'border-box' }}>
-      {/* Sidebar */}
       <div style={{ width: '256px', backgroundColor: '#292524', padding: '48px 28px', flexShrink: 0, boxSizing: 'border-box' }}>
+        {hasPhoto && (
+          <img src={data.photoUrl} alt="" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', marginBottom: '16px', border: '2px solid rgba(255,255,255,0.15)' }} />
+        )}
         <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#fafaf9', margin: 0, lineHeight: 1.2 }}>{data.name || '您的姓名'}</h1>
         {data.jobTitle && <p style={{ fontSize: '11px', color: '#a8a29e', margin: '6px 0 0' }}>{data.jobTitle}</p>}
         {contact.length > 0 && (
@@ -195,8 +223,15 @@ function ModernTemplate({ data, pdfRef }: { data: PreviewData; pdfRef: Ref<HTMLD
             {data.languages.filter(l => l.name).map((l, i) => <p key={i} style={{ fontSize: '10px', color: '#a8a29e', margin: '3px 0' }}>{l.name}{l.level ? ` — ${l.level}` : ''}</p>)}
           </div>
         )}
+        {(data.certifications ?? []).some(c => c.name) && (
+          <div style={{ marginTop: '28px' }}>
+            <p style={{ fontSize: '8px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#78716c', margin: '0 0 8px' }}>{secTitle(data, 'certifications')}</p>
+            {(data.certifications ?? []).filter(c => c.name).map((c, i) => (
+              <p key={i} style={{ fontSize: '10px', color: '#a8a29e', margin: '3px 0' }}>{c.name}{c.issuer ? ` · ${c.issuer}` : ''}</p>
+            ))}
+          </div>
+        )}
       </div>
-      {/* Main */}
       <div style={{ flex: 1, padding: '48px 40px', boxSizing: 'border-box' }}>
         {body.filter(id => !isSectionEmpty(id, data)).map(id => (
           <div key={id} style={{ marginBottom: '24px' }}>
@@ -222,13 +257,21 @@ const MINIMAL_SS: SS = {
 function MinimalTemplate({ data, pdfRef }: { data: PreviewData; pdfRef: Ref<HTMLDivElement> }) {
   const contact = [data.email, data.phone, data.location, data.linkedin, data.website].filter(Boolean)
   const body = data.sectionOrder.filter(id => id !== 'personal')
+  const hasPhoto = data.showPhoto && data.photoUrl
   return (
     <div ref={pdfRef} style={{ width: '794px', minHeight: '1122px', backgroundColor: '#fff', padding: '72px 80px', boxSizing: 'border-box', fontFamily: '"Georgia","Times New Roman",serif' }}>
-      <h1 style={{ fontSize: '26px', fontWeight: 400, color: '#111', margin: 0, letterSpacing: '-0.2px' }}>{data.name || 'Your Name'}</h1>
-      {data.jobTitle && <p style={{ fontSize: '12px', color: '#777', margin: '4px 0 0', fontStyle: 'italic' }}>{data.jobTitle}</p>}
-      {contact.length > 0 && (
-        <p style={{ fontSize: '9.5px', color: '#999', margin: '8px 0 0' }}>{contact.join('  ·  ')}</p>
-      )}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', marginBottom: '8px' }}>
+        <div>
+          <h1 style={{ fontSize: '26px', fontWeight: 400, color: '#111', margin: 0, letterSpacing: '-0.2px' }}>{data.name || 'Your Name'}</h1>
+          {data.jobTitle && <p style={{ fontSize: '12px', color: '#777', margin: '4px 0 0', fontStyle: 'italic' }}>{data.jobTitle}</p>}
+          {contact.length > 0 && (
+            <p style={{ fontSize: '9.5px', color: '#999', margin: '8px 0 0' }}>{contact.join('  ·  ')}</p>
+          )}
+        </div>
+        {hasPhoto && (
+          <img src={data.photoUrl} alt="" style={{ width: '72px', height: '72px', borderRadius: '4px', objectFit: 'cover', flexShrink: 0 }} />
+        )}
+      </div>
       <div style={{ borderTop: '0.5px solid #ddd', margin: '20px 0' }} />
       {body.filter(id => !isSectionEmpty(id, data)).map(id => (
         <div key={id} style={{ marginBottom: '24px' }}>
@@ -253,17 +296,21 @@ const PROF_SS: SS = {
 function ProfessionalTemplate({ data, pdfRef }: { data: PreviewData; pdfRef: Ref<HTMLDivElement> }) {
   const contact = [data.email, data.phone, data.location, data.linkedin, data.website].filter(Boolean)
   const body = data.sectionOrder.filter(id => id !== 'personal')
+  const hasPhoto = data.showPhoto && data.photoUrl
   return (
     <div ref={pdfRef} style={{ width: '794px', minHeight: '1122px', backgroundColor: '#fff', boxSizing: 'border-box', fontFamily: FONT }}>
-      {/* Navy header bar */}
-      <div style={{ backgroundColor: '#1e3a5f', padding: '32px 48px' }}>
-        <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#fff', margin: 0 }}>{data.name || 'Your Name'}</h1>
-        {data.jobTitle && <p style={{ fontSize: '12px', color: '#a8c0d8', margin: '4px 0 0' }}>{data.jobTitle}</p>}
-        {contact.length > 0 && (
-          <p style={{ fontSize: '9.5px', color: '#8ba5bf', margin: '10px 0 0' }}>{contact.join('  |  ')}</p>
+      <div style={{ backgroundColor: '#1e3a5f', padding: '32px 48px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px' }}>
+        <div>
+          <h1 style={{ fontSize: '26px', fontWeight: 700, color: '#fff', margin: 0 }}>{data.name || 'Your Name'}</h1>
+          {data.jobTitle && <p style={{ fontSize: '12px', color: '#a8c0d8', margin: '4px 0 0' }}>{data.jobTitle}</p>}
+          {contact.length > 0 && (
+            <p style={{ fontSize: '9.5px', color: '#8ba5bf', margin: '10px 0 0' }}>{contact.join('  |  ')}</p>
+          )}
+        </div>
+        {hasPhoto && (
+          <img src={data.photoUrl} alt="" style={{ width: '72px', height: '72px', borderRadius: '8px', objectFit: 'cover', flexShrink: 0, border: '2px solid rgba(255,255,255,0.2)' }} />
         )}
       </div>
-      {/* Body */}
       <div style={{ padding: '36px 48px' }}>
         {body.filter(id => !isSectionEmpty(id, data)).map(id => (
           <div key={id} style={{ marginBottom: '22px' }}>
@@ -289,10 +336,13 @@ const CREATIVE_SS: SS = {
 function CreativeTemplate({ data, pdfRef }: { data: PreviewData; pdfRef: Ref<HTMLDivElement> }) {
   const contact = [data.email, data.phone, data.location, data.linkedin, data.website].filter(Boolean)
   const body = data.sectionOrder.filter(id => id !== 'personal' && !SIDEBAR_SECTIONS.includes(id))
+  const hasPhoto = data.showPhoto && data.photoUrl
   return (
     <div ref={pdfRef} style={{ width: '794px', minHeight: '1122px', backgroundColor: '#fff', display: 'flex', fontFamily: FONT, boxSizing: 'border-box' }}>
-      {/* Sidebar */}
       <div style={{ width: '230px', backgroundColor: '#fbf2ee', borderRight: '3px solid #d4562f', padding: '48px 24px', flexShrink: 0, boxSizing: 'border-box' }}>
+        {hasPhoto && (
+          <img src={data.photoUrl} alt="" style={{ width: '80px', height: '80px', borderRadius: '50%', objectFit: 'cover', marginBottom: '16px', border: '3px solid #d4562f' }} />
+        )}
         <h1 style={{ fontSize: '20px', fontWeight: 700, color: '#7d2e18', margin: 0, lineHeight: 1.2 }}>{data.name || '您的姓名'}</h1>
         {data.jobTitle && <p style={{ fontSize: '10px', color: '#c04b2a', margin: '6px 0 0' }}>{data.jobTitle}</p>}
         {contact.length > 0 && (
@@ -313,8 +363,13 @@ function CreativeTemplate({ data, pdfRef }: { data: PreviewData; pdfRef: Ref<HTM
             {data.languages.filter(l => l.name).map((l, i) => <p key={i} style={{ fontSize: '10px', color: '#444', margin: '3px 0' }}>{l.name}{l.level ? ` — ${l.level}` : ''}</p>)}
           </div>
         )}
+        {(data.certifications ?? []).some(c => c.name) && (
+          <div style={{ marginTop: '24px' }}>
+            <p style={{ fontSize: '7.5px', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: '#c04b2a', margin: '0 0 6px' }}>{secTitle(data, 'certifications')}</p>
+            {(data.certifications ?? []).filter(c => c.name).map((c, i) => <p key={i} style={{ fontSize: '10px', color: '#444', margin: '3px 0' }}>• {c.name}</p>)}
+          </div>
+        )}
       </div>
-      {/* Main */}
       <div style={{ flex: 1, padding: '48px 36px', boxSizing: 'border-box' }}>
         {body.filter(id => !isSectionEmpty(id, data)).map(id => (
           <div key={id} style={{ marginBottom: '22px' }}>

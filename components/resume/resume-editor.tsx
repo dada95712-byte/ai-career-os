@@ -25,6 +25,10 @@ export interface ResEdu {
   startDate: string; endDate: string
 }
 export interface ResLang { id: string; name: string; level: string; customName?: string }
+export interface ResCert {
+  id: string; name: string; issuer: string; issueDate: string
+  expiryDate: string; neverExpires: boolean; credentialId: string; credentialUrl: string
+}
 export interface ResConference {
   id: string; name: string; organizer: string; date: string; role: string; description: string
 }
@@ -41,10 +45,13 @@ export interface ResData {
   experiences: ResExp[]
   education: ResEdu[]
   languages: ResLang[]
+  certifications: ResCert[]
   conferences: ResConference[]
   activities: ResActivity[]
   sectionOrder: SectionId[]
   rawText: string
+  photoUrl: string
+  showPhoto: boolean
 }
 
 export interface SavedResumeData {
@@ -55,10 +62,13 @@ export interface SavedResumeData {
   experiences: { company: string; title: string; description: string; startDate?: string; endDate?: string; current?: boolean }[]
   education: { school: string; degree: string; major: string; year: string; startDate?: string; endDate?: string }[]
   languages?: { name: string; level: string }[]
+  certifications?: { name: string; issuer: string; issueDate: string; expiryDate: string; neverExpires: boolean; credentialId: string; credentialUrl: string }[]
   conferences?: { name: string; organizer: string; date: string; role: string; description: string }[]
   activities?: { name: string; organization: string; date: string; role: string; description: string }[]
   sectionOrder?: SectionId[]
   rawText: string
+  photoUrl?: string
+  showPhoto?: boolean
 }
 
 interface ResumeEditorProps {
@@ -87,12 +97,12 @@ interface ScoreReport {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_SECTION_ORDER: SectionId[] = [
-  'personal', 'summary', 'experience', 'education', 'skills', 'languages', 'conferences', 'activities',
+  'personal', 'summary', 'experience', 'education', 'skills', 'certifications', 'languages', 'conferences', 'activities',
 ]
 
-const SECTION_LABELS: Record<'zh' | 'en', Record<SectionId, string>> = {
-  zh: { personal: '個人資訊', summary: '摘要', experience: '工作經歷', education: '學歷', skills: '技能', languages: '語言', conferences: '會議', activities: '活動' },
-  en: { personal: 'Personal Info', summary: 'Summary', experience: 'Work Experience', education: 'Education', skills: 'Skills', languages: 'Languages', conferences: 'Conferences', activities: 'Activities' },
+const SECTION_LABELS: Record<SectionId, string> = {
+  personal: '個人資訊', summary: '摘要', experience: '工作經歷', education: '學歷',
+  skills: '技能', certifications: '證照', languages: '語言', conferences: '會議', activities: '活動',
 }
 
 const SUMMARY_TYPES: Record<'zh' | 'en', string[]> = {
@@ -135,6 +145,55 @@ const LANGUAGE_OPTIONS = [
 ] as const
 
 const OTHER_LANG = '__other__'
+
+const CERT_SHORTCUTS = [
+  { name: 'TOEIC', issuer: 'ETS' },
+  { name: 'TOEFL iBT', issuer: 'ETS' },
+  { name: 'PMP', issuer: 'PMI' },
+  { name: 'CFA', issuer: 'CFA Institute' },
+  { name: '乙級技術士', issuer: '勞動部' },
+  { name: 'AWS Solutions Architect', issuer: 'Amazon' },
+  { name: 'Google Analytics', issuer: 'Google' },
+  { name: 'MOS', issuer: 'Microsoft' },
+]
+
+const PRESETS: { id: string; label: string; sectionOrder: SectionId[]; summary: string; summaryType: string }[] = [
+  {
+    id: 'freshman',
+    label: '新鮮人',
+    sectionOrder: ['personal', 'summary', 'education', 'experience', 'skills', 'certifications', 'languages', 'conferences', 'activities'],
+    summary: '應屆畢業生，主修資訊管理，熱愛學習新技術，在校期間積極參與專題開發與社團活動，具備良好的團隊合作與溝通能力，期待在貴公司展開職涯第一步。',
+    summaryType: '個人摘要',
+  },
+  {
+    id: 'engineer',
+    label: '工程師',
+    sectionOrder: ['personal', 'summary', 'experience', 'skills', 'education', 'certifications', 'languages', 'conferences', 'activities'],
+    summary: '擁有 5 年以上軟體開發經驗，熟悉 TypeScript、React 與 Node.js，主導過多個大型系統架構重構專案，能獨立完成從需求分析到上線部署的全流程開發。',
+    summaryType: '個人摘要',
+  },
+  {
+    id: 'marketing',
+    label: '行銷',
+    sectionOrder: ['personal', 'summary', 'experience', 'skills', 'education', 'certifications', 'languages', 'activities', 'conferences'],
+    summary: '具備 3 年數位行銷實戰經驗，擅長社群媒體經營、SEO 優化與內容策略規劃，曾主導年度品牌活動使社群互動率提升 40%，熟悉 Google Analytics、Meta Ads 等工具。',
+    summaryType: '個人摘要',
+  },
+  {
+    id: 'manager',
+    label: '管理職',
+    sectionOrder: ['personal', 'summary', 'experience', 'education', 'skills', 'certifications', 'languages', 'conferences', 'activities'],
+    summary: '擁有 8 年以上管理經驗，曾帶領跨部門團隊完成複數重點專案，具備優秀的策略規劃、資源調配與利害關係人溝通能力，成功推動組織轉型並提升整體績效 25%。',
+    summaryType: '個人摘要',
+  },
+  {
+    id: 'career-change',
+    label: '轉職用',
+    sectionOrder: ['personal', 'summary', 'skills', 'experience', 'education', 'certifications', 'languages', 'conferences', 'activities'],
+    summary: '擁有豐富的跨領域經驗，正積極轉型至產品管理領域。具備使用者研究、資料分析與敏捷開發基礎知識，善用過去在業務與客戶端的實戰經驗，快速融入新環境並創造價值。',
+    summaryType: '求職目標',
+  },
+]
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -186,10 +245,13 @@ function fromSaved(p: SavedResumeData): ResData {
       const isCustom = name !== '' && !LANGUAGE_OPTIONS.some(o => o.zh === name || o.en === name)
       return { id: genId(), name, level: l.level || '', customName: isCustom ? name : undefined }
     }),
+    certifications: (p.certifications || []).map(c => ({ id: genId(), ...c })),
     conferences: (p.conferences || []).map(c => ({ id: genId(), ...c })),
     activities: (p.activities || []).map(a => ({ id: genId(), ...a })),
     sectionOrder: p.sectionOrder ?? DEFAULT_SECTION_ORDER,
     rawText: p.rawText || '',
+    photoUrl: p.photoUrl || '',
+    showPhoto: p.showPhoto ?? false,
   }
 }
 
@@ -200,6 +262,7 @@ function toSaved(d: ResData): SavedResumeData {
     ...d.education.flatMap(e => [e.school, e.degree, e.major]),
     d.skills.join(' '),
     ...d.languages.map(l => `${l.name} ${l.level}`),
+    ...d.certifications.map(c => `${c.name} ${c.issuer}`),
     ...d.conferences.map(c => `${c.name} ${c.organizer}`),
     ...d.activities.map(a => `${a.name} ${a.organization}`),
   ].filter(Boolean).join('\n')
@@ -211,10 +274,13 @@ function toSaved(d: ResData): SavedResumeData {
     experiences: d.experiences.map(e => ({ company: e.company, title: e.title, description: e.description, startDate: e.startDate, endDate: e.endDate, current: e.current })),
     education: d.education.map(e => ({ school: e.school, degree: e.degree, major: e.major, year: e.endDate, startDate: e.startDate, endDate: e.endDate })),
     languages: d.languages.map(l => ({ name: l.name, level: l.level })),
+    certifications: d.certifications.map(c => ({ name: c.name, issuer: c.issuer, issueDate: c.issueDate, expiryDate: c.expiryDate, neverExpires: c.neverExpires, credentialId: c.credentialId, credentialUrl: c.credentialUrl })),
     conferences: d.conferences.map(c => ({ name: c.name, organizer: c.organizer, date: c.date, role: c.role, description: c.description })),
     activities: d.activities.map(a => ({ name: a.name, organization: a.organization, date: a.date, role: a.role, description: a.description })),
     sectionOrder: d.sectionOrder,
     rawText,
+    photoUrl: d.photoUrl,
+    showPhoto: d.showPhoto,
   }
 }
 
@@ -229,9 +295,12 @@ function toPreview(d: ResData): PreviewData {
     experiences: d.experiences,
     education: d.education,
     languages: d.languages,
+    certifications: d.certifications,
     conferences: d.conferences,
     activities: d.activities,
     sectionOrder: d.sectionOrder,
+    photoUrl: d.photoUrl,
+    showPhoto: d.showPhoto,
   }
 }
 
@@ -264,7 +333,7 @@ function SortableTab({ id, label, active, onClick }: { id: SectionId; label: str
   )
 }
 
-// ── Sortable conference/activity row ──────────────────────────────────────────
+// ── Sortable conference row ───────────────────────────────────────────────────
 
 function SortableConfRow({ conf, lang, onUpdate, onRemove }: { conf: ResConference; lang: 'zh' | 'en'; onUpdate: (id: string, f: keyof ResConference, v: string) => void; onRemove: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: conf.id })
@@ -274,59 +343,108 @@ function SortableConfRow({ conf, lang, onUpdate, onRemove }: { conf: ResConferen
       className="rounded-xl border border-warm-200 bg-white p-4 space-y-3">
       <div className="flex items-center gap-2">
         <span {...attributes} {...listeners} className="cursor-grab text-ink-300 hover:text-ink-400 text-sm select-none">⠿</span>
-        <p className="flex-1 text-xs font-semibold text-ink-600">{lang === 'zh' ? '會議' : 'Conference'}</p>
+        <p className="flex-1 text-xs font-semibold text-ink-600">會議</p>
         <button onClick={() => onRemove(conf.id)} className="text-xs text-ink-300 hover:text-red-400 transition-colors">✕</button>
       </div>
-      <Field label={lang === 'zh' ? '會議名稱' : 'Conference Name'}>
+      <Field label="會議名稱">
         <input className={INP} value={conf.name} onChange={e => onUpdate(conf.id, 'name', e.target.value)} />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label={lang === 'zh' ? '主辦單位' : 'Organizer'}>
+        <Field label="主辦單位">
           <input className={INP} value={conf.organizer} onChange={e => onUpdate(conf.id, 'organizer', e.target.value)} />
         </Field>
-        <Field label={lang === 'zh' ? '日期' : 'Date'}>
+        <Field label="日期">
           <input className={INP} type="month" value={conf.date} onChange={e => onUpdate(conf.id, 'date', e.target.value)} />
         </Field>
       </div>
-      <Field label={lang === 'zh' ? '角色' : 'Role'}>
+      <Field label="角色">
         <select className={INP} value={conf.role} onChange={e => onUpdate(conf.id, 'role', e.target.value)}>
-          <option value="">{lang === 'zh' ? '請選擇' : 'Select'}</option>
+          <option value="">請選擇</option>
           {roles.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
       </Field>
-      <Field label={lang === 'zh' ? '說明' : 'Description'}>
+      <Field label="說明">
         <textarea className={INP + ' resize-none'} rows={2} value={conf.description} onChange={e => onUpdate(conf.id, 'description', e.target.value)} />
       </Field>
     </div>
   )
 }
 
-function SortableActRow({ act, lang, onUpdate, onRemove }: { act: ResActivity; lang: 'zh' | 'en'; onUpdate: (id: string, f: keyof ResActivity, v: string) => void; onRemove: (id: string) => void }) {
+// ── Sortable activity row ─────────────────────────────────────────────────────
+
+function SortableActRow({ act, onUpdate, onRemove }: { act: ResActivity; onUpdate: (id: string, f: keyof ResActivity, v: string) => void; onRemove: (id: string) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: act.id })
   return (
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
       className="rounded-xl border border-warm-200 bg-white p-4 space-y-3">
       <div className="flex items-center gap-2">
         <span {...attributes} {...listeners} className="cursor-grab text-ink-300 hover:text-ink-400 text-sm select-none">⠿</span>
-        <p className="flex-1 text-xs font-semibold text-ink-600">{lang === 'zh' ? '活動' : 'Activity'}</p>
+        <p className="flex-1 text-xs font-semibold text-ink-600">活動</p>
         <button onClick={() => onRemove(act.id)} className="text-xs text-ink-300 hover:text-red-400 transition-colors">✕</button>
       </div>
-      <Field label={lang === 'zh' ? '活動名稱' : 'Activity Name'}>
+      <Field label="活動名稱">
         <input className={INP} value={act.name} onChange={e => onUpdate(act.id, 'name', e.target.value)} />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label={lang === 'zh' ? '組織' : 'Organization'}>
+        <Field label="組織">
           <input className={INP} value={act.organization} onChange={e => onUpdate(act.id, 'organization', e.target.value)} />
         </Field>
-        <Field label={lang === 'zh' ? '日期' : 'Date'}>
+        <Field label="日期">
           <input className={INP} type="month" value={act.date} onChange={e => onUpdate(act.id, 'date', e.target.value)} />
         </Field>
       </div>
-      <Field label={lang === 'zh' ? '角色' : 'Role'}>
-        <input className={INP} value={act.role} onChange={e => onUpdate(act.id, 'role', e.target.value)} placeholder={lang === 'zh' ? '例如：志工、幹部' : 'e.g. Volunteer, Leader'} />
+      <Field label="角色">
+        <input className={INP} value={act.role} onChange={e => onUpdate(act.id, 'role', e.target.value)} placeholder="例如：志工、幹部" />
       </Field>
-      <Field label={lang === 'zh' ? '說明' : 'Description'}>
+      <Field label="說明">
         <textarea className={INP + ' resize-none'} rows={2} value={act.description} onChange={e => onUpdate(act.id, 'description', e.target.value)} />
+      </Field>
+    </div>
+  )
+}
+
+// ── Sortable certification row ────────────────────────────────────────────────
+
+function SortableCertRow({ cert, onUpdate, onRemove }: { cert: ResCert; onUpdate: (id: string, f: keyof ResCert, v: string | boolean) => void; onRemove: (id: string) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: cert.id })
+  return (
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="rounded-xl border border-warm-200 bg-white p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <span {...attributes} {...listeners} className="cursor-grab text-ink-300 hover:text-ink-400 text-sm select-none">⠿</span>
+        <p className="flex-1 text-xs font-semibold text-ink-600">證照</p>
+        <button onClick={() => onRemove(cert.id)} className="text-xs text-ink-300 hover:text-red-400 transition-colors">✕</button>
+      </div>
+      <Field label="證照名稱">
+        <input className={INP} value={cert.name} onChange={e => onUpdate(cert.id, 'name', e.target.value)} placeholder="例如：TOEIC、PMP、AWS" />
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="核發機構">
+          <input className={INP} value={cert.issuer} onChange={e => onUpdate(cert.id, 'issuer', e.target.value)} />
+        </Field>
+        <Field label="取得日期">
+          <input className={INP} type="month" value={cert.issueDate} onChange={e => onUpdate(cert.id, 'issueDate', e.target.value)} />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="到期日期">
+          <input className={INP} type="month" value={cert.expiryDate} disabled={cert.neverExpires}
+            onChange={e => onUpdate(cert.id, 'expiryDate', e.target.value)} />
+        </Field>
+        <div className="flex items-end pb-2">
+          <label className="flex items-center gap-2 text-xs text-ink-500 cursor-pointer">
+            <input type="checkbox" checked={cert.neverExpires}
+              onChange={e => { onUpdate(cert.id, 'neverExpires', e.target.checked); if (e.target.checked) onUpdate(cert.id, 'expiryDate', '') }}
+              className="rounded border-warm-300" />
+            永久有效
+          </label>
+        </div>
+      </div>
+      <Field label="證照編號（選填）">
+        <input className={INP} value={cert.credentialId} onChange={e => onUpdate(cert.id, 'credentialId', e.target.value)} />
+      </Field>
+      <Field label="證照連結（選填）">
+        <input className={INP} type="url" value={cert.credentialUrl} onChange={e => onUpdate(cert.id, 'credentialUrl', e.target.value)} placeholder="https://" />
       </Field>
     </div>
   )
@@ -414,6 +532,15 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
     upd('languages', resume.languages.map(l => l.id === id ? { ...l, name: value, customName: value } : l))
   }
 
+  function updCert(id: string, f: keyof ResCert, v: string | boolean) {
+    upd('certifications', resume.certifications.map(c => c.id === id ? { ...c, [f]: v } : c))
+  }
+  function addCert() { upd('certifications', [...resume.certifications, { id: genId(), name: '', issuer: '', issueDate: '', expiryDate: '', neverExpires: false, credentialId: '', credentialUrl: '' }]) }
+  function addCertFromShortcut(shortcut: { name: string; issuer: string }) {
+    upd('certifications', [...resume.certifications, { id: genId(), name: shortcut.name, issuer: shortcut.issuer, issueDate: '', expiryDate: '', neverExpires: false, credentialId: '', credentialUrl: '' }])
+  }
+  function removeCert(id: string) { upd('certifications', resume.certifications.filter(c => c.id !== id)) }
+
   function updConf(id: string, f: keyof ResConference, v: string) {
     upd('conferences', resume.conferences.map(c => c.id === id ? { ...c, [f]: v } : c))
   }
@@ -432,28 +559,64 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
   }
   function removeSkill(s: string) { upd('skills', resume.skills.filter(k => k !== s)) }
 
-  // Section drag end (tab reorder)
   function handleSectionDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (over && active.id !== over.id) {
       upd('sectionOrder', arrayMove(resume.sectionOrder, resume.sectionOrder.indexOf(active.id as SectionId), resume.sectionOrder.indexOf(over.id as SectionId)))
     }
   }
-
-  // Conference drag end
   function handleConfDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (over && active.id !== over.id) {
       upd('conferences', arrayMove(resume.conferences, resume.conferences.findIndex(c => c.id === active.id), resume.conferences.findIndex(c => c.id === over.id)))
     }
   }
-
-  // Activity drag end
   function handleActDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (over && active.id !== over.id) {
       upd('activities', arrayMove(resume.activities, resume.activities.findIndex(a => a.id === active.id), resume.activities.findIndex(a => a.id === over.id)))
     }
+  }
+  function handleCertDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (over && active.id !== over.id) {
+      upd('certifications', arrayMove(resume.certifications, resume.certifications.findIndex(c => c.id === active.id), resume.certifications.findIndex(c => c.id === over.id)))
+    }
+  }
+
+  function applyPreset(presetId: string) {
+    const preset = PRESETS.find(p => p.id === presetId)
+    if (!preset) return
+    setResume(prev => ({
+      ...prev,
+      sectionOrder: preset.sectionOrder,
+      summary: prev.summary || preset.summary,
+      summaryType: preset.summaryType,
+    }))
+    setSaved(false)
+  }
+
+  function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const maxSize = 240
+        const ratio = Math.min(maxSize / img.width, maxSize / img.height, 1)
+        canvas.width = Math.round(img.width * ratio)
+        canvas.height = Math.round(img.height * ratio)
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+        setResume(p => ({ ...p, photoUrl: dataUrl, showPhoto: true }))
+        setSaved(false)
+      }
+      img.src = ev.target?.result as string
+    }
+    reader.readAsDataURL(file)
+    e.target.value = ''
   }
 
   // ── Actions ──────────────────────────────────────────────────────────────────
@@ -534,7 +697,6 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
 
   // ── Edit panel ────────────────────────────────────────────────────────────────
 
-  const labels = SECTION_LABELS[resume.lang]
   const summaryTypes = SUMMARY_TYPES[resume.lang]
   const langLevels = LANG_LEVELS[resume.lang]
 
@@ -542,10 +704,22 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
     <div className="h-full flex overflow-hidden">
       {/* Sortable vertical section list */}
       <div className="w-[108px] shrink-0 bg-cream-100 border-r border-warm-200 overflow-y-auto py-3 px-1.5">
+        {/* Preset selector */}
+        <div className="px-0.5 pb-2 mb-1.5 border-b border-warm-200">
+          <p className="text-[9px] text-ink-400 mb-1 font-medium uppercase tracking-wide px-1">套用範本</p>
+          <select
+            className="w-full text-[11px] rounded-md border border-warm-200 bg-white px-1.5 py-1 text-ink-600 focus:outline-none focus:border-terra-400"
+            value=""
+            onChange={e => { if (e.target.value) applyPreset(e.target.value) }}
+          >
+            <option value="">選擇範本…</option>
+            {PRESETS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
+        </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
           <SortableContext items={resume.sectionOrder} strategy={verticalListSortingStrategy}>
             {resume.sectionOrder.map(id => (
-              <SortableTab key={id} id={id} label={labels[id]} active={section === id} onClick={() => setSection(id)} />
+              <SortableTab key={id} id={id} label={SECTION_LABELS[id]} active={section === id} onClick={() => setSection(id)} />
             ))}
           </SortableContext>
         </DndContext>
@@ -557,20 +731,45 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
         {/* ── Personal Info ── */}
         {section === 'personal' && (
           <>
-            <Field label={resume.lang === 'zh' ? '姓名' : 'Full Name'}><input className={INP} value={resume.name} onChange={e => upd('name', e.target.value)} /></Field>
-            <Field label={resume.lang === 'zh' ? '職稱' : 'Job Title'}><input className={INP} value={resume.jobTitle} onChange={e => upd('jobTitle', e.target.value)} /></Field>
-            <Field label={resume.lang === 'zh' ? '電子郵件' : 'Email'}><input className={INP} type="email" value={resume.email} onChange={e => upd('email', e.target.value)} /></Field>
-            <Field label={resume.lang === 'zh' ? '電話' : 'Phone'}><input className={INP} value={resume.phone} onChange={e => upd('phone', e.target.value)} /></Field>
-            <Field label={resume.lang === 'zh' ? '地點' : 'Location'}><input className={INP} value={resume.location} onChange={e => upd('location', e.target.value)} /></Field>
+            {/* Photo upload */}
+            <div className="flex items-start gap-3 p-3 rounded-xl border border-warm-200 bg-cream-50">
+              <div className="shrink-0">
+                {resume.photoUrl ? (
+                  <img src={resume.photoUrl} alt="照片" className="w-20 h-20 rounded-lg object-cover border border-warm-200" />
+                ) : (
+                  <div className="w-20 h-20 rounded-lg bg-warm-200 border border-dashed border-warm-300 flex items-center justify-center text-2xl text-ink-300">👤</div>
+                )}
+              </div>
+              <div className="flex-1 space-y-2">
+                <label className="flex items-center gap-2 text-xs text-ink-500 cursor-pointer">
+                  <input type="checkbox" checked={resume.showPhoto} onChange={e => upd('showPhoto', e.target.checked)} className="rounded border-warm-300" />
+                  顯示照片於履歷
+                </label>
+                <label className="inline-flex items-center gap-1.5 rounded-lg border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-600 hover:border-terra-300 hover:text-terra-600 transition-all cursor-pointer">
+                  📷 上傳照片
+                  <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+                </label>
+                {resume.photoUrl && (
+                  <button onClick={() => setResume(p => ({ ...p, photoUrl: '', showPhoto: false }))} className="block text-xs text-ink-400 hover:text-red-400 transition-colors">
+                    移除照片
+                  </button>
+                )}
+                <p className="text-[10px] text-ink-400">注意：英文履歷通常不附照片</p>
+              </div>
+            </div>
+            <Field label="姓名"><input className={INP} value={resume.name} onChange={e => upd('name', e.target.value)} /></Field>
+            <Field label="職稱"><input className={INP} value={resume.jobTitle} onChange={e => upd('jobTitle', e.target.value)} /></Field>
+            <Field label="電子郵件"><input className={INP} type="email" value={resume.email} onChange={e => upd('email', e.target.value)} /></Field>
+            <Field label="電話"><input className={INP} value={resume.phone} onChange={e => upd('phone', e.target.value)} /></Field>
+            <Field label="地點"><input className={INP} value={resume.location} onChange={e => upd('location', e.target.value)} /></Field>
             <Field label="LinkedIn"><input className={INP} value={resume.linkedin} onChange={e => upd('linkedin', e.target.value)} /></Field>
-            <Field label={resume.lang === 'zh' ? '個人網站' : 'Website'}><input className={INP} value={resume.website} onChange={e => upd('website', e.target.value)} /></Field>
+            <Field label="個人網站"><input className={INP} value={resume.website} onChange={e => upd('website', e.target.value)} /></Field>
           </>
         )}
 
         {/* ── Summary ── */}
         {section === 'summary' && (
           <>
-            {/* Subtype selector */}
             <div className="flex flex-wrap gap-1.5">
               {summaryTypes.map(t => (
                 <button key={t} onClick={() => upd('summaryType', t)}
@@ -583,12 +782,12 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
               <label className={LBL + ' mb-0'}>{resume.summaryType}</label>
               <button onClick={handleGenerateSummary} disabled={generatingSummary}
                 className="flex items-center gap-1.5 rounded-lg border border-terra-200 bg-terra-50 px-3 py-1.5 text-xs text-terra-600 hover:bg-terra-100 transition-all disabled:opacity-60">
-                {generatingSummary ? <><SpinSm />{resume.lang === 'zh' ? 'AI 生成中...' : 'Generating...'}</> : `🤖 ${resume.lang === 'zh' ? 'AI 生成' : 'AI Generate'}`}
+                {generatingSummary ? <><SpinSm />AI 生成中…</> : '🤖 AI 生成'}
               </button>
             </div>
             <textarea className={INP + ' resize-none'} rows={8}
               value={resume.summary} onChange={e => upd('summary', e.target.value)} />
-            <p className="text-[10px] text-ink-400">{resume.lang === 'zh' ? '建議 2-3 句話，約 60-100 字' : '2-3 sentences recommended'}</p>
+            <p className="text-[10px] text-ink-400">建議 2-3 句話，約 60-100 字</p>
           </>
         )}
 
@@ -598,31 +797,27 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
             {resume.experiences.map((exp, idx) => (
               <div key={exp.id} className="rounded-xl border border-warm-200 bg-white p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-ink-600">{labels.experience} {idx + 1}</p>
+                  <p className="text-xs font-semibold text-ink-600">工作經歷 {idx + 1}</p>
                   <button onClick={() => removeExp(exp.id)} className="text-xs text-ink-300 hover:text-red-400 transition-colors">✕</button>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label={resume.lang === 'zh' ? '公司' : 'Company'}><input className={INP} value={exp.company} onChange={e => updExp(exp.id, 'company', e.target.value)} /></Field>
-                  <Field label={resume.lang === 'zh' ? '職位' : 'Title'}><input className={INP} value={exp.title} onChange={e => updExp(exp.id, 'title', e.target.value)} /></Field>
+                  <Field label="公司"><input className={INP} value={exp.company} onChange={e => updExp(exp.id, 'company', e.target.value)} /></Field>
+                  <Field label="職位"><input className={INP} value={exp.title} onChange={e => updExp(exp.id, 'title', e.target.value)} /></Field>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label={resume.lang === 'zh' ? '開始日期' : 'Start'}>
-                    <input className={INP} type="month" value={exp.startDate} onChange={e => updExp(exp.id, 'startDate', e.target.value)} />
-                  </Field>
-                  <Field label={resume.lang === 'zh' ? '結束日期' : 'End'}>
-                    <input className={INP} type="month" value={exp.endDate} disabled={exp.current} onChange={e => updExp(exp.id, 'endDate', e.target.value)} />
-                  </Field>
+                  <Field label="開始日期"><input className={INP} type="month" value={exp.startDate} onChange={e => updExp(exp.id, 'startDate', e.target.value)} /></Field>
+                  <Field label="結束日期"><input className={INP} type="month" value={exp.endDate} disabled={exp.current} onChange={e => updExp(exp.id, 'endDate', e.target.value)} /></Field>
                 </div>
                 <label className="flex items-center gap-2 text-xs text-ink-500 cursor-pointer">
                   <input type="checkbox" checked={exp.current} onChange={e => { updExp(exp.id, 'current', e.target.checked); if (e.target.checked) updExp(exp.id, 'endDate', '') }} className="rounded border-warm-300" />
-                  {resume.lang === 'zh' ? '目前在職中' : 'Currently working here'}
+                  目前在職中
                 </label>
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className={LBL + ' mb-0'}>{resume.lang === 'zh' ? '工作描述' : 'Description'}</label>
+                    <label className={LBL + ' mb-0'}>工作描述</label>
                     <button onClick={() => handleOptimizeExp(exp.id)} disabled={optimizingId === exp.id}
                       className="flex items-center gap-1 rounded-md border border-terra-200 bg-terra-50 px-2 py-1 text-[10px] text-terra-600 hover:bg-terra-100 transition-all disabled:opacity-60">
-                      {optimizingId === exp.id ? <><SpinSm />{resume.lang === 'zh' ? '優化中...' : 'Optimizing...'}</> : `🤖 ${resume.lang === 'zh' ? 'AI 優化' : 'AI Optimize'}`}
+                      {optimizingId === exp.id ? <><SpinSm />優化中…</> : '🤖 AI 優化'}
                     </button>
                   </div>
                   <textarea className={INP + ' resize-none'} rows={5} value={exp.description} onChange={e => updExp(exp.id, 'description', e.target.value)} />
@@ -630,7 +825,7 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
               </div>
             ))}
             <button onClick={addExp} className="w-full rounded-xl border-2 border-dashed border-warm-300 py-3 text-sm text-ink-400 hover:border-terra-300 hover:text-terra-500 transition-all">
-              ＋ {resume.lang === 'zh' ? '新增工作經歷' : 'Add Experience'}
+              ＋ 新增工作經歷
             </button>
           </div>
         )}
@@ -641,22 +836,22 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
             {resume.education.map((edu, idx) => (
               <div key={edu.id} className="rounded-xl border border-warm-200 bg-white p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-ink-600">{labels.education} {idx + 1}</p>
+                  <p className="text-xs font-semibold text-ink-600">學歷 {idx + 1}</p>
                   <button onClick={() => removeEdu(edu.id)} className="text-xs text-ink-300 hover:text-red-400 transition-colors">✕</button>
                 </div>
-                <Field label={resume.lang === 'zh' ? '學校名稱' : 'School'}><input className={INP} value={edu.school} onChange={e => updEdu(edu.id, 'school', e.target.value)} /></Field>
+                <Field label="學校名稱"><input className={INP} value={edu.school} onChange={e => updEdu(edu.id, 'school', e.target.value)} /></Field>
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label={resume.lang === 'zh' ? '科系' : 'Major'}><input className={INP} value={edu.major} onChange={e => updEdu(edu.id, 'major', e.target.value)} /></Field>
-                  <Field label={resume.lang === 'zh' ? '學位' : 'Degree'}><input className={INP} value={edu.degree} onChange={e => updEdu(edu.id, 'degree', e.target.value)} /></Field>
+                  <Field label="科系"><input className={INP} value={edu.major} onChange={e => updEdu(edu.id, 'major', e.target.value)} /></Field>
+                  <Field label="學位"><input className={INP} value={edu.degree} onChange={e => updEdu(edu.id, 'degree', e.target.value)} /></Field>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  <Field label={resume.lang === 'zh' ? '入學' : 'Start'}><input className={INP} type="month" value={edu.startDate} onChange={e => updEdu(edu.id, 'startDate', e.target.value)} /></Field>
-                  <Field label={resume.lang === 'zh' ? '畢業' : 'End'}><input className={INP} type="month" value={edu.endDate} onChange={e => updEdu(edu.id, 'endDate', e.target.value)} /></Field>
+                  <Field label="入學"><input className={INP} type="month" value={edu.startDate} onChange={e => updEdu(edu.id, 'startDate', e.target.value)} /></Field>
+                  <Field label="畢業"><input className={INP} type="month" value={edu.endDate} onChange={e => updEdu(edu.id, 'endDate', e.target.value)} /></Field>
                 </div>
               </div>
             ))}
             <button onClick={addEdu} className="w-full rounded-xl border-2 border-dashed border-warm-300 py-3 text-sm text-ink-400 hover:border-terra-300 hover:text-terra-500 transition-all">
-              ＋ {resume.lang === 'zh' ? '新增學歷' : 'Add Education'}
+              ＋ 新增學歷
             </button>
           </div>
         )}
@@ -665,11 +860,11 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
         {section === 'skills' && (
           <>
             <div className="flex gap-2">
-              <input className={INP} placeholder={resume.lang === 'zh' ? '輸入技能後按 Enter' : 'Type a skill then Enter'}
+              <input className={INP} placeholder="輸入技能後按 Enter"
                 value={newSkill} onChange={e => setNewSkill(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill() } }} />
               <button onClick={addSkill} className="shrink-0 rounded-lg bg-terra-500 px-4 py-2 text-sm font-medium text-white hover:bg-terra-700 transition-colors">
-                {resume.lang === 'zh' ? '新增' : 'Add'}
+                新增
               </button>
             </div>
             <div className="flex flex-wrap gap-2 pt-1">
@@ -679,9 +874,8 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
                   <button onClick={() => removeSkill(s)} className="text-terra-400 hover:text-red-400 text-xs ml-0.5 transition-colors">×</button>
                 </div>
               ))}
-              {resume.skills.length === 0 && <p className="text-sm text-ink-300">{resume.lang === 'zh' ? '尚未新增技能' : 'No skills added yet'}</p>}
+              {resume.skills.length === 0 && <p className="text-sm text-ink-300">尚未新增技能</p>}
             </div>
-            {/* ── Skills library link ── */}
             <div className="mt-4 rounded-xl border border-warm-200 bg-cream-50 px-4 py-3 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-ink-700">⚡ 管理我的技能庫</p>
@@ -695,6 +889,33 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
           </>
         )}
 
+        {/* ── Certifications ── */}
+        {section === 'certifications' && (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-warm-200 bg-cream-50 p-3">
+              <p className="text-[10px] text-ink-400 mb-2">快速填入：</p>
+              <div className="flex flex-wrap gap-1.5">
+                {CERT_SHORTCUTS.map(c => (
+                  <button key={c.name} onClick={() => addCertFromShortcut(c)}
+                    className="px-2 py-0.5 text-[11px] rounded-full border border-warm-200 bg-white text-ink-500 hover:border-terra-300 hover:text-terra-600 transition-colors">
+                    {c.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCertDragEnd}>
+              <SortableContext items={resume.certifications.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                {resume.certifications.map(cert => (
+                  <SortableCertRow key={cert.id} cert={cert} onUpdate={updCert} onRemove={removeCert} />
+                ))}
+              </SortableContext>
+            </DndContext>
+            <button onClick={addCert} className="w-full rounded-xl border-2 border-dashed border-warm-300 py-3 text-sm text-ink-400 hover:border-terra-300 hover:text-terra-500 transition-all">
+              ＋ 新增證照
+            </button>
+          </div>
+        )}
+
         {/* ── Languages ── */}
         {section === 'languages' && (
           <div className="space-y-3">
@@ -705,23 +926,19 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
                 <div key={lang.id} className="space-y-2">
                   <div className="flex items-end gap-2">
                     <div className="flex-1">
-                      {idx === 0 && <label className={LBL}>{resume.lang === 'zh' ? '語言' : 'Language'}</label>}
-                      <select
-                        className={INP}
-                        value={dropValue}
-                        onChange={e => handleLangDropdown(lang.id, e.target.value)}
-                      >
-                        <option value="">{resume.lang === 'zh' ? '-- 請選擇 --' : '-- Select --'}</option>
+                      {idx === 0 && <label className={LBL}>語言</label>}
+                      <select className={INP} value={dropValue} onChange={e => handleLangDropdown(lang.id, e.target.value)}>
+                        <option value="">-- 請選擇 --</option>
                         {LANGUAGE_OPTIONS.map(opt => (
                           <option key={opt.key} value={resume.lang === 'zh' ? opt.zh : opt.en}>
                             {resume.lang === 'zh' ? `${opt.zh} / ${opt.en}` : opt.en}
                           </option>
                         ))}
-                        <option value={OTHER_LANG}>{resume.lang === 'zh' ? '其他 / Other' : 'Other'}</option>
+                        <option value={OTHER_LANG}>其他 / Other</option>
                       </select>
                     </div>
                     <div className="w-32">
-                      {idx === 0 && <label className={LBL}>{resume.lang === 'zh' ? '熟練度' : 'Proficiency'}</label>}
+                      {idx === 0 && <label className={LBL}>熟練度</label>}
                       <select className={INP} value={lang.level} onChange={e => updLang(lang.id, 'level', e.target.value)}>
                         {langLevels.map(l => <option key={l} value={l}>{l}</option>)}
                       </select>
@@ -729,18 +946,14 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
                     <button onClick={() => removeLang(lang.id)} className="mb-0.5 pb-2 text-ink-300 hover:text-red-400 transition-colors">✕</button>
                   </div>
                   {isCustom && (
-                    <input
-                      className={INP}
-                      placeholder={resume.lang === 'zh' ? '請輸入語言名稱...' : 'Enter language name...'}
-                      value={lang.name}
-                      onChange={e => handleCustomLangName(lang.id, e.target.value)}
-                    />
+                    <input className={INP} placeholder="請輸入語言名稱…"
+                      value={lang.name} onChange={e => handleCustomLangName(lang.id, e.target.value)} />
                   )}
                 </div>
               )
             })}
             <button onClick={addLang} className="w-full rounded-xl border-2 border-dashed border-warm-300 py-3 text-sm text-ink-400 hover:border-terra-300 hover:text-terra-500 transition-all">
-              ＋ {resume.lang === 'zh' ? '新增語言' : 'Add Language'}
+              ＋ 新增語言
             </button>
           </div>
         )}
@@ -756,7 +969,7 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
               </SortableContext>
             </DndContext>
             <button onClick={addConf} className="w-full rounded-xl border-2 border-dashed border-warm-300 py-3 text-sm text-ink-400 hover:border-terra-300 hover:text-terra-500 transition-all">
-              ＋ {resume.lang === 'zh' ? '新增會議' : 'Add Conference'}
+              ＋ 新增會議
             </button>
           </div>
         )}
@@ -767,12 +980,12 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleActDragEnd}>
               <SortableContext items={resume.activities.map(a => a.id)} strategy={verticalListSortingStrategy}>
                 {resume.activities.map(act => (
-                  <SortableActRow key={act.id} act={act} lang={resume.lang} onUpdate={updAct} onRemove={removeAct} />
+                  <SortableActRow key={act.id} act={act} onUpdate={updAct} onRemove={removeAct} />
                 ))}
               </SortableContext>
             </DndContext>
             <button onClick={addAct} className="w-full rounded-xl border-2 border-dashed border-warm-300 py-3 text-sm text-ink-400 hover:border-terra-300 hover:text-terra-500 transition-all">
-              ＋ {resume.lang === 'zh' ? '新增活動' : 'Add Activity'}
+              ＋ 新增活動
             </button>
           </div>
         )}
@@ -782,7 +995,6 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
 
   const previewPanel = (
     <div className="h-full flex flex-col">
-      {/* Preview controls */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-warm-200 bg-warm-100 shrink-0 gap-2 flex-wrap">
         <div className="flex gap-1 rounded-lg border border-warm-300 bg-white p-0.5 overflow-x-auto">
           {TEMPLATES.map(t => (
@@ -797,7 +1009,6 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
           {downloading ? <><SpinSm />匯出中</> : '↓ PDF'}
         </button>
       </div>
-      {/* A4 area */}
       <div ref={previewContainerRef} className="flex-1 overflow-auto bg-warm-100 p-4 flex justify-center">
         <div style={{ width: `${A4_WIDTH * previewScale}px`, height: `${A4_WIDTH * 1.414 * previewScale}px`, flexShrink: 0 }}>
           <div style={{ transform: `scale(${previewScale})`, transformOrigin: 'top left' }}>
@@ -818,11 +1029,10 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
       <div className="flex items-center gap-2 px-4 py-3 border-b border-warm-200 bg-white shrink-0 flex-wrap">
         {!fullPreview && (
           <button onClick={onBack} className="flex items-center gap-1 text-sm text-ink-400 hover:text-ink-700 transition-colors whitespace-nowrap shrink-0">
-            ← {resume.lang === 'zh' ? '返回' : 'Back'}
+            ← 返回
           </button>
         )}
 
-        {/* Resume name */}
         <div className="flex-1 min-w-0">
           {editingName ? (
             <input ref={nameInputRef} className="w-full max-w-xs rounded-lg border border-terra-400 bg-cream-100 px-3 py-1.5 text-sm font-medium text-ink-800 focus:outline-none"
@@ -831,13 +1041,13 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
           ) : (
             <button onClick={() => !fullPreview && setEditingName(true)}
               className="max-w-xs truncate rounded-lg px-3 py-1.5 text-sm font-medium text-ink-700 hover:bg-cream-200 transition-colors text-left">
-              {resumeName || (resume.lang === 'zh' ? '點擊設定名稱' : 'Click to name')}
+              {resumeName || '點擊設定名稱'}
               {!fullPreview && <span className="ml-1.5 text-[10px] text-ink-300">✎</span>}
             </button>
           )}
         </div>
 
-        {/* Language toggle */}
+        {/* Language toggle — controls resume content language only */}
         {!fullPreview && (
           <div className="flex gap-0.5 rounded-lg border border-warm-200 bg-white p-0.5 shrink-0">
             {(['zh', 'en'] as const).map(l => (
@@ -859,38 +1069,35 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
           </div>
         )}
 
-        {/* Preview mode toggle — all screen sizes */}
         <button onClick={() => setFullPreview(p => !p)}
           className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all shrink-0 ${fullPreview ? 'border-terra-400 bg-terra-50 text-terra-700' : 'border-warm-200 text-ink-500 hover:border-terra-300 hover:text-terra-600'}`}>
           {fullPreview ? '✕ 關閉預覽' : '👁 預覽'}
         </button>
 
-        {/* Mobile edit/preview toggle */}
         {!fullPreview && (
           <div className="flex gap-1 rounded-lg border border-warm-200 bg-white p-0.5 md:hidden shrink-0">
             {(['edit', 'preview'] as const).map(v => (
               <button key={v} onClick={() => setMobileView(v)}
                 className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${mobileView === v ? 'bg-cream-200 text-ink-800' : 'text-ink-400'}`}>
-                {v === 'edit' ? (resume.lang === 'zh' ? '編輯' : 'Edit') : (resume.lang === 'zh' ? '預覽' : 'Preview')}
+                {v === 'edit' ? '編輯' : '預覽'}
               </button>
             ))}
           </div>
         )}
 
-        {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
           {scoreResult && !fullPreview && (
             <button onClick={() => setShowScoreDrawer(true)}
               className="hidden sm:flex items-center gap-2 rounded-lg border border-warm-200 bg-cream-100 px-3 py-1.5 hover:border-terra-300 transition-all">
               <span className="text-sm font-bold text-terra-500">{scoreResult.score}</span>
               <span className="text-xs text-ink-400">/ 100</span>
-              <span className="text-xs text-terra-400 underline underline-offset-2">{resume.lang === 'zh' ? '查看報告' : 'View Report'}</span>
+              <span className="text-xs text-terra-400 underline underline-offset-2">查看報告</span>
             </button>
           )}
           {!fullPreview && (
             <button onClick={handleScore} disabled={scoring}
               className="hidden sm:flex items-center gap-1.5 rounded-lg border border-warm-200 px-3 py-1.5 text-xs text-ink-500 hover:border-terra-300 hover:text-terra-600 transition-all disabled:opacity-60">
-              {scoring ? <><SpinSm />{resume.lang === 'zh' ? '評分中' : 'Scoring'}</> : `🤖 ${resume.lang === 'zh' ? 'AI 評分' : 'AI Score'}`}
+              {scoring ? <><SpinSm />評分中</> : '🤖 AI 評分'}
             </button>
           )}
           <button onClick={handleDownload} disabled={downloading}
@@ -899,7 +1106,7 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
           </button>
           {!fullPreview && (
             <Button variant={saved ? 'sage' : 'primary'} size="sm" onClick={handleSave} loading={saving}>
-              {saved ? '✓ 已儲存' : (resume.lang === 'zh' ? '儲存' : 'Save')}
+              {saved ? '✓ 已儲存' : '儲存'}
             </Button>
           )}
         </div>
@@ -907,13 +1114,11 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
 
       {/* Main panels */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left: edit (hidden in full preview mode) */}
         {!fullPreview && (
           <div className={`${mobileView === 'preview' ? 'hidden' : 'flex'} md:flex flex-col w-full md:w-[40%] bg-cream-100 border-r border-warm-200 overflow-hidden`}>
             {editPanel}
           </div>
         )}
-        {/* Right: preview */}
         <div className={`${!fullPreview && mobileView === 'edit' ? 'hidden' : 'flex'} md:flex flex-col flex-1 overflow-hidden relative`}>
           {previewPanel}
         </div>
@@ -1065,25 +1270,16 @@ function ScoreDrawer({
 
   return (
     <>
-      {/* Backdrop */}
       <div className="fixed inset-0 z-[60] bg-black/30" onClick={onClose} />
-
-      {/* Drawer panel */}
       <div className="fixed right-0 top-0 bottom-0 z-[61] w-full max-w-[480px] bg-white shadow-2xl flex flex-col overflow-hidden">
-
-        {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-warm-200 shrink-0">
           <h2 className="text-base font-bold text-ink-800 flex-1">
             {isZh ? '📊 AI 評分報告' : '📊 AI Score Report'}
           </h2>
-          {/* Language toggle */}
           <div className="flex rounded-lg overflow-hidden border border-warm-200 shrink-0">
             {(['zh', 'en'] as const).map(l => (
-              <button
-                key={l}
-                onClick={() => switchLang(l)}
-                className={`px-2.5 py-1 text-xs font-medium transition-colors ${reportLang === l ? 'bg-terra-500 text-white' : 'bg-cream-200 text-ink-400 hover:text-ink-600'}`}
-              >
+              <button key={l} onClick={() => switchLang(l)}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${reportLang === l ? 'bg-terra-500 text-white' : 'bg-cream-200 text-ink-400 hover:text-ink-600'}`}>
                 {l === 'zh' ? '中文' : 'EN'}
               </button>
             ))}
@@ -1091,11 +1287,7 @@ function ScoreDrawer({
           <button onClick={onClose} className="text-ink-400 hover:text-ink-700 transition-colors text-lg leading-none shrink-0">✕</button>
         </div>
 
-        {/* Scrollable body — fades on lang switch */}
-        <div
-          className={`flex-1 overflow-y-auto px-6 py-5 space-y-6 transition-opacity duration-150 ${visible ? 'opacity-100' : 'opacity-0'}`}
-        >
-          {/* ── Total score ── */}
+        <div className={`flex-1 overflow-y-auto px-6 py-5 space-y-6 transition-opacity duration-150 ${visible ? 'opacity-100' : 'opacity-0'}`}>
           <div className="flex items-end gap-5">
             <div className="text-center">
               <div className="text-6xl font-black text-terra-500 leading-none tabular-nums">{report.score}</div>
@@ -1112,7 +1304,6 @@ function ScoreDrawer({
             </div>
           </div>
 
-          {/* ── Dimensions ── */}
           <div>
             <h3 className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-3">
               {isZh ? '分項評分' : 'Dimension Scores'}
@@ -1125,7 +1316,6 @@ function ScoreDrawer({
             </div>
           </div>
 
-          {/* ── Suggestions ── */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <h3 className="text-xs font-semibold text-ink-500 uppercase tracking-wide flex-1">
@@ -1133,7 +1323,7 @@ function ScoreDrawer({
               </h3>
               {regenerating && (
                 <span className="flex items-center gap-1 text-[10px] text-terra-500">
-                  <SpinSm />{isZh ? 'AI 重新生成中...' : 'Regenerating...'}
+                  <SpinSm />{isZh ? 'AI 重新生成中…' : 'Regenerating...'}
                 </span>
               )}
             </div>
@@ -1162,7 +1352,6 @@ function ScoreDrawer({
             </div>
           </div>
 
-          {/* ── Suggested keywords ── */}
           {keywords.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold text-ink-500 uppercase tracking-wide mb-2">
@@ -1177,7 +1366,6 @@ function ScoreDrawer({
           )}
         </div>
 
-        {/* ── Action buttons ── */}
         <div className="shrink-0 border-t border-warm-200 px-6 py-4 flex gap-2">
           <button onClick={onClose}
             className="flex-1 rounded-lg bg-terra-500 py-2.5 text-sm font-medium text-white hover:bg-terra-600 transition-colors">
