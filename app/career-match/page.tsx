@@ -1,10 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import { ProgressRing } from '@/components/ui/progress-ring'
 
 interface Job { id: string; title: string; company: string; location: string; salaryMin?: number; salaryMax?: number; description: string; url?: string; platform: string; matchScore?: number; matchedSkills?: string[]; missingSkills?: string[] }
@@ -13,30 +12,71 @@ type AppStatus = 'saved' | 'applied' | 'phone_screen' | 'interview' | 'offer' | 
 interface Application { id: string; jobTitle: string; company: string; status: AppStatus; platform?: string }
 
 const STATUS: Record<AppStatus, { label: string; color: string; dot: string; badge: 'default' | 'info' | 'warning' | 'success' | 'danger' }> = {
-  saved:        { label: '已儲存',   color: 'text-ink-400', dot: 'bg-zinc-600', badge: 'default' },
-  applied:      { label: '已投遞',   color: 'text-sky-400',  dot: 'bg-sky-500',  badge: 'info' },
-  phone_screen: { label: '電話面試', color: 'text-honey-500',dot: 'bg-honey-500',badge: 'warning' },
-  interview:    { label: '面試中',   color: 'text-violet-400',dot: 'bg-violet-500',badge: 'info' },
-  offer:        { label: 'Offer',    color: 'text-sage-600',dot: 'bg-sage-500',badge: 'success' },
-  rejected:     { label: '未錄取',  color: 'text-red-400', dot: 'bg-red-500',   badge: 'danger' },
+  saved:        { label: '已儲存',   color: 'text-ink-400',    dot: 'bg-zinc-600',   badge: 'default' },
+  applied:      { label: '已投遞',   color: 'text-sky-400',    dot: 'bg-sky-500',    badge: 'info' },
+  phone_screen: { label: '電話面試', color: 'text-honey-500',  dot: 'bg-honey-500',  badge: 'warning' },
+  interview:    { label: '面試中',   color: 'text-violet-400', dot: 'bg-violet-500', badge: 'info' },
+  offer:        { label: 'Offer',    color: 'text-sage-600',   dot: 'bg-sage-500',   badge: 'success' },
+  rejected:     { label: '未錄取',  color: 'text-red-400',    dot: 'bg-red-500',    badge: 'danger' },
 }
 const COLS: AppStatus[] = ['saved', 'applied', 'phone_screen', 'interview', 'offer', 'rejected']
 
+const LOCATION_OPTIONS = [
+  '全台灣', '台北市', '新北市', '桃園市', '新竹市', '新竹縣',
+  '台中市', '台南市', '高雄市', '遠端工作 / Remote', '海外',
+]
+
+const CACHE_KEY = 'job-search-state'
+const APPS_KEY  = 'job-applications'
+const CACHE_TTL = 30 * 60 * 1000 // 30 minutes
+
+function persistApps(apps: Application[]) {
+  try { localStorage.setItem(APPS_KEY, JSON.stringify(apps)) } catch { /* quota */ }
+}
+
 export default function CareerMatchPage() {
-  const [tab, setTab] = useState<'search' | 'track'>('search')
-  const [query, setQuery] = useState(''); const [location, setLocation] = useState('台北市')
-  const [jobs, setJobs] = useState<Job[]>([]); const [searching, setSearching] = useState(false)
-  const [selected, setSelected] = useState<Job | null>(null); const [analyzing, setAnalyzing] = useState(false)
-  const [apps, setApps] = useState<Application[]>([]); const [error, setError] = useState('')
+  const [tab, setTab]           = useState<'search' | 'track'>('search')
+  const [query, setQuery]       = useState('')
+  const [location, setLocation] = useState('全台灣')
+  const [jobs, setJobs]         = useState<Job[]>([])
+  const [searching, setSearching] = useState(false)
+  const [selected, setSelected] = useState<Job | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [apps, setApps]         = useState<Application[]>([])
+  const [error, setError]       = useState('')
+  const [searchStale, setSearchStale] = useState(false)
+
+  // ── Restore persisted state on mount ──────────────────────────────────────
+  useEffect(() => {
+    try {
+      const rawApps = localStorage.getItem(APPS_KEY)
+      if (rawApps) setApps(JSON.parse(rawApps))
+
+      const rawSearch = localStorage.getItem(CACHE_KEY)
+      if (rawSearch) {
+        const { query: q, location: loc, jobs: j, timestamp } = JSON.parse(rawSearch)
+        setQuery(q ?? '')
+        setLocation(loc ?? '全台灣')
+        setJobs(j ?? [])
+        if (Date.now() - timestamp > CACHE_TTL) setSearchStale(true)
+      }
+    } catch { /* corrupt storage — ignore */ }
+  }, [])
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
   async function search() {
     if (!query.trim()) return
-    setSearching(true); setError(''); setJobs([]); setSelected(null)
+    setSearching(true); setError(''); setJobs([]); setSelected(null); setSearchStale(false)
     try {
       const res = await fetch(`/api/jobs/search?${new URLSearchParams({ query, location })}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? '搜尋失敗')
-      setJobs(data.jobs ?? [])
+      const results: Job[] = data.jobs ?? []
+      setJobs(results)
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify({ query, location, jobs: results, timestamp: Date.now() }))
+      } catch { /* quota */ }
     } catch (e) { setError((e as Error).message) }
     finally { setSearching(false) }
   }
@@ -55,12 +95,24 @@ export default function CareerMatchPage() {
   }
 
   function saveJob(job: Job) {
-    setApps((p) => [...p.filter((a) => a.id !== job.id), { id: job.id, jobTitle: job.title, company: job.company, status: 'saved', platform: job.platform }])
+    setApps((prev) => {
+      const next = [...prev.filter((a) => a.id !== job.id), { id: job.id, jobTitle: job.title, company: job.company, status: 'saved' as AppStatus, platform: job.platform }]
+      persistApps(next)
+      return next
+    })
   }
 
   function updateStatus(id: string, status: AppStatus) {
-    setApps((p) => p.map((a) => a.id === id ? { ...a, status } : a))
+    setApps((prev) => {
+      const next = prev.map((a) => a.id === id ? { ...a, status } : a)
+      persistApps(next)
+      return next
+    })
   }
+
+  const isSaved = (jobId: string) => apps.some((a) => a.id === jobId)
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
@@ -81,18 +133,42 @@ export default function CareerMatchPage() {
       {/* ── Search Tab ──────────────────────────────────────── */}
       {tab === 'search' && (
         <div className="space-y-5">
-          <Card>
-            <CardContent className="pt-5">
-              <div className="flex gap-3">
-                <Input placeholder="職位名稱，例如：前端工程師" value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && search()} className="flex-1" />
-                <Input placeholder="地點" value={location} onChange={(e) => setLocation(e.target.value)} className="w-28" />
-                <Button onClick={search} loading={searching}>搜尋</Button>
-              </div>
-              {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
-            </CardContent>
-          </Card>
+
+          {/* ── Search bar (compact, no card wrapper) ── */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              {/* Job title input */}
+              <input
+                placeholder="職位名稱，例如：前端工程師"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && search()}
+                className="w-[200px] rounded-xl border border-warm-200 bg-white px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none shadow-[var(--shadow-warm-xs)]"
+              />
+              {/* Location dropdown */}
+              <select
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="w-[130px] rounded-xl border border-warm-200 bg-white px-3 py-2 text-sm text-ink-700 focus:border-terra-400 focus:outline-none shadow-[var(--shadow-warm-xs)] cursor-pointer">
+                {LOCATION_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              <Button onClick={search} loading={searching}>搜尋</Button>
+            </div>
+            {error && <p className="text-sm text-red-400">{error}</p>}
+          </div>
+
+          {/* ── Stale cache banner ── */}
+          {searchStale && jobs.length > 0 && (
+            <div className="flex items-center gap-3 rounded-xl border border-honey-200 bg-honey-50 px-4 py-2.5">
+              <span className="text-xs text-honey-600">搜尋結果可能已過時（超過 30 分鐘）</span>
+              <button onClick={search} disabled={searching}
+                className="ml-auto text-xs font-medium text-terra-600 hover:text-terra-700 transition-colors whitespace-nowrap">
+                點此重新搜尋 →
+              </button>
+            </div>
+          )}
 
           {jobs.length > 0 && (
             <div className="flex gap-5">
@@ -108,11 +184,14 @@ export default function CareerMatchPage() {
                         <p className="text-sm font-semibold text-ink-700 truncate">{job.title}</p>
                         <p className="text-xs text-ink-500 truncate">{job.company}</p>
                       </div>
-                      {job.matchScore !== undefined && (
-                        <span className={`shrink-0 text-sm font-bold ${job.matchScore >= 70 ? 'text-sage-600' : job.matchScore >= 50 ? 'text-honey-500' : 'text-red-400'}`}>
-                          {job.matchScore}%
-                        </span>
-                      )}
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        {job.matchScore !== undefined && (
+                          <span className={`text-sm font-bold ${job.matchScore >= 70 ? 'text-sage-600' : job.matchScore >= 50 ? 'text-honey-500' : 'text-red-400'}`}>
+                            {job.matchScore}%
+                          </span>
+                        )}
+                        {isSaved(job.id) && <span className="text-[10px] text-sage-500 font-medium">✓ 已儲存</span>}
+                      </div>
                     </div>
                     <div className="mt-2 flex items-center gap-2">
                       <Badge variant="outline">{job.location}</Badge>
@@ -137,7 +216,12 @@ export default function CareerMatchPage() {
                           <CardTitle className="text-base">{selected.title}</CardTitle>
                           <p className="text-sm text-ink-500 mt-1">{selected.company} · {selected.location}</p>
                         </div>
-                        <Button size="sm" variant="secondary" onClick={() => saveJob(selected)}>+ 儲存</Button>
+                        <Button
+                          size="sm"
+                          variant={isSaved(selected.id) ? 'outline' : 'secondary'}
+                          onClick={() => saveJob(selected)}>
+                          {isSaved(selected.id) ? '✓ 已儲存' : '+ 儲存'}
+                        </Button>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-5">
