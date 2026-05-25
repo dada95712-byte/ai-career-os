@@ -18,6 +18,10 @@ interface Question {
 interface RealRecord {
   id: string; question: string; answer: string; score?: number; feedback?: string; date: string
 }
+interface PracticeResult {
+  answer: string; score: number
+  strengths: string[]; suggestions: string[]; optimizedAnswer: string
+}
 
 const TYPE: Record<string, { label: string; labelEn: string; color: 'info' | 'warning' | 'success' | 'default' }> = {
   behavioral:  { label: '行為面試', labelEn: 'Behavioral',  color: 'info' },
@@ -49,6 +53,10 @@ const QA_BANK = [
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }
 const scoreCol = (s: number) => s >= 8 ? 'text-sage-600' : s >= 6 ? 'text-honey-500' : 'text-red-400'
+function scoreStars(score: number) {
+  const filled = Math.round(score / 2)
+  return '★'.repeat(filled) + '☆'.repeat(5 - filled)
+}
 
 type SpeechRecognitionCtor = new () => {
   continuous: boolean; interimResults: boolean; lang: string
@@ -77,10 +85,11 @@ export default function InterviewPrepPage() {
 
   // QA bank
   const [selectedCat, setSelectedCat] = useState('通用')
-  const [practiceQ, setPracticeQ] = useState<{ zh: string; en: string } | null>(null)
+  const [practiceIdx, setPracticeIdx] = useState(0)
   const [practiceAnswer, setPracticeAnswer] = useState('')
-  const [practiceFeedback, setPracticeFeedback] = useState('')
+  const [practiceResults, setPracticeResults] = useState<Record<string, PracticeResult>>({})
   const [practiceEval, setPracticeEval] = useState(false)
+  const [showOptimized, setShowOptimized] = useState(false)
 
   // Real interview record
   const [records, setRecords] = useState<RealRecord[]>([])
@@ -106,7 +115,19 @@ export default function InterviewPrepPage() {
     localStorage.setItem('interview-records', JSON.stringify(next))
   }, [])
 
-  // ── Voice mode ──
+  // ── Computed (QA bank) ────────────────────────────────────────────────────
+  const catQuestions = QA_BANK.find((c) => c.category === selectedCat)?.questions ?? []
+  const practiceQ    = catQuestions[practiceIdx] ?? null
+  const practiceResult = practiceQ ? practiceResults[practiceQ.zh] : undefined
+
+  function goToQuestion(idx: number) {
+    const q = catQuestions[idx]
+    setPracticeIdx(idx)
+    setPracticeAnswer(q ? (practiceResults[q.zh]?.answer ?? '') : '')
+    setShowOptimized(false)
+  }
+
+  // ── Voice mode ────────────────────────────────────────────────────────────
   function startVoice(target: typeof voiceTarget) {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
     if (!SpeechRecognition) { alert('你的瀏覽器不支援語音輸入，請使用 Chrome 或 Safari'); return }
@@ -129,7 +150,7 @@ export default function InterviewPrepPage() {
       else setRecAnswer((p) => p + transcript)
     }
     recognition.onerror = () => { setVoiceActive(false) }
-    recognition.onend = () => { setVoiceActive(false) }
+    recognition.onend   = () => { setVoiceActive(false) }
 
     recognitionRef.current = recognition
     recognition.start()
@@ -137,12 +158,12 @@ export default function InterviewPrepPage() {
     setVoiceTarget(target)
   }
 
-  // ── Mock interview ──
+  // ── Mock interview ─────────────────────────────────────────────────────────
   async function generateQuestions() {
     if (!role.trim()) return
     setGenerating(true); setQuestions([]); setSelectedQ(null); setAnswer('')
     try {
-      const res = await fetch('/api/interview/questions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, company }) })
+      const res  = await fetch('/api/interview/questions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role, company }) })
       const data = await res.json(); setQuestions(data.questions ?? [])
     } catch { /* silent */ }
     finally { setGenerating(false) }
@@ -154,24 +175,33 @@ export default function InterviewPrepPage() {
     if (!q || !a?.trim()) return
     if (forPractice) setPracticeEval(true); else setEvaluating(true)
     try {
-      const res = await fetch('/api/interview/evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, answer: a }) })
+      const res  = await fetch('/api/interview/evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: q, answer: a }) })
       const data = await res.json()
-      if (forPractice) {
-        setPracticeFeedback(`評分：${data.score}/10\n\n${data.feedback}`)
+      if (forPractice && practiceQ) {
+        setPracticeResults((prev) => ({
+          ...prev,
+          [practiceQ.zh]: {
+            answer: a,
+            score: data.score ?? 0,
+            strengths: Array.isArray(data.strengths) ? data.strengths : [],
+            suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+            optimizedAnswer: data.optimizedAnswer ?? data.feedback ?? '',
+          },
+        }))
       } else {
         setQuestions((p) => p.map((qu) => qu.id === selectedQ?.id ? { ...qu, userAnswer: a, aiFeedback: data.feedback, aiScore: data.score } : qu))
         setSelectedQ((p) => p && { ...p, userAnswer: a, aiFeedback: data.feedback, aiScore: data.score })
       }
-    } catch { if (forPractice) setPracticeFeedback('評分失敗') }
+    } catch { /* silent */ }
     finally { if (forPractice) setPracticeEval(false); else setEvaluating(false) }
   }
 
-  // ── Real record ──
+  // ── Real record ────────────────────────────────────────────────────────────
   async function evaluateRecord() {
     if (!recQuestion.trim() || !recAnswer.trim()) return
     setRecEvaluating(true)
     try {
-      const res = await fetch('/api/interview/evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: recQuestion, answer: recAnswer }) })
+      const res  = await fetch('/api/interview/evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: recQuestion, answer: recAnswer }) })
       const data = await res.json()
       const rec: RealRecord = { id: genId(), question: recQuestion, answer: recAnswer, score: data.score, feedback: data.feedback, date: new Date().toISOString() }
       saveRecords([rec, ...records])
@@ -182,7 +212,7 @@ export default function InterviewPrepPage() {
 
   function deleteRecord(id: string) { saveRecords(records.filter((r) => r.id !== id)) }
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-4 md:p-8 space-y-5">
@@ -204,10 +234,9 @@ export default function InterviewPrepPage() {
         ))}
       </div>
 
-      {/* ── Mock Interview ──────────────────────────────────── */}
+      {/* ── Mock Interview ──────────────────────────────────────────────────── */}
       {tab === 'mock' && (
         <div className="space-y-5">
-          {/* Left/right layout */}
           <div className="flex flex-col lg:flex-row gap-5">
             {/* Left: Setup */}
             <div className="w-full lg:w-72 shrink-0 space-y-4">
@@ -233,7 +262,6 @@ export default function InterviewPrepPage() {
                 </CardContent>
               </Card>
 
-              {/* Question list */}
               {questions.length > 0 && (
                 <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                   {questions.map((q) => (
@@ -278,11 +306,11 @@ export default function InterviewPrepPage() {
                         rows={6} value={answer} onChange={(e) => setAnswer(e.target.value)} />
                       <button
                         onClick={() => startVoice('mock')}
-                        className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all ${voiceActive && voiceTarget === 'mock' ? 'border-red-300 bg-red-50 text-red-500' : 'border-warm-300 text-ink-400 hover:border-terra-300'}`}>
+                        className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all ${voiceActive && voiceTarget === 'mock' ? 'border-red-300 bg-red-50 text-red-500' : 'border-warm-200 bg-cream-200 text-ink-500 hover:border-warm-300'}`}>
                         {voiceActive && voiceTarget === 'mock' ? '⏹ 停止錄音' : '🎙 語音輸入'}
                       </button>
                     </div>
-                    <Button variant="primary" onClick={() => evaluate(false)} loading={evaluating} disabled={!answer.trim()}>🤖 AI 評分與建議</Button>
+                    <Button variant="primary" onClick={() => evaluate(false)} loading={evaluating} disabled={!answer.trim()}>✨ AI 評分與建議</Button>
                     {selectedQ.aiFeedback && (
                       <div className="space-y-3">
                         <div className="flex items-center gap-3">
@@ -312,53 +340,201 @@ export default function InterviewPrepPage() {
         </div>
       )}
 
-      {/* ── QA Bank ─────────────────────────────────────────── */}
+      {/* ── QA Bank ─────────────────────────────────────────────────────────── */}
       {tab === 'qa' && (
-        <div className="flex flex-col sm:flex-row gap-5">
-          <div className="flex sm:flex-col gap-1 sm:w-32 shrink-0 overflow-x-auto">
-            {QA_BANK.map((cat) => (
-              <button key={cat.category} onClick={() => { setSelectedCat(cat.category); setPracticeQ(null); setPracticeAnswer(''); setPracticeFeedback('') }}
-                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors ${selectedCat === cat.category ? 'bg-terra-50 text-terra-600 font-medium' : 'text-ink-500 hover:bg-cream-200 hover:text-ink-600'}`}>
-                {cat.category}
-              </button>
-            ))}
-          </div>
-          <div className="flex-1 space-y-3">
-            {QA_BANK.find((c) => c.category === selectedCat)?.questions.map((q, i) => (
-              <button key={i} onClick={() => { setPracticeQ(q); setPracticeAnswer(''); setPracticeFeedback('') }}
-                className={`w-full text-left rounded-2xl border p-4 transition-all ${practiceQ?.zh === q.zh ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
-                <p className="text-sm text-ink-600">{q.zh}</p>
-                <p className="text-xs text-ink-400 mt-1 italic">{q.en}</p>
-              </button>
-            ))}
-            {practiceQ && (
-              <Card className="border-terra-100">
-                <CardHeader>
-                  <CardTitle>練習回答</CardTitle>
-                  <p className="text-sm text-ink-700 mt-1">{practiceQ.zh}</p>
-                  <p className="text-xs text-ink-400 italic mt-0.5">{practiceQ.en}</p>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Textarea placeholder="請輸入你的回答..." rows={6} value={practiceAnswer} onChange={(e) => setPracticeAnswer(e.target.value)} />
-                  <button
-                    onClick={() => startVoice('practice')}
-                    className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all ${voiceActive && voiceTarget === 'practice' ? 'border-red-300 bg-red-50 text-red-500' : 'border-warm-300 text-ink-400 hover:border-terra-300'}`}>
-                    {voiceActive && voiceTarget === 'practice' ? '⏹ 停止錄音' : '🎙 語音輸入'}
-                  </button>
-                  <Button variant="primary" onClick={() => evaluate(true)} loading={practiceEval} disabled={!practiceAnswer.trim()}>🤖 AI 評分</Button>
-                  {practiceFeedback && (
-                    <div className="rounded-xl border border-terra-100 bg-terra-50 p-4">
-                      <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">{practiceFeedback}</p>
+        <div className="flex gap-5">
+          {/* ── Left: category + question list (35%) ── */}
+          <div className="w-[35%] shrink-0 space-y-3">
+            {/* Category pills */}
+            <div className="flex gap-1.5 flex-wrap">
+              {QA_BANK.map((cat) => (
+                <button key={cat.category}
+                  onClick={() => { setSelectedCat(cat.category); setPracticeIdx(0); setPracticeAnswer(''); setShowOptimized(false) }}
+                  className={`rounded-full border px-3 py-1 text-sm transition-colors ${selectedCat === cat.category ? 'bg-terra-50 border-terra-400 text-terra-600 font-medium' : 'border-warm-200 text-ink-500 hover:border-warm-300'}`}>
+                  {cat.category}
+                </button>
+              ))}
+            </div>
+
+            {/* Question cards */}
+            <div className="space-y-2">
+              {catQuestions.map((q, i) => {
+                const result   = practiceResults[q.zh]
+                const isActive = i === practiceIdx
+                const isDone   = !!result
+                return (
+                  <button key={i} onClick={() => goToQuestion(i)}
+                    className={`w-full text-left rounded-2xl border p-4 transition-all ${
+                      isActive
+                        ? 'border-terra-400 bg-terra-50'
+                        : isDone
+                          ? 'border-sage-200 bg-sage-50 hover:border-sage-300'
+                          : 'border-warm-200 bg-white hover:border-warm-300 hover:shadow-[var(--shadow-warm-xs)]'
+                    }`}>
+                    <div className="flex items-start gap-3">
+                      <span className={`text-lg font-bold leading-none shrink-0 mt-0.5 ${isDone ? 'text-sage-400' : isActive ? 'text-terra-400' : 'text-ink-200'}`}>
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-base font-medium text-ink-800 leading-snug">{q.zh}</p>
+                        <p className="text-sm text-ink-400 mt-1 leading-snug">{q.en}</p>
+                        <div className="flex items-center justify-between mt-2">
+                          {isDone ? (
+                            <>
+                              <span className="text-xs text-sage-600 font-medium">✓ 已完成 · {result.score}/10</span>
+                              <span className="text-xs text-terra-500">重新練習</span>
+                            </>
+                          ) : (
+                            <span className="text-xs text-terra-500">開始練習 →</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ── Right: practice panel (65%) ── */}
+          <div className="flex-1 min-w-0">
+            {practiceQ ? (
+              <div className="space-y-4">
+                {/* Header bar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm font-bold text-ink-300">#{String(practiceIdx + 1).padStart(2, '0')}</span>
+                  <Badge variant="default">{selectedCat}</Badge>
+                  <span className="ml-auto text-xs text-ink-400">
+                    進度 {catQuestions.filter((q) => practiceResults[q.zh]).length}/{catQuestions.length} 題已完成
+                  </span>
+                </div>
+
+                {/* Question block */}
+                <div className="bg-terra-50 border-l-4 border-l-terra-400 p-4 rounded-r-lg">
+                  <p className="text-xl font-semibold text-ink-900 leading-relaxed">{practiceQ.zh}</p>
+                  <p className="text-sm text-ink-400 mt-1 italic">{practiceQ.en}</p>
+                </div>
+
+                {/* Answer input */}
+                <div className="space-y-3">
+                  <label className="block text-sm font-medium text-ink-600">你的回答</label>
+                  <textarea
+                    placeholder="用 STAR 格式回答效果最好：情境 → 任務 → 行動 → 結果"
+                    rows={8}
+                    value={practiceAnswer}
+                    onChange={(e) => setPracticeAnswer(e.target.value)}
+                    className="w-full min-h-[200px] rounded-xl border border-warm-300 bg-white px-4 py-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none resize-y leading-relaxed" />
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => startVoice('practice')}
+                      className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm transition-all ${voiceActive && voiceTarget === 'practice' ? 'border-red-300 bg-red-50 text-red-500' : 'border-warm-200 bg-cream-200 text-ink-500 hover:border-warm-300'}`}>
+                      {voiceActive && voiceTarget === 'practice' ? '⏹ 停止錄音' : '🎙 語音輸入'}
+                    </button>
+                    <button
+                      onClick={() => evaluate(true)}
+                      disabled={!practiceAnswer.trim() || practiceEval}
+                      className="flex items-center gap-2 rounded-xl bg-terra-500 px-5 py-2 text-sm font-semibold text-white hover:bg-terra-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[var(--shadow-warm-sm)]">
+                      {practiceEval ? (
+                        <><svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>評分中...</>
+                      ) : (
+                        <>✨ AI 評分</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Score result */}
+                {practiceResult && (
+                  <div className="rounded-2xl border border-warm-200 bg-white p-5 space-y-4 shadow-[var(--shadow-warm-xs)]">
+                    {/* Score + stars */}
+                    <div className="flex items-center gap-4">
+                      <span className={`text-5xl font-bold tabular-nums ${scoreCol(practiceResult.score)}`}>
+                        {practiceResult.score}
+                      </span>
+                      <div>
+                        <p className="text-xs text-ink-400 mb-0.5">/ 10 分</p>
+                        <p className="text-honey-500 text-lg tracking-wider">{scoreStars(practiceResult.score)}</p>
+                      </div>
+                    </div>
+
+                    {/* Two-column: strengths + suggestions */}
+                    {(practiceResult.strengths.length > 0 || practiceResult.suggestions.length > 0) && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {practiceResult.strengths.length > 0 && (
+                          <div className="rounded-xl bg-sage-50 border border-sage-200 p-3">
+                            <p className="text-xs font-semibold text-sage-600 mb-2">✓ 優點</p>
+                            <ul className="space-y-1.5">
+                              {practiceResult.strengths.map((s, i) => (
+                                <li key={i} className="text-xs text-ink-600 flex gap-1.5 leading-relaxed">
+                                  <span className="text-sage-500 shrink-0 mt-0.5">✓</span>{s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {practiceResult.suggestions.length > 0 && (
+                          <div className="rounded-xl bg-honey-50 border border-amber-200 p-3">
+                            <p className="text-xs font-semibold text-honey-600 mb-2">→ 改善建議</p>
+                            <ul className="space-y-1.5">
+                              {practiceResult.suggestions.map((s, i) => (
+                                <li key={i} className="text-xs text-ink-600 flex gap-1.5 leading-relaxed">
+                                  <span className="text-honey-500 shrink-0 mt-0.5">→</span>{s}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Optimized answer toggle */}
+                    {practiceResult.optimizedAnswer && (
+                      <>
+                        <button
+                          onClick={() => setShowOptimized((p) => !p)}
+                          className="flex items-center justify-center gap-2 w-full rounded-xl border border-terra-200 bg-terra-50 px-4 py-2.5 text-sm font-medium text-terra-600 hover:bg-terra-100 transition-colors">
+                          {showOptimized ? '▲ 收起優化版回答' : '✨ 查看優化版回答'}
+                        </button>
+                        {showOptimized && (
+                          <div className="rounded-xl border border-terra-200 bg-terra-50 p-4">
+                            <p className="text-xs font-semibold text-terra-500 mb-2">AI 建議回答</p>
+                            <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">{practiceResult.optimizedAnswer}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Prev / Next navigation */}
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    onClick={() => goToQuestion(Math.max(0, practiceIdx - 1))}
+                    disabled={practiceIdx === 0}
+                    className="flex items-center gap-1.5 rounded-xl border border-warm-200 bg-white px-4 py-2 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                    ← 上一題
+                  </button>
+                  <span className="text-xs text-ink-300">{practiceIdx + 1} / {catQuestions.length}</span>
+                  <button
+                    onClick={() => goToQuestion(Math.min(catQuestions.length - 1, practiceIdx + 1))}
+                    disabled={practiceIdx === catQuestions.length - 1}
+                    className="flex items-center gap-1.5 rounded-xl border border-warm-200 bg-white px-4 py-2 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                    下一題 →
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center h-full py-20 text-center">
+                <p className="text-4xl mb-3">📋</p>
+                <p className="text-sm text-ink-500">從左側選擇一道題目開始練習</p>
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* ── Real Interview Record ────────────────────────────── */}
+      {/* ── Real Interview Record ────────────────────────────────────────────── */}
       {tab === 'record' && (
         <div className="space-y-5">
           <Card>
@@ -376,7 +552,7 @@ export default function InterviewPrepPage() {
                 <Textarea label="你的回答" placeholder="記錄你當時的回答..." rows={5} value={recAnswer} onChange={(e) => setRecAnswer(e.target.value)} />
                 <button
                   onClick={() => startVoice('record')}
-                  className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all ${voiceActive && voiceTarget === 'record' ? 'border-red-300 bg-red-50 text-red-500' : 'border-warm-300 text-ink-400 hover:border-terra-300'}`}>
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-all ${voiceActive && voiceTarget === 'record' ? 'border-red-300 bg-red-50 text-red-500' : 'border-warm-200 bg-cream-200 text-ink-500 hover:border-warm-300'}`}>
                   {voiceActive && voiceTarget === 'record' ? '⏹ 停止錄音' : '🎙 語音輸入'}
                 </button>
               </div>
@@ -386,7 +562,6 @@ export default function InterviewPrepPage() {
             </CardContent>
           </Card>
 
-          {/* Printable records */}
           {records.length > 0 && (
             <div ref={printRef} className="space-y-3 print:p-6">
               <h2 className="text-sm font-semibold text-ink-600 print:text-base print:mb-4">我的面試題庫 ({records.length} 題)</h2>
