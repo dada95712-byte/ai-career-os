@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -12,14 +11,14 @@ const SKILL_CATEGORIES = ['專業技能', '工具與軟體', '核心職能', '�
 type SkillCategory = typeof SKILL_CATEGORIES[number]
 interface TaggedSkill { name: string; category: SkillCategory }
 
-const CATEGORY_COLORS: Record<SkillCategory, string> = {
-  '專業技能':   'bg-terra-50 border-terra-200 text-terra-600',
-  '工具與軟體': 'bg-sky-50 border-sky-200 text-sky-600',
-  '核心職能':   'bg-violet-50 border-violet-200 text-violet-600',
-  '軟實力':     'bg-sage-50 border-sage-200 text-sage-600',
-  '語言能力':   'bg-honey-50 border-amber-200 text-honey-500',
-  '證照與認證': 'bg-cream-200 border-warm-300 text-ink-600',
-  '學習中':     'bg-orange-50 border-orange-200 text-orange-500',
+const CAT_DOT: Record<SkillCategory, string> = {
+  '專業技能':   'bg-terra-400',
+  '工具與軟體': 'bg-sky-400',
+  '核心職能':   'bg-violet-400',
+  '軟實力':     'bg-sage-400',
+  '語言能力':   'bg-honey-400',
+  '證照與認證': 'bg-warm-400',
+  '學習中':     'bg-orange-400',
 }
 
 function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
@@ -31,46 +30,68 @@ function Spinner({ className = 'h-4 w-4' }: { className?: string }) {
   )
 }
 
-// ── Usage cards ────────────────────────────────────────────────────────────────
+// ── SkillChip ─────────────────────────────────────────────────────────────────
 
-const USAGE_CARDS = [
-  {
-    icon: '🎯',
-    title: '職缺匹配',
-    desc: '比對職缺要求，計算匹配分數',
-    href: '/career-match',
-    label: '前往 Job Pipeline',
-    bg: 'bg-terra-50',
-    iconBg: 'bg-terra-100',
-    border: 'border-terra-200',
-    hoverBorder: 'hover:border-terra-300',
-    textColor: 'text-terra-600',
-  },
-  {
-    icon: '📊',
-    title: '技能落差',
-    desc: '找出與目標職位的技能差距',
-    href: '/career-growth',
-    label: '前往 Skill Map',
-    bg: 'bg-violet-50',
-    iconBg: 'bg-violet-100',
-    border: 'border-violet-200',
-    hoverBorder: 'hover:border-violet-300',
-    textColor: 'text-violet-600',
-  },
-  {
-    icon: '🎤',
-    title: '面試準備',
-    desc: '根據你的技能生成針對性題目',
-    href: '/interview-prep',
-    label: '前往 Interviews',
-    bg: 'bg-sky-50',
-    iconBg: 'bg-sky-100',
-    border: 'border-sky-200',
-    hoverBorder: 'hover:border-sky-300',
-    textColor: 'text-sky-600',
-  },
-]
+function SkillChip({
+  skill, isEditingCat, onStartEditCat, onCancelEditCat, onChangeCat, onDelete, onLongPress,
+}: {
+  skill: TaggedSkill
+  isEditingCat: boolean
+  onStartEditCat: () => void
+  onCancelEditCat: () => void
+  onChangeCat: (cat: SkillCategory) => void
+  onDelete: () => void
+  onLongPress: () => void
+}) {
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function handleTouchStart() {
+    timerRef.current = setTimeout(() => { onLongPress(); timerRef.current = null }, 600)
+  }
+  function clearLongPress() {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+  }
+
+  return (
+    <div
+      className={`group relative inline-flex items-center gap-0.5 rounded-full border text-sm select-none transition-all duration-150
+        ${isEditingCat
+          ? 'border-terra-400 bg-terra-50 text-terra-700 pl-3 pr-2 py-1'
+          : 'bg-white border-warm-200 text-ink-700 hover:border-terra-300 hover:bg-terra-50 px-3 py-1 cursor-default'
+        }`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={clearLongPress}
+      onTouchMove={clearLongPress}
+    >
+      <span>{skill.name}</span>
+      {isEditingCat ? (
+        <select
+          autoFocus
+          value={skill.category}
+          onChange={(e) => onChangeCat(e.target.value as SkillCategory)}
+          onBlur={onCancelEditCat}
+          onClick={(e) => e.stopPropagation()}
+          className="ml-1 rounded-md border border-warm-200 bg-white text-[11px] text-ink-700 focus:outline-none focus:border-terra-400 shadow-[var(--shadow-warm-sm)] py-0.5 pr-1 cursor-pointer"
+        >
+          {SKILL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+      ) : (
+        <span className="inline-flex items-center gap-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150 ml-0.5">
+          <button
+            title="編輯分類"
+            onMouseDown={(e) => { e.preventDefault(); onStartEditCat() }}
+            className="text-[11px] text-ink-400 hover:text-terra-600 transition-colors px-0.5 leading-none"
+          >✏️</button>
+          <button
+            title="刪除"
+            onMouseDown={(e) => { e.preventDefault(); onDelete() }}
+            className="text-[12px] text-ink-400 hover:text-red-400 transition-colors px-0.5 leading-none"
+          >✕</button>
+        </span>
+      )}
+    </div>
+  )
+}
 
 // ── Component ──────────────────────────────────────────────────────────────────
 
@@ -81,13 +102,15 @@ export default function SkillsPage() {
   const [skillView, setSkillView]     = useState<'category' | 'all'>('category')
   const [collapsedCats, setCollapsedCats] = useState<Set<SkillCategory>>(new Set())
   const [dupAlert, setDupAlert]       = useState('')
-  const [editingSkill, setEditingSkill] = useState<{
-    originalName: string; newName: string; newCat: SkillCategory; x: number; y: number
-  } | null>(null)
+  const [editingCatFor, setEditingCatFor] = useState<string | null>(null)
+  const [toast, setToast]             = useState<{ msg: string; skill: TaggedSkill } | null>(null)
+  const [mobileMenuSkill, setMobileMenuSkill] = useState<string | null>(null)
   const [recommendedSkills, setRecommendedSkills] = useState<TaggedSkill[]>([])
   const [checkedSkills, setCheckedSkills] = useState<Set<string>>(new Set())
   const [loadingRecommend, setLoadingRecommend] = useState(false)
   const [showRecommend, setShowRecommend] = useState(false)
+
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Init ────────────────────────────────────────────────────────────────────
 
@@ -102,12 +125,16 @@ export default function SkillsPage() {
     } catch { /* ignore */ }
   }, [])
 
+  useEffect(() => {
+    return () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current) }
+  }, [])
+
   function persist(next: TaggedSkill[]) {
     setSkills(next)
     try { localStorage.setItem('career-skills', JSON.stringify(next)) } catch { /* quota */ }
   }
 
-  // ── Skill handlers ──────────────────────────────────────────────────────────
+  // ── Handlers ────────────────────────────────────────────────────────────────
 
   function norm(s: string) { return s.toLowerCase().replace(/\s+/g, '') }
 
@@ -119,9 +146,25 @@ export default function SkillsPage() {
     persist([...skills, { name: t, category: newSkillCat }]); setNewSkill('')
   }
 
-  function removeSkill(name: string) {
-    persist(skills.filter((s) => s.name !== name))
-    if (editingSkill?.originalName === name) setEditingSkill(null)
+  function changeCat(skillName: string, newCat: SkillCategory) {
+    persist(skills.map((s) => s.name === skillName ? { ...s, category: newCat } : s))
+    setEditingCatFor(null)
+  }
+
+  function deleteWithToast(skillName: string) {
+    const skill = skills.find((s) => s.name === skillName)
+    if (!skill) return
+    persist(skills.filter((s) => s.name !== skillName))
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    setToast({ msg: `已刪除「${skillName}」`, skill })
+    toastTimerRef.current = setTimeout(() => { setToast(null); toastTimerRef.current = null }, 5000)
+  }
+
+  function undoDelete() {
+    if (!toast) return
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
+    persist([toast.skill, ...skills])
+    setToast(null)
   }
 
   function dedupSkills() {
@@ -133,21 +176,6 @@ export default function SkillsPage() {
     persist(deduped)
     setDupAlert(removed > 0 ? `已移除 ${removed} 個重複技能` : '沒有發現重複技能')
     setTimeout(() => setDupAlert(''), 2500)
-  }
-
-  function openSkillEdit(s: TaggedSkill, rect: DOMRect) {
-    const x = Math.min(rect.left, window.innerWidth - 240)
-    const y = rect.bottom + 6
-    setEditingSkill({ originalName: s.name, newName: s.name, newCat: s.category, x, y })
-  }
-
-  function saveEditedSkill() {
-    if (!editingSkill) return
-    const trimmed = editingSkill.newName.trim(); if (!trimmed) return
-    const conflict = skills.some((s) => norm(s.name) === norm(trimmed) && s.name !== editingSkill.originalName)
-    if (conflict) { setDupAlert('此技能名稱已存在'); setTimeout(() => setDupAlert(''), 2500); return }
-    persist(skills.map((s) => s.name === editingSkill.originalName ? { name: trimmed, category: editingSkill.newCat } : s))
-    setEditingSkill(null)
   }
 
   function toggleCat(cat: SkillCategory) {
@@ -198,107 +226,138 @@ export default function SkillsPage() {
     acc[cat] = skills.filter((s) => s.category === cat); return acc
   }, {} as Record<SkillCategory, TaggedSkill[]>)
 
+  // ── Shared chip renderer ─────────────────────────────────────────────────────
+
+  function renderChip(s: TaggedSkill) {
+    return (
+      <SkillChip
+        key={s.name}
+        skill={s}
+        isEditingCat={editingCatFor === s.name}
+        onStartEditCat={() => setEditingCatFor(s.name)}
+        onCancelEditCat={() => setEditingCatFor(null)}
+        onChangeCat={(cat) => changeCat(s.name, cat)}
+        onDelete={() => deleteWithToast(s.name)}
+        onLongPress={() => setMobileMenuSkill(s.name)}
+      />
+    )
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 md:p-8 space-y-5">
 
       {/* ── Header ── */}
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-ink-900">⚡ 我的技能庫</h1>
-        <p className="mt-1 text-sm text-ink-500">管理你的技能，AI 將自動用於以下功能：</p>
+        <p className="mt-1 text-sm text-ink-500">統一管理技能，自動用於 AI 分析與匹配</p>
       </div>
 
-      {/* ── Usage cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {USAGE_CARDS.map((card) => (
-          <Link key={card.href} href={card.href}
-            className={`group flex items-start gap-4 rounded-2xl border ${card.border} ${card.hoverBorder} ${card.bg} p-4 transition-all duration-150 shadow-[var(--shadow-warm-xs)] hover:shadow-[var(--shadow-warm-sm)]`}>
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${card.iconBg} text-xl`}>
-              {card.icon}
-            </div>
-            <div className="min-w-0">
-              <p className={`text-sm font-semibold ${card.textColor}`}>{card.title}</p>
-              <p className="text-xs text-ink-500 mt-0.5 leading-relaxed">{card.desc}</p>
-              <p className={`text-[11px] font-medium ${card.textColor} mt-1.5 group-hover:underline`}>{card.label} →</p>
-            </div>
-          </Link>
-        ))}
+      {/* ── Usage bar ── */}
+      <div className="flex items-center gap-2 flex-wrap bg-cream-50 border border-warm-200 rounded-lg px-4 py-3">
+        <span className="text-sm text-ink-500 shrink-0">你的技能將用於：</span>
+        <Link href="/career-match" className="text-sm font-medium text-terra-600 hover:text-terra-800 transition-colors whitespace-nowrap">🎯 職缺匹配 →</Link>
+        <span className="text-ink-300">·</span>
+        <Link href="/career-growth" className="text-sm font-medium text-terra-600 hover:text-terra-800 transition-colors whitespace-nowrap">📊 技能落差 →</Link>
+        <span className="text-ink-300">·</span>
+        <Link href="/interview-prep" className="text-sm font-medium text-terra-600 hover:text-terra-800 transition-colors whitespace-nowrap">🎤 面試準備 →</Link>
       </div>
 
-      {/* ── Edit popover backdrop ── */}
-      {editingSkill && (
-        <div className="fixed inset-0 z-[90]" onClick={() => setEditingSkill(null)} />
-      )}
-      {editingSkill && (
-        <div
-          style={{ top: editingSkill.y, left: editingSkill.x }}
-          className="fixed z-[91] w-56 rounded-2xl border border-warm-200 bg-white p-3 shadow-[var(--shadow-warm-md)] space-y-2">
-          <div>
-            <label className="block text-[10px] font-medium text-ink-400 mb-1">技能名稱</label>
-            <input
-              autoFocus
-              value={editingSkill.newName}
-              onChange={(e) => setEditingSkill((p) => p && { ...p, newName: e.target.value })}
-              onKeyDown={(e) => { if (e.key === 'Enter') saveEditedSkill(); if (e.key === 'Escape') setEditingSkill(null) }}
-              className="w-full rounded-lg border border-warm-200 bg-cream-50 px-2.5 py-1.5 text-sm text-ink-800 focus:border-terra-400 focus:outline-none" />
+      {/* ── Controls bar ── */}
+      <div className="border-b border-warm-200 pb-3 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Input */}
+          <input
+            placeholder="新增技能..."
+            value={newSkill}
+            onChange={(e) => setNewSkill(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addSkill()}
+            className="h-9 w-40 rounded-xl border border-warm-300 bg-white px-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
+          />
+          {/* Category select */}
+          <select
+            value={newSkillCat}
+            onChange={(e) => setNewSkillCat(e.target.value as SkillCategory)}
+            className="h-9 w-[120px] rounded-xl border border-warm-300 bg-white px-2 text-sm text-ink-700 focus:border-terra-400 focus:outline-none"
+          >
+            {SKILL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+          {/* Add button */}
+          <button
+            onClick={addSkill}
+            className="h-9 rounded-xl bg-terra-500 px-4 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]"
+          >
+            新增
+          </button>
+
+          {/* Separator */}
+          <div className="h-5 w-px bg-warm-200 mx-1" />
+
+          {/* AI recommend */}
+          <button
+            onClick={handleRecommendSkills}
+            disabled={loadingRecommend}
+            className="h-9 flex items-center gap-1.5 rounded-xl border border-warm-200 bg-white px-3 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors disabled:opacity-50"
+          >
+            {loadingRecommend ? <Spinner /> : '🤖'} AI 推薦
+          </button>
+          {/* Dedup */}
+          <button
+            onClick={dedupSkills}
+            className="h-9 rounded-xl border border-warm-200 bg-white px-3 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors"
+          >
+            清除重複
+          </button>
+
+          {/* View toggle — pushed to right */}
+          <div className="ml-auto flex gap-0.5 rounded-lg border border-warm-200 bg-white p-0.5 h-9 items-center">
+            {(['category', 'all'] as const).map((v) => (
+              <button key={v} onClick={() => setSkillView(v)}
+                className={`rounded-md px-3 h-7 text-xs font-medium transition-all ${skillView === v ? 'bg-cream-200 text-ink-700' : 'text-ink-400 hover:text-ink-600'}`}>
+                {v === 'category' ? '分類視圖' : '全部顯示'}
+              </button>
+            ))}
           </div>
-          <div>
-            <label className="block text-[10px] font-medium text-ink-400 mb-1">分類</label>
-            <select
-              value={editingSkill.newCat}
-              onChange={(e) => setEditingSkill((p) => p && { ...p, newCat: e.target.value as SkillCategory })}
-              className="w-full rounded-lg border border-warm-200 bg-cream-50 px-2.5 py-1.5 text-xs text-ink-700 focus:border-terra-400 focus:outline-none">
-              {SKILL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          <div className="flex gap-1.5 pt-1">
-            <button onClick={saveEditedSkill}
-              className="flex-1 rounded-lg bg-terra-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-terra-700 transition-colors">
-              儲存
+        </div>
+
+        {/* Dup alert */}
+        {dupAlert && (
+          <p className="text-xs text-terra-600 bg-terra-50 border border-terra-100 rounded-lg px-3 py-1.5">{dupAlert}</p>
+        )}
+      </div>
+
+      {/* ── Mobile long-press menu ── */}
+      {mobileMenuSkill && (
+        <div className="fixed inset-0 z-[100] flex items-end" onClick={() => setMobileMenuSkill(null)}>
+          <div className="w-full bg-white rounded-t-2xl border-t border-warm-200 p-4 space-y-1 shadow-[var(--shadow-warm-lg)]" onClick={(e) => e.stopPropagation()}>
+            <p className="text-center text-xs font-semibold text-ink-400 pb-2 border-b border-warm-100">{mobileMenuSkill}</p>
+            <button
+              className="w-full text-left py-3 px-1 text-sm text-ink-700 hover:text-terra-600 transition-colors"
+              onClick={() => { setEditingCatFor(mobileMenuSkill); setMobileMenuSkill(null) }}>
+              ✏️ 編輯分類
             </button>
-            <button onClick={() => removeSkill(editingSkill.originalName)}
-              className="rounded-lg border border-warm-200 px-2.5 py-1.5 text-xs text-red-400 hover:border-red-200 hover:bg-red-50 transition-colors">
-              刪除
+            <button
+              className="w-full text-left py-3 px-1 text-sm text-red-500 hover:text-red-600 transition-colors"
+              onClick={() => { deleteWithToast(mobileMenuSkill); setMobileMenuSkill(null) }}>
+              ✕ 刪除
+            </button>
+            <button
+              className="w-full text-center py-2 text-sm text-ink-400 mt-1"
+              onClick={() => setMobileMenuSkill(null)}>
+              取消
             </button>
           </div>
         </div>
       )}
 
-      {/* ── Add skill + controls ── */}
-      <Card>
-        <CardContent className="pt-5 space-y-3">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <Input placeholder="例如：React、Python、專案管理" value={newSkill}
-              onChange={(e) => setNewSkill(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') addSkill() }}
-              className="flex-1" />
-            <select value={newSkillCat} onChange={(e) => setNewSkillCat(e.target.value as SkillCategory)}
-              className="rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-700 focus:border-terra-400 focus:outline-none">
-              {SKILL_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <Button onClick={addSkill}>新增</Button>
-          </div>
-          {dupAlert && (
-            <p className="text-xs text-terra-600 bg-terra-50 border border-terra-200 rounded-lg px-3 py-1.5">{dupAlert}</p>
-          )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleRecommendSkills} loading={loadingRecommend}>🤖 AI 分析日誌推薦技能</Button>
-            <button onClick={dedupSkills}
-              className="rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-xs text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
-              🔧 清除重複技能
-            </button>
-            <div className="flex gap-1 rounded-lg border border-warm-200 bg-white p-0.5 ml-auto">
-              {(['category', 'all'] as const).map((v) => (
-                <button key={v} onClick={() => setSkillView(v)}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${skillView === v ? 'bg-cream-200 text-ink-700' : 'text-ink-400'}`}>
-                  {v === 'category' ? '分類視圖' : '全部顯示'}
-                </button>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* ── Toast ── */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-3 rounded-2xl border border-warm-200 bg-white px-5 py-3 shadow-[var(--shadow-warm-md)] text-sm whitespace-nowrap">
+          <span className="text-ink-600">{toast.msg}</span>
+          <button onClick={undoDelete} className="text-terra-500 font-semibold hover:text-terra-700 transition-colors">復原</button>
+        </div>
+      )}
 
       {/* ── AI Recommend panel ── */}
       {showRecommend && (
@@ -306,7 +365,7 @@ export default function SkillsPage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle>AI 推薦技能</CardTitle>
-              <button onClick={() => setShowRecommend(false)} className="text-ink-400 hover:text-ink-600">×</button>
+              <button onClick={() => setShowRecommend(false)} className="text-ink-400 hover:text-ink-600 text-lg leading-none">×</button>
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -337,26 +396,18 @@ export default function SkillsPage() {
 
       {/* ── Skill list ── */}
       {skillView === 'all' ? (
-        <Card>
-          <CardHeader><CardTitle>所有技能 <span className="text-ink-400 font-normal">({skills.length})</span></CardTitle></CardHeader>
-          <CardContent>
-            {skills.length === 0 ? (
-              <div className="py-8 text-center"><p className="text-2xl mb-2">⚡</p><p className="text-sm text-ink-500">尚未新增技能</p></div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {skills.map((s) => (
-                  <button key={s.name}
-                    onClick={(e) => openSkillEdit(s, e.currentTarget.getBoundingClientRect())}
-                    className={`flex items-center gap-1 rounded-full border pl-3 pr-2 py-1 transition-all hover:opacity-80 ${CATEGORY_COLORS[s.category]} ${editingSkill?.originalName === s.name ? 'ring-2 ring-terra-400 ring-offset-1' : ''}`}>
-                    <span className="text-sm">{s.name}</span>
-                    <span className="text-[10px] opacity-60">· {s.category}</span>
-                    <span className="ml-1 opacity-40 text-xs">✎</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        <div className="rounded-2xl border border-warm-200 bg-white p-5">
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold text-ink-700">所有技能 <span className="text-ink-400 font-normal">({skills.length})</span></p>
+          </div>
+          {skills.length === 0 ? (
+            <div className="py-8 text-center"><p className="text-2xl mb-2">⚡</p><p className="text-sm text-ink-500">尚未新增技能</p></div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {skills.map((s) => renderChip(s))}
+            </div>
+          )}
+        </div>
       ) : (
         <div className="space-y-3">
           {SKILL_CATEGORIES.map((cat) => {
@@ -364,30 +415,21 @@ export default function SkillsPage() {
             if (!catSkills.length) return null
             const collapsed = collapsedCats.has(cat)
             return (
-              <Card key={cat}>
-                <button className="w-full" onClick={() => toggleCat(cat)}>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm">{cat} <span className="text-ink-400 font-normal">({catSkills.length})</span></CardTitle>
-                      <span className="text-ink-300 text-xs">{collapsed ? '▶' : '▼'}</span>
-                    </div>
-                  </CardHeader>
+              <div key={cat} className="rounded-2xl border border-warm-200 bg-white overflow-hidden">
+                <button className="w-full flex items-center justify-between px-5 py-3 hover:bg-cream-50 transition-colors" onClick={() => toggleCat(cat)}>
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full shrink-0 ${CAT_DOT[cat]}`} />
+                    <span className="text-sm font-semibold text-ink-700">{cat}</span>
+                    <span className="text-xs text-ink-400 font-normal">({catSkills.length})</span>
+                  </div>
+                  <span className="text-ink-300 text-xs">{collapsed ? '▶' : '▼'}</span>
                 </button>
                 {!collapsed && (
-                  <CardContent className="pt-0">
-                    <div className="flex flex-wrap gap-2">
-                      {catSkills.map((s) => (
-                        <button key={s.name}
-                          onClick={(e) => { e.stopPropagation(); openSkillEdit(s, e.currentTarget.getBoundingClientRect()) }}
-                          className={`flex items-center gap-1 rounded-full border pl-3 pr-2 py-1 transition-all hover:opacity-80 ${CATEGORY_COLORS[cat]} ${editingSkill?.originalName === s.name ? 'ring-2 ring-terra-400 ring-offset-1' : ''}`}>
-                          <span className="text-sm">{s.name}</span>
-                          <span className="ml-1 opacity-40 text-xs">✎</span>
-                        </button>
-                      ))}
-                    </div>
-                  </CardContent>
+                  <div className="px-5 pb-4 pt-1 flex flex-wrap gap-2">
+                    {catSkills.map((s) => renderChip(s))}
+                  </div>
                 )}
-              </Card>
+              </div>
             )
           })}
           {skills.length === 0 && (
