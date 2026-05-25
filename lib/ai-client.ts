@@ -1,7 +1,16 @@
 import OpenAI from 'openai'
 
-const PRIMARY_MODEL  = 'deepseek/deepseek-v4-flash:free'
-const FALLBACK_MODEL = 'meta-llama/llama-3.3-70b-instruct:free'
+const FREE_MODELS = [
+  'google/gemma-4-31b-it:free',
+  'meta-llama/llama-3.3-70b-instruct:free',
+  'nvidia/nemotron-3-super-120b-a12b:free',
+]
+
+export const VISION_MODELS = [
+  'nvidia/nemotron-nano-12b-v2-vl:free',
+  'google/gemma-4-26b-a4b-it:free',
+]
+
 const DEFAULT_SYSTEM = '你是一個專業的台灣職涯顧問，請用繁體中文回答。'
 
 // ── Lazy singleton ────────────────────────────────────────────────────────────
@@ -23,71 +32,46 @@ function getClient(): OpenAI {
 
 // ── Internal helper ───────────────────────────────────────────────────────────
 
-async function complete(
-  model: string,
+async function tryModels(
+  models: string[],
   messages: OpenAI.Chat.ChatCompletionMessageParam[]
 ): Promise<string> {
-  const res = await getClient().chat.completions.create({ model, messages })
-  return res.choices[0]?.message?.content ?? ''
+  for (const model of models) {
+    try {
+      const res = await getClient().chat.completions.create({ model, messages })
+      return res.choices[0]?.message?.content ?? ''
+    } catch (err) {
+      const e = err as { status?: number; message?: string }
+      console.warn(`[AI] Model ${model} failed: ${e.status ?? ''} ${e.message ?? ''}`)
+    }
+  }
+  throw new Error('所有 AI 服務目前無法使用，請稍後再試')
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Single-turn AI call.
- * Tries PRIMARY_MODEL first; falls back to FALLBACK_MODEL on error.
+ * Single-turn AI call. Rotates through FREE_MODELS until one succeeds.
  */
 export async function callAI(prompt: string, systemPrompt?: string): Promise<string> {
-  const sys = systemPrompt ?? DEFAULT_SYSTEM
-  const msgs: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: 'system', content: sys },
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    { role: 'system', content: systemPrompt ?? DEFAULT_SYSTEM },
     { role: 'user',   content: prompt },
   ]
-
-  try {
-    return await complete(PRIMARY_MODEL, msgs)
-  } catch (err) {
-    console.warn('[AI] Primary model failed:', (err as Error).message)
-  }
-
-  try {
-    const result = await complete(FALLBACK_MODEL, msgs)
-    console.info('[AI] Using fallback model')
-    return result
-  } catch (err) {
-    console.error('[AI] Fallback model also failed:', (err as Error).message)
-    throw new Error('所有 AI 服務目前無法使用，請稍後再試')
-  }
+  return tryModels(FREE_MODELS, messages)
 }
 
 /**
- * Multi-turn chat call.
- * Tries PRIMARY_MODEL first; falls back to FALLBACK_MODEL on error.
+ * Multi-turn chat call. Rotates through FREE_MODELS until one succeeds.
  */
 export async function callAIChat(
   messages: { role: 'user' | 'assistant'; content: string }[],
   systemPrompt?: string
 ): Promise<string> {
-  const sys = systemPrompt ?? DEFAULT_SYSTEM
   if (messages.length === 0) throw new Error('messages 不得為空')
-
   const openaiMessages: OpenAI.Chat.ChatCompletionMessageParam[] = [
-    { role: 'system', content: sys },
+    { role: 'system', content: systemPrompt ?? DEFAULT_SYSTEM },
     ...messages,
   ]
-
-  try {
-    return await complete(PRIMARY_MODEL, openaiMessages)
-  } catch (err) {
-    console.warn('[AI] Primary model chat failed:', (err as Error).message)
-  }
-
-  try {
-    const result = await complete(FALLBACK_MODEL, openaiMessages)
-    console.info('[AI] Using fallback model for chat')
-    return result
-  } catch (err) {
-    console.error('[AI] Fallback model chat also failed:', (err as Error).message)
-    throw new Error('所有 AI 服務目前無法使用，請稍後再試')
-  }
+  return tryModels(FREE_MODELS, openaiMessages)
 }

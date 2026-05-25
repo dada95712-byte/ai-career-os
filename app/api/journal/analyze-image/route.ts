@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { NextResponse } from 'next/server'
+import { VISION_MODELS } from '@/lib/ai-client'
 
 export async function POST(req: Request) {
   try {
@@ -14,24 +15,29 @@ export async function POST(req: Request) {
     if (!key) return NextResponse.json({ description: '' })
 
     const client = new OpenAI({ apiKey: key, baseURL: 'https://openrouter.ai/api/v1' })
-    const res = await client.chat.completions.create({
-      model: 'nvidia/nemotron-nano-12b-v2-vl:free',
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: imageUrl, detail: 'auto' } },
-            {
-              type: 'text',
-              text: '請分析這張圖片的內容，用繁體中文描述。如果圖片包含文字（白板、截圖、筆記、證書等），請直接擷取並回覆文字內容；否則描述圖片中的場景與重點。回答請簡潔，不超過 150 字。',
-            },
-          ],
-        },
-      ],
-    })
+    const content: OpenAI.Chat.ChatCompletionContentPart[] = [
+      { type: 'image_url', image_url: { url: imageUrl, detail: 'auto' } },
+      {
+        type: 'text',
+        text: '請分析這張圖片的內容，用繁體中文描述。如果圖片包含文字（白板、截圖、筆記、證書等），請直接擷取並回覆文字內容；否則描述圖片中的場景與重點。回答請簡潔，不超過 150 字。',
+      },
+    ]
 
-    const description = res.choices[0]?.message?.content ?? ''
-    return NextResponse.json({ description })
+    for (const model of VISION_MODELS) {
+      try {
+        const res = await client.chat.completions.create({
+          model,
+          messages: [{ role: 'user', content }],
+        })
+        const description = res.choices[0]?.message?.content ?? ''
+        return NextResponse.json({ description })
+      } catch (err) {
+        const e = err as { status?: number; message?: string }
+        console.warn(`[analyze-image] Model ${model} failed: ${e.status ?? ''} ${e.message ?? ''}`)
+      }
+    }
+
+    return NextResponse.json({ description: '' }, { status: 500 })
   } catch (err) {
     console.error('[analyze-image]', err)
     return NextResponse.json({ description: '' }, { status: 500 })
