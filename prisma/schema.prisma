@@ -29,6 +29,7 @@ model User {
   learningGoals   LearningGoal[]
   chatSessions      ChatSession[]
   interviewSessions InterviewSession[]
+  workJournals      WorkJournal[]
 }
 
 model Account {
@@ -170,6 +171,25 @@ model InterviewSession {
   company   String?
   language  String   @default("zh-TW")
   questions Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WorkJournal {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  company   String?
+  jobTitle  String?  @db.VarChar(255)
+  date      DateTime
+  template  String   @default("free")
+  situation String?  @db.Text
+  task      String?  @db.Text
+  action    String?  @db.Text
+  result    String?  @db.Text
+  content   String?  @db.Text
+  tags      Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)

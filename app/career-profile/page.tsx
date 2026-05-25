@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -42,7 +42,7 @@ interface ResumeEntry {
 }
 interface JournalImage { url: string; aiDescription?: string; uploadedAt: string }
 interface JournalEntry {
-  id: string; title: string; company: string; date: string
+  id: string; title: string; company: string; jobTitle?: string; date: string
   template: 'star' | 'free' | 'ai'
   situation?: string; task?: string; action?: string; result?: string
   content?: string
@@ -70,7 +70,7 @@ function todayStr() { return new Date().toISOString().slice(0, 10) }
 function fmtDate(d: string) { try { return new Date(d).toLocaleDateString('zh-TW') } catch { return d } }
 function detectLang(text: string): 'zh' | 'en' { return /[一-鿿]/.test(text) ? 'zh' : 'en' }
 function emptyEntry(): JournalEntry {
-  return { id: '', title: '', company: '', date: todayStr(), template: 'free', content: '', tags: [], images: [], createdAt: '' }
+  return { id: '', title: '', company: '', jobTitle: '', date: todayStr(), template: 'free', content: '', tags: [], images: [], createdAt: '' }
 }
 
 const AI_TOPICS = [
@@ -174,6 +174,7 @@ export default function CareerProfilePage() {
   const [showFilterPanel, setShowFilterPanel] = useState(false)
   const [companyHistory, setCompanyHistory] = useState<string[]>([])
   const [showCompanyDD, setShowCompanyDD] = useState(false)
+  const [showJobTitleDD, setShowJobTitleDD] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
   const [uploadingImg, setUploadingImg] = useState(false)
   const [analyzingImg, setAnalyzingImg] = useState(false)
@@ -189,6 +190,17 @@ export default function CareerProfilePage() {
   const [aiCurrentAnswer, setAiCurrentAnswer] = useState('')
   const [aiGenerating, setAiGenerating] = useState(false)
   const [isListening, setIsListening] = useState(false)
+
+  const jobTitleHistory = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    entries.forEach((e) => {
+      if (e.company && e.jobTitle) {
+        if (!map[e.company]) map[e.company] = []
+        if (!map[e.company].includes(e.jobTitle)) map[e.company].push(e.jobTitle)
+      }
+    })
+    return map
+  }, [entries])
 
   // Init from localStorage
   useEffect(() => {
@@ -834,7 +846,7 @@ export default function CareerProfilePage() {
                           <Badge variant="outline">{entry.template === 'star' ? '⭐ STAR' : entry.template === 'ai' ? '🤖 AI引導' : '📝 自由'}</Badge>
                           {taggingId === entry.id && <span className="text-[10px] text-terra-500 flex items-center gap-1"><Spinner className="h-2.5 w-2.5" />AI 標記中</span>}
                         </div>
-                        <p className="text-xs text-ink-400 mt-0.5">{entry.company && `${entry.company} · `}{fmtDate(entry.date)}</p>
+                        <p className="text-xs text-ink-400 mt-0.5">{entry.company && `${entry.company}`}{entry.jobTitle && ` · ${entry.jobTitle}`}{` · ${fmtDate(entry.date)}`}</p>
                         {entry.tags.length > 0 && <div className="flex flex-wrap gap-1 mt-2">{entry.tags.map((t) => <Badge key={t} variant="terra">{t}</Badge>)}</div>}
                         {entry.images.length > 0 && (
                           <div className="flex gap-2 mt-2">
@@ -895,9 +907,9 @@ export default function CareerProfilePage() {
               ))}
             </div>
 
-            {/* Company + Date */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="relative">
+            {/* Company + JobTitle + Date */}
+            <div className="grid grid-cols-2 sm:grid-cols-10 gap-4">
+              <div className="relative col-span-1 sm:col-span-4">
                 <label className="block text-xs font-medium text-ink-500 mb-1.5">公司</label>
                 <input
                   className="w-full rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
@@ -914,7 +926,24 @@ export default function CareerProfilePage() {
                   </div>
                 )}
               </div>
-              <div>
+              <div className="relative col-span-1 sm:col-span-3">
+                <label className="block text-xs font-medium text-ink-500 mb-1.5">職位</label>
+                <input
+                  className="w-full rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
+                  placeholder="任職職位" value={draft.jobTitle ?? ''}
+                  onChange={(e) => updateDraft('jobTitle', e.target.value)}
+                  onFocus={() => setShowJobTitleDD(true)}
+                  onBlur={() => setTimeout(() => setShowJobTitleDD(false), 150)} />
+                {showJobTitleDD && draft.company && (jobTitleHistory[draft.company] ?? []).length > 0 && (
+                  <div className="absolute top-full mt-1 w-full rounded-xl border border-warm-200 bg-white shadow-[var(--shadow-warm-md)] z-10">
+                    {(jobTitleHistory[draft.company] ?? []).filter((t) => t.toLowerCase().includes((draft.jobTitle ?? '').toLowerCase())).map((t) => (
+                      <button key={t} className="w-full text-left px-3 py-2 text-sm text-ink-600 hover:bg-cream-100 first:rounded-t-xl last:rounded-b-xl"
+                        onClick={() => { updateDraft('jobTitle', t); setShowJobTitleDD(false) }}>{t}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="col-span-2 sm:col-span-3">
                 <label className="block text-xs font-medium text-ink-500 mb-1.5">日期</label>
                 <input type="date" value={draft.date} onChange={(e) => updateDraft('date', e.target.value)}
                   className="w-full rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-800 focus:border-terra-400 focus:outline-none" />
