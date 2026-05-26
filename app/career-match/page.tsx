@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Link from 'next/link'
+import { PageTooltip } from '@/components/onboarding/page-tooltip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ProgressRing } from '@/components/ui/progress-ring'
@@ -748,6 +749,7 @@ export default function ApplicationTrackerPage() {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="p-4 md:p-8 space-y-5">
+      <PageTooltip pageKey="application_tracker" />
       {/* Header */}
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-ink-900">◎ Application Tracker</h1>

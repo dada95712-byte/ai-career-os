@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { ResumeEditor, type SavedResumeData } from '@/components/resume/resume-editor'
+import { PageTooltip } from '@/components/onboarding/page-tooltip'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -432,6 +433,7 @@ export default function CareerProfilePage() {
 
   return (
     <div className="p-4 md:p-8 space-y-5">
+      <PageTooltip pageKey="resume_lab" />
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>

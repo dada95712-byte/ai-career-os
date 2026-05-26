@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { PageTooltip } from '@/components/onboarding/page-tooltip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -698,6 +699,7 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
 
   return (
     <div className="p-4 md:p-8 space-y-5">
+      <PageTooltip pageKey="interviews" />
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-ink-900">⬟ Interview Arena</h1>
         <p className="mt-1 text-sm text-ink-500">AI 模擬面試 · 常見題庫 · 實際面試記錄 · PDF 匯出</p>

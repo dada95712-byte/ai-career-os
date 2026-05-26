@@ -2,11 +2,20 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import { WelcomeModal } from '@/components/onboarding/welcome-modal'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface MoodEntry { date: string; mood: string }
 interface DayPoint  { mood: string | null; dayLabel: string }
+
+interface TaskDef {
+  id: string
+  label: string
+  time: string
+  desc: string
+  href: string
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -35,12 +44,6 @@ const PIPELINE_ITEMS = [
   { company: 'Shopee',      role: 'Frontend Lead', status: 'saved',       daysAgo: 1 },
 ]
 
-const TODAY_TASKS = [
-  { id: 'resume',   label: '上傳或完善履歷',  time: '5 分鐘',  desc: 'AI 評分，找出改善方向', href: '/career-profile' },
-  { id: 'skills',   label: '更新技能庫',      time: '3 分鐘',  desc: '比對職缺，找出技能落差', href: '/dashboard/skills' },
-  { id: 'practice', label: '練習一道面試題',  time: '10 分鐘', desc: 'AI 即時回饋，提升表達力', href: '/interview-prep' },
-]
-
 const SCORE_BREAKDOWN = [
   { label: '履歷',     value: 0,  max: 30, color: '#C97941', note: '尚未上傳',   href: '/career-profile' },
   { label: '技能庫',   value: 10, max: 20, color: '#7FA887', note: '10 項技能',  href: '/dashboard/skills' },
@@ -54,6 +57,75 @@ const QUICK_LINKS = [
   { label: '面試練習', href: '/interview-prep',  symbol: '🎤', bg: '#F2F7F3', border: '#D0E3D2', color: '#5E8F68' },
   { label: '新增職缺', href: '/career-match',    symbol: '＋', bg: '#F3ECE4', border: '#E6DDD2', color: '#8B7B70' },
 ]
+
+// ── Personalized task presets ──────────────────────────────────────────────────
+
+const DEFAULT_TASKS: TaskDef[] = [
+  { id: 'resume',   label: '上傳或完善履歷',  time: '5 分鐘',  desc: 'AI 評分，找出改善方向', href: '/career-profile' },
+  { id: 'skills',   label: '更新技能庫',      time: '3 分鐘',  desc: '比對職缺，找出技能落差', href: '/dashboard/skills' },
+  { id: 'practice', label: '練習一道面試題',  time: '10 分鐘', desc: 'AI 即時回饋，提升表達力', href: '/interview-prep' },
+]
+
+const TASK_PRESETS: Record<string, TaskDef[]> = {
+  'active_search+resume': [
+    { id: 'upload',  label: '上傳履歷 AI 評分', time: '5 分鐘', desc: 'AI 立即評分，找出改善方向', href: '/career-profile' },
+    { id: 'skills',  label: '更新技能庫',        time: '3 分鐘', desc: '確保資料是最新的',         href: '/dashboard/skills' },
+    { id: 'ats',     label: '查看 ATS 報告',     time: '2 分鐘', desc: '了解履歷是否會被過濾',     href: '/career-profile' },
+  ],
+  'active_search+jobs': [
+    { id: 'add_job', label: '新增目標職缺',   time: '5 分鐘', desc: '追蹤求職進度',         href: '/career-match' },
+    { id: 'gap',     label: '技能落差分析',   time: '5 分鐘', desc: '找出需要補強的技能',   href: '/career-growth' },
+    { id: 'skills',  label: '更新技能庫',     time: '3 分鐘', desc: '確保資料是最新的',     href: '/dashboard/skills' },
+  ],
+  'active_search+interview': [
+    { id: 'practice', label: '練習一道面試題',   time: '10 分鐘', desc: 'AI 即時回饋，提升表達力', href: '/interview-prep' },
+    { id: 'gap',      label: '技能落差分析',     time: '5 分鐘',  desc: '找出需要補強的技能',     href: '/career-growth' },
+    { id: 'add_job',  label: '新增目標職缺',     time: '3 分鐘',  desc: '追蹤求職進度',           href: '/career-match' },
+  ],
+  'active_search+skills': [
+    { id: 'gap',      label: '技能落差分析', time: '5 分鐘', desc: '找出需要補強的技能', href: '/career-growth' },
+    { id: 'skills',   label: '更新技能庫',   time: '3 分鐘', desc: '確保資料是最新的',   href: '/dashboard/skills' },
+    { id: 'practice', label: '練習一道面試題', time: '10 分鐘', desc: 'AI 即時回饋', href: '/interview-prep' },
+  ],
+  'passive+resume': [
+    { id: 'resume', label: '更新履歷',       time: '5 分鐘', desc: '保持履歷最新狀態',   href: '/career-profile' },
+    { id: 'gap',    label: '技能落差分析', time: '5 分鐘', desc: '找出市場需要什麼', href: '/career-growth' },
+    { id: 'intel',  label: '查看產業趨勢', time: '3 分鐘', desc: '了解當前就業市場', href: '/career-intelligence' },
+  ],
+  'passive+jobs': [
+    { id: 'intel',   label: '查看產業趨勢', time: '3 分鐘', desc: '了解當前就業市場',   href: '/career-intelligence' },
+    { id: 'gap',     label: '技能落差分析', time: '5 分鐘', desc: '找出市場需要什麼',   href: '/career-growth' },
+    { id: 'add_job', label: '新增目標職缺', time: '5 分鐘', desc: '看看有哪些機會',     href: '/career-match' },
+  ],
+  'passive+interview': [
+    { id: 'practice', label: '練習一道面試題', time: '10 分鐘', desc: 'AI 即時回饋', href: '/interview-prep' },
+    { id: 'gap',      label: '技能落差分析',   time: '5 分鐘',  desc: '找出需要補強的技能', href: '/career-growth' },
+    { id: 'resume',   label: '更新履歷',       time: '5 分鐘',  desc: '保持履歷最新狀態', href: '/career-profile' },
+  ],
+  'passive+skills': [
+    { id: 'gap',    label: '技能落差分析', time: '5 分鐘', desc: '找出市場需要什麼',   href: '/career-growth' },
+    { id: 'skills', label: '更新技能庫',   time: '3 分鐘', desc: '確保資料是最新的',   href: '/dashboard/skills' },
+    { id: 'intel',  label: '查看產業趨勢', time: '3 分鐘', desc: '了解當前就業市場',   href: '/career-intelligence' },
+  ],
+  'just_started': [
+    { id: 'exp',    label: '更新工作經歷', time: '5 分鐘', desc: '記錄新工作的詳細資訊',    href: '/career-profile' },
+    { id: 'gap',    label: '技能落差分析', time: '5 分鐘', desc: '找出需要學習的技能',      href: '/career-growth' },
+    { id: 'journal',label: '記錄工作成果', time: '3 分鐘', desc: '用 STAR 法則記錄亮點',    href: '/career-intelligence' },
+  ],
+  'fresh_grad': [
+    { id: 'build',    label: '建立新鮮人履歷', time: '10 分鐘', desc: '用範本快速建立第一份履歷', href: '/career-profile' },
+    { id: 'skills',   label: '新增技能',        time: '3 分鐘',  desc: '列出你的專業能力',        href: '/dashboard/skills' },
+    { id: 'practice', label: '練習面試',         time: '10 分鐘', desc: 'AI 即時回饋',             href: '/interview-prep' },
+  ],
+}
+
+function getPersonalizedTasks(status: string | null, goal: string | null): TaskDef[] {
+  if (!status) return DEFAULT_TASKS
+  if (status === 'just_started') return TASK_PRESETS['just_started']
+  if (status === 'fresh_grad')   return TASK_PRESETS['fresh_grad']
+  const key = `${status}+${goal}`
+  return TASK_PRESETS[key] ?? DEFAULT_TASKS
+}
 
 // ── Card Wrapper ───────────────────────────────────────────────────────────────
 function Pane({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -153,9 +225,13 @@ function Checkbox({ done, onToggle }: { done: boolean; onToggle: () => void }) {
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export function DashboardClient({ name }: { name: string }) {
-  const [moodLogs,   setMoodLogs]   = useState<MoodEntry[]>([])
-  const [todayMood,  setTodayMood]  = useState<string | null>(null)
-  const [doneTaskIds, setDoneTaskIds] = useState<Set<string>>(new Set())
+  const [moodLogs,     setMoodLogs]     = useState<MoodEntry[]>([])
+  const [todayMood,    setTodayMood]    = useState<string | null>(null)
+  const [doneTaskIds,  setDoneTaskIds]  = useState<Set<string>>(new Set())
+  const [showModal,    setShowModal]    = useState(false)
+  const [onbStatus,    setOnbStatus]    = useState<string | null>(null)
+  const [onbGoal,      setOnbGoal]      = useState<string | null>(null)
+  const [celebVisible, setCelebVisible] = useState(false)
 
   const todayKey = new Date().toISOString().split('T')[0]
 
@@ -173,7 +249,40 @@ export function DashboardClient({ name }: { name: string }) {
       const rawDone = localStorage.getItem(`dashboard-done-${todayKey}`)
       if (rawDone) setDoneTaskIds(new Set(JSON.parse(rawDone)))
     } catch { /* ignore */ }
+
+    const completed = localStorage.getItem('onboarding_completed')
+    if (!completed) {
+      setShowModal(true)
+    } else {
+      setOnbStatus(localStorage.getItem('onboarding_status'))
+      setOnbGoal(localStorage.getItem('onboarding_goal'))
+    }
   }, [todayKey])
+
+  function handleOnboardingComplete(status: string, goal: string) {
+    localStorage.setItem('onboarding_completed', 'true')
+    localStorage.setItem('onboarding_status', status)
+    localStorage.setItem('onboarding_goal', goal)
+    setOnbStatus(status)
+    setOnbGoal(goal)
+    setShowModal(false)
+  }
+
+  function handleOnboardingSkip() {
+    localStorage.setItem('onboarding_completed', 'true')
+    setShowModal(false)
+  }
+
+  function openGuide() {
+    localStorage.removeItem('onboarding_completed')
+    localStorage.removeItem('onboarding_status')
+    localStorage.removeItem('onboarding_goal')
+    const keys = Object.keys(localStorage).filter(k => k.startsWith('tooltip_seen_'))
+    keys.forEach(k => localStorage.removeItem(k))
+    setOnbStatus(null)
+    setOnbGoal(null)
+    setShowModal(true)
+  }
 
   function recordMood(mood: string) {
     const updated = [...moodLogs.filter(l => l.date !== todayKey), { date: todayKey, mood }]
@@ -182,11 +291,21 @@ export function DashboardClient({ name }: { name: string }) {
     localStorage.setItem('career-mood-logs', JSON.stringify(updated))
   }
 
+  const todayTasks = useMemo(
+    () => getPersonalizedTasks(onbStatus, onbGoal),
+    [onbStatus, onbGoal]
+  )
+
   function toggleTask(id: string) {
     setDoneTaskIds(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
       localStorage.setItem(`dashboard-done-${todayKey}`, JSON.stringify([...next]))
+      const allDone = todayTasks.every(t => next.has(t.id))
+      if (allDone && !prev.has(id)) {
+        setCelebVisible(true)
+        setTimeout(() => setCelebVisible(false), 6000)
+      }
       return next
     })
   }
@@ -204,7 +323,8 @@ export function DashboardClient({ name }: { name: string }) {
 
   const totalScore    = SCORE_BREAKDOWN.reduce((s, b) => s + b.value, 0)
   const completedCount = doneTaskIds.size
-  const totalTasks    = TODAY_TASKS.length
+  const totalTasks    = todayTasks.length
+  const allTasksDone  = completedCount >= totalTasks && totalTasks > 0
 
   const hour     = new Date().getHours()
   const greeting = hour < 5 ? '深夜好' : hour < 12 ? '早安' : hour < 18 ? '午安' : '晚安'
@@ -218,247 +338,289 @@ export function DashboardClient({ name }: { name: string }) {
     : totalScore < 40 ? '/dashboard/skills' : '/interview-prep'
 
   return (
-    <div className="min-h-screen space-y-5 p-5 lg:p-8" style={{ background: '#F7F3EE' }}>
+    <>
+      {showModal && (
+        <WelcomeModal
+          userName={name}
+          onComplete={handleOnboardingComplete}
+          onSkip={handleOnboardingSkip}
+        />
+      )}
 
-      {/* ── HERO ───────────────────────────────────────────────────────────── */}
-      <Pane className="!p-6">
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-xs font-medium" style={{ color: '#C4B0A2' }}>{dateLabel}</p>
-            <h1 className="mt-1 text-[1.6rem] font-bold leading-tight tracking-tight" style={{ color: '#4B4038' }}>
-              {greeting}，{name}
-            </h1>
-            <p className="mt-1 text-sm" style={{ color: '#9E8E84' }}>
-              {todayMood
-                ? `今天心情：${MOODS.find(m => m.key === todayMood)?.emoji}  ${MOODS.find(m => m.key === todayMood)?.label}`
-                : '今天想在職涯上做什麼？'}
+      <div className="min-h-screen space-y-5 p-5 lg:p-8" style={{ background: '#F7F3EE' }}>
+
+        {/* ── CELEBRATION BANNER ─────────────────────────────────────────────── */}
+        {celebVisible && (
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #FBF2EA 0%, #F5F8F0 100%)',
+              border: '1px solid #D8C8B8',
+              borderRadius: 16,
+              padding: '14px 20px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              animation: 'fadeIn 0.4s ease',
+            }}
+          >
+            <span style={{ fontSize: 22 }}>🎉</span>
+            <p style={{ fontSize: 13, color: '#4B4038', fontWeight: 500 }}>
+              今日任務全部完成！Career Score 已更新，明天繼續保持！
             </p>
-          </div>
-
-          {/* Quick actions */}
-          <div className="flex gap-2 flex-wrap">
-            {QUICK_LINKS.map((q) => (
-              <Link key={q.href} href={q.href}
-                className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-opacity hover:opacity-75"
-                style={{ background: q.bg, border: `1px solid ${q.border}`, color: q.color }}>
-                <span>{q.symbol}</span>{q.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* Progress hint */}
-        {completedCount > 0 && (
-          <div className="mt-5 flex items-center gap-3">
-            <div className="flex-1 h-[3px] rounded-full" style={{ background: '#EDE5DB' }}>
-              <div className="h-[3px] rounded-full" style={{
-                background: '#C97941',
-                width: `${(completedCount / totalTasks) * 100}%`,
-                transition: 'width 0.4s ease',
-              }} />
-            </div>
-            <span className="text-[11px] shrink-0" style={{ color: '#C4B0A2' }}>
-              今日 {completedCount}/{totalTasks} 完成
-            </span>
           </div>
         )}
-      </Pane>
 
-      {/* ── CAREER SNAPSHOT  +  TODAY PROGRESS ────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-
-        {/* Career Snapshot — 3/5 */}
-        <Pane className="lg:col-span-3">
-          <SectionLabel>Career Score</SectionLabel>
-
-          {/* Score header */}
-          <div className="flex items-start justify-between mb-5">
+        {/* ── HERO ───────────────────────────────────────────────────────────── */}
+        <Pane className="!p-6">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
-              <div className="flex items-end gap-2">
-                <span className="text-5xl font-bold leading-none" style={{ color: '#4B4038' }}>{totalScore}</span>
-                <span className="text-lg mb-1 font-light" style={{ color: '#C4B8B2' }}>/100</span>
-              </div>
-              <p className="text-xs mt-2" style={{ color: '#9E8E84' }}>
-                {totalScore < 20 ? '剛起步，每一步都算數'
-                  : totalScore < 50 ? '穩定進行中，繼續保持'
-                  : totalScore < 75 ? '表現不錯，快衝刺了！'
-                  : '非常棒，接近完整狀態'}
+              <p className="text-xs font-medium" style={{ color: '#C4B0A2' }}>{dateLabel}</p>
+              <h1 className="mt-1 text-[1.6rem] font-bold leading-tight tracking-tight" style={{ color: '#4B4038' }}>
+                {greeting}，{name}
+              </h1>
+              <p className="mt-1 text-sm" style={{ color: '#9E8E84' }}>
+                {todayMood
+                  ? `今天心情：${MOODS.find(m => m.key === todayMood)?.emoji}  ${MOODS.find(m => m.key === todayMood)?.label}`
+                  : '今天想在職涯上做什麼？'}
               </p>
             </div>
-            <ScoreRing score={totalScore} size={76} />
+
+            <div className="flex flex-col items-end gap-2">
+              {/* Guide button */}
+              <button
+                onClick={openGuide}
+                className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-opacity hover:opacity-75"
+                style={{ background: '#F3ECE4', border: '1px solid #E6DDD2', color: '#9E8E84' }}
+              >
+                📖 查看使用指引
+              </button>
+
+              {/* Quick actions */}
+              <div className="flex gap-2 flex-wrap justify-end">
+                {QUICK_LINKS.map((q) => (
+                  <Link key={q.href} href={q.href}
+                    className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-opacity hover:opacity-75"
+                    style={{ background: q.bg, border: `1px solid ${q.border}`, color: q.color }}>
+                    <span>{q.symbol}</span>{q.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
           </div>
 
-          {/* Breakdown */}
-          <div className="space-y-3.5">
-            {SCORE_BREAKDOWN.map((b) => {
-              const pct = Math.round((b.value / b.max) * 100)
-              return (
-                <Link key={b.label} href={b.href} className="block group">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-medium" style={{ color: '#6B5E56' }}>{b.label}</span>
-                    <span className="text-[11px]" style={{ color: '#C4B8B2' }}>{b.note}</span>
-                  </div>
-                  <div className="h-[5px] rounded-full" style={{ background: '#EDE5DB' }}>
-                    <div className="h-[5px] rounded-full transition-all duration-500 group-hover:opacity-70"
-                      style={{ width: `${pct || 2}%`, background: b.color }} />
-                  </div>
-                </Link>
-              )
-            })}
-          </div>
-
-          {/* Next step */}
-          <div className="mt-5 pt-4" style={{ borderTop: '1px solid #EDE5DB' }}>
-            <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: '#C4B0A2' }}>本週建議</p>
-            <p className="text-sm leading-relaxed" style={{ color: '#4B4038' }}>{nextStepText}</p>
-            <Link href={nextStepHref}
-              className="inline-flex items-center gap-1 text-xs font-medium mt-2 transition-opacity hover:opacity-70"
-              style={{ color: '#C97941' }}>
-              開始 →
-            </Link>
-          </div>
-        </Pane>
-
-        {/* Today Progress — 2/5 */}
-        <Pane className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <SectionLabel>今日進度</SectionLabel>
-            <span className="text-[11px] px-2 py-0.5 rounded-full -mt-4"
-              style={{ background: '#F3ECE4', color: '#9E8E84' }}>
-              {completedCount}/{totalTasks}
-            </span>
-          </div>
-
-          <div className="space-y-2">
-            {TODAY_TASKS.map((task) => {
-              const done = doneTaskIds.has(task.id)
-              return (
-                <div key={task.id} className="flex items-start gap-3 rounded-xl p-3 transition-colors"
-                  style={{ background: done ? '#F5F0EB' : '#FAF7F4' }}>
-                  <Checkbox done={done} onToggle={() => toggleTask(task.id)} />
-                  <div className="flex-1 min-w-0">
-                    <Link href={task.href} className="block transition-opacity hover:opacity-70">
-                      <p className="text-sm font-medium"
-                        style={{ color: done ? '#B8A890' : '#4B4038', textDecoration: done ? 'line-through' : 'none' }}>
-                        {task.label}
-                      </p>
-                    </Link>
-                    {!done && <p className="text-xs mt-0.5" style={{ color: '#B8A890' }}>{task.desc}</p>}
-                  </div>
-                  <span className="text-[10px] shrink-0 pt-0.5" style={{ color: '#D4C4B8' }}>{task.time}</span>
-                </div>
-              )
-            })}
-          </div>
-
-          {/* Gentle note */}
-          <div className="mt-4 rounded-xl px-3 py-3"
-            style={{ background: showEncouragement ? '#FBF5F0' : '#F5F8F5', border: `1px solid ${showEncouragement ? '#EDD8CC' : '#D8EAD8'}` }}>
-            <p className="text-xs leading-relaxed" style={{ color: showEncouragement ? '#A07060' : '#6A9470' }}>
-              {showEncouragement
-                ? '求職是需要時間的旅程，放慢腳步也沒關係。你已經很努力了 🤗'
-                : '完成今日任務，Career Score 會自動更新，AI 建議也會更精準。'}
-            </p>
-          </div>
-        </Pane>
-      </div>
-
-      {/* ── STATS ROW ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: '本週投遞', value: '2',  sub: '較上週 +1',  color: '#C97941' },
-          { label: 'ATS 平均', value: '—',  sub: '上傳後顯示', color: '#B8A090' },
-          { label: '面試邀請', value: '1',  sub: '進行中',     color: '#7FA887' },
-          { label: '今日完成', value: `${completedCount}`, sub: `共 ${totalTasks} 項`, color: '#D4A25A' },
-        ].map((s) => (
-          <div key={s.label} className="rounded-2xl px-4 py-3.5"
-            style={{ background: '#FFFDFC', border: '1px solid #E6DDD2', boxShadow: '0 1px 3px rgba(100,70,40,0.05)' }}>
-            <p className="text-[1.6rem] font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
-            <p className="text-xs font-medium mt-1.5" style={{ color: '#6B5E56' }}>{s.label}</p>
-            <p className="text-[10px] mt-0.5" style={{ color: '#C4B8B2' }}>{s.sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* ── PIPELINE  +  MOOD ──────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
-
-        {/* Job Pipeline — 2/3 */}
-        <Pane className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <SectionLabel>求職追蹤</SectionLabel>
-            <Link href="/career-match" className="text-[11px] font-medium -mt-4 transition-opacity hover:opacity-70"
-              style={{ color: '#C97941' }}>
-              全部 →
-            </Link>
-          </div>
-          <div className="space-y-1.5">
-            {PIPELINE_ITEMS.map((item, i) => {
-              const cfg = STATUS_CFG[item.status] ?? STATUS_CFG.saved
-              return (
-                <Link key={i} href="/career-match"
-                  className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors"
-                  style={{ background: '#FAF7F4' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#F3ECE4')}
-                  onMouseLeave={e => (e.currentTarget.style.background = '#FAF7F4')}>
-                  <div className={`h-2 w-2 rounded-full shrink-0 ${cfg.dot}`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate" style={{ color: '#4B4038' }}>{item.company}</p>
-                    <p className="text-xs truncate" style={{ color: '#9E8E84' }}>{item.role}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className={`text-xs font-medium ${cfg.textColor}`}>{cfg.label}</p>
-                    <p className="text-[10px] mt-0.5" style={{ color: '#C4B8B2' }}>
-                      {item.daysAgo === 0 ? '今天' : `${item.daysAgo} 天前`}
-                    </p>
-                  </div>
-                </Link>
-              )
-            })}
-            <Link href="/career-match"
-              className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-colors mt-1"
-              style={{ background: '#F3ECE4', color: '#9E8E84' }}
-              onMouseEnter={e => (e.currentTarget.style.background = '#EAE0D4')}
-              onMouseLeave={e => (e.currentTarget.style.background = '#F3ECE4')}>
-              ＋ 新增職缺
-            </Link>
-          </div>
-        </Pane>
-
-        {/* Mood — 1/3 */}
-        <Pane>
-          <div className="flex items-center justify-between mb-4">
-            <SectionLabel>今日心情</SectionLabel>
-            {todayMood && (
-              <span className="text-[11px] -mt-4" style={{ color: '#C4B8B2' }}>
-                {MOODS.find(m => m.key === todayMood)?.emoji} 已記錄
+          {/* Progress hint */}
+          {completedCount > 0 && (
+            <div className="mt-5 flex items-center gap-3">
+              <div className="flex-1 h-[3px] rounded-full" style={{ background: '#EDE5DB' }}>
+                <div className="h-[3px] rounded-full" style={{
+                  background: allTasksDone ? '#7FA887' : '#C97941',
+                  width: `${(completedCount / totalTasks) * 100}%`,
+                  transition: 'width 0.4s ease',
+                }} />
+              </div>
+              <span className="text-[11px] shrink-0" style={{ color: allTasksDone ? '#7FA887' : '#C4B0A2' }}>
+                {allTasksDone ? '✓ 今日全部完成' : `今日 ${completedCount}/${totalTasks} 完成`}
               </span>
-            )}
-          </div>
-          <div className="flex flex-wrap gap-1.5 mb-5">
-            {MOODS.map((m) => {
-              const active = todayMood === m.key
-              return (
-                <button key={m.key} type="button" onClick={() => recordMood(m.key)}
-                  className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-all"
-                  style={{
-                    border: `1px solid ${active ? '#C97941' : '#E6DDD2'}`,
-                    background: active ? '#FBF2EA' : '#FAF7F4',
-                    color: active ? '#C97941' : '#9E8E84',
-                    fontWeight: active ? 500 : 400,
-                  }}>
-                  <span>{m.emoji}</span>
-                  <span className="hidden sm:inline lg:hidden xl:inline">{m.label}</span>
-                </button>
-              )
-            })}
-          </div>
-          <p className="text-[10px] mb-2" style={{ color: '#C4B8B2' }}>7 天情緒趨勢</p>
-          <div className="overflow-x-auto">
-            <MoodSparkline days={last7Days} />
-          </div>
+            </div>
+          )}
         </Pane>
+
+        {/* ── CAREER SNAPSHOT  +  TODAY PROGRESS ────────────────────────────── */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+
+          {/* Career Snapshot — 3/5 */}
+          <Pane className="lg:col-span-3">
+            <SectionLabel>Career Score</SectionLabel>
+
+            {/* Score header */}
+            <div className="flex items-start justify-between mb-5">
+              <div>
+                <div className="flex items-end gap-2">
+                  <span className="text-5xl font-bold leading-none" style={{ color: '#4B4038' }}>{totalScore}</span>
+                  <span className="text-lg mb-1 font-light" style={{ color: '#C4B8B2' }}>/100</span>
+                </div>
+                <p className="text-xs mt-2" style={{ color: '#9E8E84' }}>
+                  {totalScore < 20 ? '剛起步，每一步都算數'
+                    : totalScore < 50 ? '穩定進行中，繼續保持'
+                    : totalScore < 75 ? '表現不錯，快衝刺了！'
+                    : '非常棒，接近完整狀態'}
+                </p>
+              </div>
+              <ScoreRing score={totalScore} size={76} />
+            </div>
+
+            {/* Breakdown */}
+            <div className="space-y-3.5">
+              {SCORE_BREAKDOWN.map((b) => {
+                const pct = Math.round((b.value / b.max) * 100)
+                return (
+                  <Link key={b.label} href={b.href} className="block group">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-medium" style={{ color: '#6B5E56' }}>{b.label}</span>
+                      <span className="text-[11px]" style={{ color: '#C4B8B2' }}>{b.note}</span>
+                    </div>
+                    <div className="h-[5px] rounded-full" style={{ background: '#EDE5DB' }}>
+                      <div className="h-[5px] rounded-full transition-all duration-500 group-hover:opacity-70"
+                        style={{ width: `${pct || 2}%`, background: b.color }} />
+                    </div>
+                  </Link>
+                )
+              })}
+            </div>
+
+            {/* Next step */}
+            <div className="mt-5 pt-4" style={{ borderTop: '1px solid #EDE5DB' }}>
+              <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: '#C4B0A2' }}>本週建議</p>
+              <p className="text-sm leading-relaxed" style={{ color: '#4B4038' }}>{nextStepText}</p>
+              <Link href={nextStepHref}
+                className="inline-flex items-center gap-1 text-xs font-medium mt-2 transition-opacity hover:opacity-70"
+                style={{ color: '#C97941' }}>
+                開始 →
+              </Link>
+            </div>
+          </Pane>
+
+          {/* Today Progress — 2/5 */}
+          <Pane className="lg:col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <SectionLabel>今日進度</SectionLabel>
+              <span className="text-[11px] px-2 py-0.5 rounded-full -mt-4"
+                style={{ background: allTasksDone ? '#EBF4ED' : '#F3ECE4', color: allTasksDone ? '#5E8F68' : '#9E8E84' }}>
+                {completedCount}/{totalTasks}
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {todayTasks.map((task) => {
+                const done = doneTaskIds.has(task.id)
+                return (
+                  <div key={task.id} className="flex items-start gap-3 rounded-xl p-3 transition-colors"
+                    style={{ background: done ? '#F5F0EB' : '#FAF7F4' }}>
+                    <Checkbox done={done} onToggle={() => toggleTask(task.id)} />
+                    <div className="flex-1 min-w-0">
+                      <Link href={task.href} className="block transition-opacity hover:opacity-70">
+                        <p className="text-sm font-medium"
+                          style={{ color: done ? '#B8A890' : '#4B4038', textDecoration: done ? 'line-through' : 'none' }}>
+                          {task.label}
+                        </p>
+                      </Link>
+                      {!done && <p className="text-xs mt-0.5" style={{ color: '#B8A890' }}>{task.desc}</p>}
+                    </div>
+                    <span className="text-[10px] shrink-0 pt-0.5" style={{ color: '#D4C4B8' }}>{task.time}</span>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Gentle note */}
+            <div className="mt-4 rounded-xl px-3 py-3"
+              style={{ background: showEncouragement ? '#FBF5F0' : '#F5F8F5', border: `1px solid ${showEncouragement ? '#EDD8CC' : '#D8EAD8'}` }}>
+              <p className="text-xs leading-relaxed" style={{ color: showEncouragement ? '#A07060' : '#6A9470' }}>
+                {showEncouragement
+                  ? '求職是需要時間的旅程，放慢腳步也沒關係。你已經很努力了 🤗'
+                  : '完成今日任務，Career Score 會自動更新，AI 建議也會更精準。'}
+              </p>
+            </div>
+          </Pane>
+        </div>
+
+        {/* ── STATS ROW ──────────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: '本週投遞', value: '2',  sub: '較上週 +1',  color: '#C97941' },
+            { label: 'ATS 平均', value: '—',  sub: '上傳後顯示', color: '#B8A090' },
+            { label: '面試邀請', value: '1',  sub: '進行中',     color: '#7FA887' },
+            { label: '今日完成', value: `${completedCount}`, sub: `共 ${totalTasks} 項`, color: '#D4A25A' },
+          ].map((s) => (
+            <div key={s.label} className="rounded-2xl px-4 py-3.5"
+              style={{ background: '#FFFDFC', border: '1px solid #E6DDD2', boxShadow: '0 1px 3px rgba(100,70,40,0.05)' }}>
+              <p className="text-[1.6rem] font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
+              <p className="text-xs font-medium mt-1.5" style={{ color: '#6B5E56' }}>{s.label}</p>
+              <p className="text-[10px] mt-0.5" style={{ color: '#C4B8B2' }}>{s.sub}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* ── PIPELINE  +  MOOD ──────────────────────────────────────────────── */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+
+          {/* Job Pipeline — 2/3 */}
+          <Pane className="lg:col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <SectionLabel>求職追蹤</SectionLabel>
+              <Link href="/career-match" className="text-[11px] font-medium -mt-4 transition-opacity hover:opacity-70"
+                style={{ color: '#C97941' }}>
+                全部 →
+              </Link>
+            </div>
+            <div className="space-y-1.5">
+              {PIPELINE_ITEMS.map((item, i) => {
+                const cfg = STATUS_CFG[item.status] ?? STATUS_CFG.saved
+                return (
+                  <Link key={i} href="/career-match"
+                    className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors"
+                    style={{ background: '#FAF7F4' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#F3ECE4')}
+                    onMouseLeave={e => (e.currentTarget.style.background = '#FAF7F4')}>
+                    <div className={`h-2 w-2 rounded-full shrink-0 ${cfg.dot}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: '#4B4038' }}>{item.company}</p>
+                      <p className="text-xs truncate" style={{ color: '#9E8E84' }}>{item.role}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`text-xs font-medium ${cfg.textColor}`}>{cfg.label}</p>
+                      <p className="text-[10px] mt-0.5" style={{ color: '#C4B8B2' }}>
+                        {item.daysAgo === 0 ? '今天' : `${item.daysAgo} 天前`}
+                      </p>
+                    </div>
+                  </Link>
+                )
+              })}
+              <Link href="/career-match"
+                className="flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-medium transition-colors mt-1"
+                style={{ background: '#F3ECE4', color: '#9E8E84' }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#EAE0D4')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#F3ECE4')}>
+                ＋ 新增職缺
+              </Link>
+            </div>
+          </Pane>
+
+          {/* Mood — 1/3 */}
+          <Pane>
+            <div className="flex items-center justify-between mb-4">
+              <SectionLabel>今日心情</SectionLabel>
+              {todayMood && (
+                <span className="text-[11px] -mt-4" style={{ color: '#C4B8B2' }}>
+                  {MOODS.find(m => m.key === todayMood)?.emoji} 已記錄
+                </span>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5 mb-5">
+              {MOODS.map((m) => {
+                const active = todayMood === m.key
+                return (
+                  <button key={m.key} type="button" onClick={() => recordMood(m.key)}
+                    className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-all"
+                    style={{
+                      border: `1px solid ${active ? '#C97941' : '#E6DDD2'}`,
+                      background: active ? '#FBF2EA' : '#FAF7F4',
+                      color: active ? '#C97941' : '#9E8E84',
+                      fontWeight: active ? 500 : 400,
+                    }}>
+                    <span>{m.emoji}</span>
+                    <span className="hidden sm:inline lg:hidden xl:inline">{m.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-[10px] mb-2" style={{ color: '#C4B8B2' }}>7 天情緒趨勢</p>
+            <div className="overflow-x-auto">
+              <MoodSparkline days={last7Days} />
+            </div>
+          </Pane>
+        </div>
       </div>
-    </div>
+    </>
   )
 }

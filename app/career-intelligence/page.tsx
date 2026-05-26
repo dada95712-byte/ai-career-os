@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { PageTooltip } from '@/components/onboarding/page-tooltip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -125,6 +126,7 @@ export default function CareerIntelligencePage() {
 
   return (
     <div className="p-4 md:p-8 space-y-5">
+      <PageTooltip pageKey="analytics" />
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-ink-900">◉ Analytics</h1>
         <p className="mt-1 text-sm text-ink-500">薪資行情 · 產業趨勢 · 公司分析 · 求職儀表板</p>

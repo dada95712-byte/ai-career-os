@@ -19,6 +19,8 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  onboardingCompleted Boolean @default(false)
+
   accounts        Account[]
   sessions        Session[]
   resumes         Resume[]
@@ -30,6 +32,7 @@ model User {
   chatSessions      ChatSession[]
   interviewSessions InterviewSession[]
   workJournals      WorkJournal[]
+  dailyProgress     DailyProgress[]
 }
 
 model Account {
@@ -182,6 +185,18 @@ model InterviewSession {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model DailyProgress {
+  id        String   @id @default(cuid())
+  userId    String
+  date      String
+  taskIds   Json     @default("[]")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
 }
 
 model WorkJournal {

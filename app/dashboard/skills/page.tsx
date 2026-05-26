@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { PageTooltip } from '@/components/onboarding/page-tooltip'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -342,7 +343,7 @@ ${skills.map((s) => `${s.name}（${s.category}）`).join('、')}
 
   return (
     <div className="p-4 md:p-8 space-y-5">
-
+      <PageTooltip pageKey="skills" />
       {/* ── Header ── */}
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-ink-900">⚡ 我的技能庫</h1>

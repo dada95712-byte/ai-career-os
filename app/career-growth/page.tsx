@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import { PageTooltip } from '@/components/onboarding/page-tooltip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -201,6 +202,7 @@ export default function CareerGrowthPage() {
 
   return (
     <div className="p-4 md:p-8 space-y-5">
+      <PageTooltip pageKey="skill_map" />
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-ink-900">◈ Skill Map</h1>
         <p className="mt-1 text-sm text-ink-500">技能落差分析 · 個人化學習路徑 · AI 職涯教練</p>
