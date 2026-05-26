@@ -11,6 +11,7 @@ const BOTTOM_NAV = [
   { href: '/career-growth',        icon: '🌱', label: '技能' },
   { href: '/interview-prep',       icon: '💬', label: '面試' },
   { href: '/career-intelligence',  icon: '📊', label: '分析' },
+  { href: '/profile-library',      icon: '👤', label: '檔案庫' },
 ]
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
