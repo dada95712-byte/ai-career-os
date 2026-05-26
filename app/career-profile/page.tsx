@@ -574,34 +574,27 @@ export default function CareerProfilePage() {
                 <p className="text-sm text-ink-500 mt-1">選擇一種方式開始</p>
               </div>
 
-              {/* Three entry cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Card 1: Upload */}
-                <button className={entryCardCls(createMode === 'upload')} onClick={() => { setCreateMode('upload'); setResumeError('') }}>
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-terra-50 border border-terra-100 text-2xl">↑</div>
-                  <div>
-                    <p className="font-semibold text-ink-800 text-sm">上傳您的履歷</p>
-                    <p className="text-xs text-ink-400 mt-1 leading-relaxed">自動解析並最佳化<br/>支援 PDF、DOC、DOCX</p>
-                  </div>
-                </button>
+              {/* Two entry cards */}
+              <div className="flex justify-center">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full" style={{ maxWidth: '832px' }}>
+                  {/* Card 1: Upload */}
+                  <button className={entryCardCls(createMode === 'upload')} onClick={() => { setCreateMode('upload'); setResumeError('') }}>
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-terra-50 border border-terra-100 text-2xl">↑</div>
+                    <div>
+                      <p className="font-semibold text-ink-800 text-sm">上傳履歷</p>
+                      <p className="text-xs text-ink-400 mt-1 leading-relaxed">自動解析並最佳化<br/>支援 PDF、DOC、DOCX</p>
+                    </div>
+                  </button>
 
-                {/* Card 2: LinkedIn */}
-                <button className={entryCardCls(createMode === 'linkedin')} onClick={() => { setCreateMode('linkedin'); setResumeError(''); setLinkedinStep(1) }}>
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 border border-blue-100 text-xl font-bold text-blue-600">in</div>
-                  <div>
-                    <p className="font-semibold text-ink-800 text-sm">從 LinkedIn 匯入</p>
-                    <p className="text-xs text-ink-400 mt-1 leading-relaxed">輸入 LinkedIn 個人頁連結<br/>AI 自動解析個人資料</p>
-                  </div>
-                </button>
-
-                {/* Card 3: Template */}
-                <button className={entryCardCls(createMode === 'template')} onClick={() => { setCreateMode('template'); setResumeError('') }}>
-                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-honey-50 border border-amber-100 text-2xl">📄</div>
-                  <div>
-                    <p className="font-semibold text-ink-800 text-sm">使用範本</p>
-                    <p className="text-xs text-ink-400 mt-1 leading-relaxed">從 5 種範本中選擇開始<br/>快速建立客製履歷</p>
-                  </div>
-                </button>
+                  {/* Card 2: Template */}
+                  <button className={entryCardCls(createMode === 'template')} onClick={() => { setCreateMode('template'); setResumeError('') }}>
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-honey-50 border border-amber-100 text-2xl">📄</div>
+                    <div>
+                      <p className="font-semibold text-ink-800 text-sm">建立履歷</p>
+                      <p className="text-xs text-ink-400 mt-1 leading-relaxed">選擇範本，快速建立你的履歷</p>
+                    </div>
+                  </button>
+                </div>
               </div>
 
               {/* ── Upload expanded ── */}
@@ -622,47 +615,6 @@ export default function CareerProfilePage() {
                     <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="hidden"
                       onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
                     {resumeError && <p className="text-sm text-red-400">{resumeError}</p>}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* ── LinkedIn expanded ── */}
-              {createMode === 'linkedin' && (
-                <Card>
-                  <CardContent className="pt-5 space-y-4">
-                    {linkedinStep === 1 ? (
-                      <>
-                        <div>
-                          <label className="block text-xs text-ink-400 mb-1.5">LinkedIn 個人頁網址</label>
-                          <input
-                            className="w-full rounded-xl border border-warm-300 bg-cream-100 px-4 py-2.5 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
-                            placeholder="linkedin.com/in/username"
-                            value={linkedinUrl}
-                            onChange={(e) => setLinkedinUrl(e.target.value)} />
-                        </div>
-                        <div className="rounded-xl bg-blue-50 border border-blue-100 px-4 py-3 text-xs text-blue-600 leading-relaxed">
-                          <p className="font-medium mb-1">如何匯入 LinkedIn 資料</p>
-                          <p>由於 LinkedIn 隱私限制，請前往你的 LinkedIn 個人頁，複製所有文字（Ctrl+A → Ctrl+C），貼到下一步的欄位中，AI 將自動解析為結構化履歷。</p>
-                        </div>
-                        <Button variant="primary" onClick={() => setLinkedinStep(2)}>
-                          下一步：貼上個人資料 →
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => setLinkedinStep(1)} className="text-xs text-ink-400 hover:text-ink-600">← 上一步</button>
-                        <Textarea
-                          label="貼上 LinkedIn 個人資料文字"
-                          placeholder="前往你的 LinkedIn 個人頁，選取所有文字（Ctrl+A），複製後貼到此處..."
-                          rows={8}
-                          value={linkedinText}
-                          onChange={(e) => setLinkedinText(e.target.value)} />
-                        {resumeError && <p className="text-sm text-red-400">{resumeError}</p>}
-                        <Button variant="primary" onClick={handleLinkedinImport} loading={linkedinParsing} disabled={!linkedinText.trim()}>
-                          匯入個人資料
-                        </Button>
-                      </>
-                    )}
                   </CardContent>
                 </Card>
               )}
