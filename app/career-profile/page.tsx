@@ -425,7 +425,7 @@ export default function CareerProfilePage() {
 
   // ── Card variant helper ───────────────────────────────────────────────────────
   const entryCardCls = (active: boolean) =>
-    `flex flex-col items-center gap-4 rounded-2xl border-2 p-6 sm:p-8 cursor-pointer transition-all text-center ${
+    `flex flex-col items-center gap-3 rounded-2xl border-2 py-5 px-5 cursor-pointer transition-all text-center ${
       active ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-terra-300 hover:bg-terra-50/50'
     }`
 
@@ -581,19 +581,19 @@ export default function CareerProfilePage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full" style={{ maxWidth: '832px' }}>
                   {/* Card 1: Upload */}
                   <button className={entryCardCls(createMode === 'upload')} onClick={() => { setCreateMode('upload'); setResumeError('') }}>
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-terra-50 border border-terra-100 text-2xl">↑</div>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-terra-50 border border-terra-100 text-xl">↑</div>
                     <div>
                       <p className="font-semibold text-ink-800 text-sm">上傳履歷</p>
                       <p className="text-xs text-ink-400 mt-1 leading-relaxed">自動解析並最佳化<br/>支援 PDF、DOC、DOCX</p>
                     </div>
                   </button>
 
-                  {/* Card 2: Template */}
-                  <button className={entryCardCls(createMode === 'template')} onClick={() => { setCreateMode('template'); setResumeError('') }}>
-                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-honey-50 border border-amber-100 text-2xl">📄</div>
+                  {/* Card 2: Manual build */}
+                  <button className={entryCardCls(false)} onClick={() => goToEditor(EMPTY_RESUME, '新履歷', 'manual')}>
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-honey-50 border border-amber-100 text-xl">📄</div>
                     <div>
                       <p className="font-semibold text-ink-800 text-sm">建立履歷</p>
-                      <p className="text-xs text-ink-400 mt-1 leading-relaxed">選擇範本，快速建立你的履歷</p>
+                      <p className="text-xs text-ink-400 mt-1 leading-relaxed">從空白開始，自由填寫你的履歷</p>
                     </div>
                   </button>
                 </div>
@@ -621,33 +621,6 @@ export default function CareerProfilePage() {
                 </Card>
               )}
 
-              {/* ── Template expanded ── */}
-              {createMode === 'template' && (
-                <Card>
-                  <CardContent className="pt-5 space-y-4">
-                    <div>
-                      <label className="block text-xs text-ink-400 mb-1.5">選擇範本</label>
-                      <select
-                        value={selectedTemplateId}
-                        onChange={(e) => setSelectedTemplateId(e.target.value)}
-                        className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2.5 text-sm text-ink-700 focus:border-terra-400 focus:outline-none">
-                        <option value="">— 選擇適合你的範本 —</option>
-                        {RESUME_TEMPLATES.map((t) => (
-                          <option key={t.id} value={t.id}>{t.emoji} {t.label} · {t.desc}</option>
-                        ))}
-                      </select>
-                    </div>
-                    {selectedTemplateId && (
-                      <div className="rounded-xl bg-cream-200 px-4 py-3 text-xs text-ink-500">
-                        {RESUME_TEMPLATES.find((t) => t.id === selectedTemplateId)?.desc}
-                      </div>
-                    )}
-                    <Button variant="primary" disabled={!selectedTemplateId} onClick={applyTemplate}>
-                      使用此範本開始 →
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
             </div>
           )}
 
