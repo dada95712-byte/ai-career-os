@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callAI } from '@/lib/ai-client'
+import { extractJSON } from '@/lib/extract-json'
 
 async function parsePDF(buffer: Buffer): Promise<string> {
   const PDFParser = (await import('pdf2json')).default
@@ -57,12 +58,8 @@ ${rawText.slice(0, 4000)}
 Return ONLY valid JSON, no other text.`
 
     const aiResponse = await callAI(prompt)
-    const jsonMatch = aiResponse.match(/\{[\s\S]*\}/)
     let parsed: Record<string, unknown> = {}
-
-    if (jsonMatch) {
-      try { parsed = JSON.parse(jsonMatch[0]) } catch { parsed = {} }
-    }
+    try { parsed = extractJSON<Record<string, unknown>>(aiResponse) } catch { parsed = {} }
 
     return NextResponse.json({
       name: parsed.name ?? '',

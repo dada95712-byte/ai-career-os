@@ -1,5 +1,6 @@
 import { callAI } from '@/lib/ai-client'
 import { NextResponse } from 'next/server'
+import { extractJSON } from '@/lib/extract-json'
 
 const CATEGORIES = ['問題解決', '領導力', '跨部門協作', '技術實作', '客戶關係', '數據分析']
 
@@ -23,16 +24,13 @@ ${text.slice(0, 1000)}
       '你是一個分析工作日誌的助手，請用繁體中文回答。'
     )
 
-    const match = result.match(/\{[\s\S]*?\}/)
     let tags: string[] = []
     let title = ''
-    if (match) {
-      try {
-        const parsed = JSON.parse(match[0])
-        tags = (parsed.tags ?? []).filter((t: string) => CATEGORIES.includes(t))
-        title = parsed.title ?? ''
-      } catch { /* ignore */ }
-    }
+    try {
+      const parsed = extractJSON<{ tags?: string[]; title?: string }>(result)
+      tags = (parsed.tags ?? []).filter((t: string) => CATEGORIES.includes(t))
+      title = parsed.title ?? ''
+    } catch { /* ignore */ }
     return NextResponse.json({ tags, title })
   } catch (err) {
     console.error('[journal/tag]', err)

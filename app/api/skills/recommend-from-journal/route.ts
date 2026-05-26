@@ -1,5 +1,6 @@
 import { callAI } from '@/lib/ai-client'
 import { NextResponse } from 'next/server'
+import { extractJSON } from '@/lib/extract-json'
 
 export async function POST(req: Request) {
   try {
@@ -19,8 +20,7 @@ ${journalText.slice(0, 2000)}
       '你是一個專業的台灣職涯顧問，請用繁體中文回答。'
     )
 
-    const match = result.match(/\[[\s\S]*?\]/)
-    const skills: string[] = match ? JSON.parse(match[0]) : []
+    const skills: string[] = extractJSON<string[]>(result)
     return NextResponse.json({ skills: Array.isArray(skills) ? skills.slice(0, 10) : [] })
   } catch (err) {
     console.error('[skills/recommend-from-journal]', err)

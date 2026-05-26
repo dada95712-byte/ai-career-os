@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callAI } from '@/lib/ai-client'
+import { extractJSON } from '@/lib/extract-json'
 
 const BREAKDOWN: Record<number, { behavioral: number; situational: number; technical: number; general: number }> = {
   10: { behavioral: 3, situational: 3, technical: 2, general: 2 },
@@ -40,10 +41,7 @@ export async function POST(req: NextRequest) {
 type 只能是：behavioral | situational | technical | general`
 
     const response = await callAI(prompt)
-    const jsonMatch = response.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('解析失敗')
-
-    const result = JSON.parse(jsonMatch[0])
+    const result = extractJSON(response)
     return NextResponse.json(result)
   } catch (err) {
     console.error('Interview questions error:', err)

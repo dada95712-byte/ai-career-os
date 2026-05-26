@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callAI } from '@/lib/ai-client'
+import { extractJSON } from '@/lib/extract-json'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -78,8 +79,7 @@ export async function GET(req: NextRequest) {
 只回傳 JSON 陣列，不要其他文字。`,
       '你是台灣人力資源專家，請用繁體中文回答。'
     )
-    const match = aiResult.match(/\[[\s\S]*\]/)
-    const jobs = match ? JSON.parse(match[0]) : []
+    const jobs = extractJSON<unknown[]>(aiResult)
     return NextResponse.json({
       jobs: Array.isArray(jobs) ? jobs : [],
       aiGenerated: true,

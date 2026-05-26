@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callAI } from '@/lib/ai-client'
+import { extractJSON } from '@/lib/extract-json'
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -29,10 +30,7 @@ export async function GET(req: NextRequest) {
 只回傳 JSON。`
 
     const response = await callAI(prompt)
-    const jsonMatch = response.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('解析失敗')
-
-    const result = JSON.parse(jsonMatch[0])
+    const result = extractJSON(response)
     return NextResponse.json(result)
   } catch (err) {
     console.error('Salary error:', err)

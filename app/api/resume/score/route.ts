@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callAI } from '@/lib/ai-client'
+import { extractJSON } from '@/lib/extract-json'
 
 export async function POST(req: NextRequest) {
   try {
@@ -56,13 +57,10 @@ ${resumeText.slice(0, 3000)}`
       : '你是一位專業的履歷撰寫顧問，請用繁體中文回答。'
 
     const response = await callAI(prompt, systemPrompt)
-    const jsonMatch = response.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('AI 回傳格式錯誤')
-
-    const result = JSON.parse(jsonMatch[0])
+    const result = extractJSON<Record<string, unknown>>(response)
 
     // Normalise + guard
-    const dims = result.dimensions ?? {}
+    const dims = (result.dimensions ?? {}) as Record<string, unknown>
     const suggestions = Array.isArray(result.suggestions) ? result.suggestions : []
 
     return NextResponse.json({

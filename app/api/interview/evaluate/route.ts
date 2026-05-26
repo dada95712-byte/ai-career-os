@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { callAI } from '@/lib/ai-client'
+import { extractJSON } from '@/lib/extract-json'
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,10 +31,7 @@ export async function POST(req: NextRequest) {
 strengths 和 suggestions 各提供 2-3 條，每條限 30 字內。只回傳 JSON。`
 
     const response = await callAI(prompt)
-    const jsonMatch = response.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('解析失敗')
-
-    const result = JSON.parse(jsonMatch[0])
+    const result = extractJSON(response)
     return NextResponse.json(result)
   } catch (err) {
     console.error('Interview evaluate error:', err)

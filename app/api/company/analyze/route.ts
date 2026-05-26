@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { callAI } from '@/lib/ai-client'
+import { extractJSON } from '@/lib/extract-json'
 
 export async function POST(req: Request) {
   try {
@@ -67,10 +68,7 @@ ${webContext ? `網路搜尋資料：\n${webContext}\n\n` : ''}
 只回傳 JSON，不要其他說明。`
 
     const response = await callAI(prompt, '你是一位台灣企業分析師，請用繁體中文回答，資料盡量準確具體。')
-    const match = response.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('AI 回應格式錯誤')
-
-    const report = JSON.parse(match[0])
+    const report = extractJSON(response)
     return NextResponse.json({ company, report, hasWebData: !!webContext })
   } catch (err) {
     console.error('[company/analyze]', err)

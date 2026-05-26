@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { callAI } from '@/lib/ai-client'
+import { extractJSON } from '@/lib/extract-json'
 
 export async function GET() {
   try {
@@ -20,10 +21,7 @@ export async function GET() {
 只回傳 JSON。`
 
     const response = await callAI(prompt)
-    const jsonMatch = response.match(/\{[\s\S]*\}/)
-    if (!jsonMatch) throw new Error('解析失敗')
-
-    const result = JSON.parse(jsonMatch[0])
+    const result = extractJSON(response)
     return NextResponse.json(result)
   } catch (err) {
     console.error('Trends error:', err)
