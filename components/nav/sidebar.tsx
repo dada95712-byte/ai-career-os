@@ -86,36 +86,45 @@ function Tip({ label, tipY }: { label: string; tipY: number }) {
 type NavItemData = typeof navItems[0]
 
 function NavItem({ item, active, collapsed }: { item: NavItemData; active: boolean; collapsed: boolean }) {
-  const [tipY, setTipY] = useState<number | null>(null)
+  const [tipY,  setTipY]  = useState<number | null>(null)
+  const [hover, setHover] = useState(false)
 
   return (
     <div
+      className="relative"
       onMouseEnter={(e) => {
+        setHover(true)
         if (collapsed) setTipY(e.currentTarget.getBoundingClientRect().top + e.currentTarget.getBoundingClientRect().height / 2)
       }}
-      onMouseLeave={() => setTipY(null)}
+      onMouseLeave={() => { setHover(false); setTipY(null) }}
     >
+      {/* Left accent bar (non-collapsed active only) */}
+      {active && !collapsed && (
+        <span className="absolute left-0 top-1 bottom-1 w-[3px] rounded-full bg-terra-500" />
+      )}
+
       <Link
         href={item.href}
         className={cn(
           'group/link flex items-center rounded-lg transition-all duration-150',
-          collapsed ? 'justify-center py-2.5 px-0 mx-1' : 'gap-3 px-3 py-2',
-          active
-            ? 'bg-terra-50 text-terra-700 font-medium border border-terra-100'
-            : 'text-ink-500 hover:bg-cream-300 hover:text-ink-700'
+          collapsed ? 'justify-center py-2.5 px-0 mx-1' : 'gap-3 py-2',
+          !collapsed && (active ? 'pl-5 pr-3' : 'px-3'),
+          active ? 'text-terra-700 font-medium' : 'text-ink-500',
         )}
+        style={{
+          background: active
+            ? 'rgba(201,121,65,0.08)'
+            : hover ? 'rgba(201,121,65,0.05)' : 'transparent',
+        }}
       >
         <span className={cn(
           'shrink-0 transition-colors',
-          active ? 'text-terra-500' : 'text-ink-300 group-hover/link:text-ink-400'
+          active ? 'text-terra-500' : 'text-ink-300 group-hover/link:text-ink-500'
         )}>
           {item.icon}
         </span>
         {!collapsed && (
-          <>
-            <span className="truncate">{item.label}</span>
-            {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-terra-400 shrink-0" />}
-          </>
+          <span className="truncate text-sm">{item.label}</span>
         )}
       </Link>
       {tipY !== null && <Tip label={item.label} tipY={tipY} />}
@@ -144,9 +153,12 @@ function OnboardingLink({ collapsed }: { collapsed: boolean }) {
       <Link
         href="/onboarding"
         className={cn(
-          'flex items-center rounded-lg text-sm text-ink-400 hover:bg-cream-300 hover:text-ink-700 transition-colors',
+          'flex items-center rounded-lg text-sm text-ink-400 hover:text-ink-600 transition-colors',
           collapsed ? 'justify-center py-2.5 px-0 mx-1' : 'gap-3 px-3 py-2'
         )}
+        style={{ background: 'transparent' }}
+        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,121,65,0.05)')}
+        onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
       >
         {onboardingIcon}
         {!collapsed && '完善資料'}
@@ -185,14 +197,14 @@ export function Sidebar() {
 
   return (
     <aside
-      style={{ width: collapsed ? 64 : 224, transition: 'width 200ms ease' }}
-      className="relative flex h-screen shrink-0 flex-col border-r border-warm-200 bg-cream-100 overflow-hidden"
+      style={{ width: collapsed ? 64 : 224, transition: 'width 200ms ease', background: '#F3ECE4', borderRight: '1px solid #E6DDD2' }}
+      className="relative flex h-screen shrink-0 flex-col overflow-hidden"
     >
       {/* ── Logo + toggle ── */}
       <div className={cn(
-        'flex items-center border-b border-warm-100 shrink-0',
+        'flex items-center shrink-0',
         collapsed ? 'justify-between px-2 py-4' : 'justify-between px-5 py-5'
-      )}>
+      )} style={{ borderBottom: '1px solid #E6DDD2' }}>
         <div className={cn('flex items-center min-w-0', !collapsed && 'gap-2.5')}>
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-terra-500 text-white text-[11px] font-bold shrink-0 shadow-[var(--shadow-warm-sm)]">
             AI
@@ -259,9 +271,13 @@ export function Sidebar() {
                   className={cn(
                     'ml-6 mt-0.5 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-all',
                     pathname === '/dashboard/skills'
-                      ? 'bg-terra-50 text-terra-600 font-medium border border-terra-100'
-                      : 'text-ink-400 hover:bg-cream-300 hover:text-ink-600'
-                  )}>
+                      ? 'text-terra-600 font-medium'
+                      : 'text-ink-400 hover:text-ink-600'
+                  )}
+                  style={{ background: pathname === '/dashboard/skills' ? 'rgba(201,121,65,0.08)' : 'transparent' }}
+                  onMouseEnter={e => { if (pathname !== '/dashboard/skills') e.currentTarget.style.background = 'rgba(201,121,65,0.05)' }}
+                  onMouseLeave={e => { if (pathname !== '/dashboard/skills') e.currentTarget.style.background = 'transparent' }}
+                >
                   <span className="text-[10px]">⚡</span>
                   <span>技能庫</span>
                 </Link>
