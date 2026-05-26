@@ -108,23 +108,31 @@ model Experience {
 }
 
 model JobApplication {
-  id           String    @id @default(cuid())
-  userId       String
-  jobTitle     String
-  company      String
-  jdText       String?   @db.Text
-  sourceUrl    String?
-  platform     String?
-  status       String    @default("saved")
-  matchScore   Int?
-  salaryMin    Int?
-  salaryMax    Int?
-  location     String?
-  appliedAt    DateTime?
-  notes        String?   @db.Text
-  createdAt    DateTime  @default(now())
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  interviewQAs InterviewQA[]
+  id              String    @id @default(cuid())
+  userId          String
+  jobTitle        String
+  company         String
+  jdText          String?   @db.Text
+  jdFullText      String?   @db.Text
+  sourceUrl       String?
+  platform        String?
+  sourcePlatform  String?
+  status          String    @default("saved")
+  matchScore      Int?
+  salaryMin       Int?
+  salaryMax       Int?
+  location        String?
+  appliedAt       DateTime?
+  deadline        DateTime?
+  notes           String?   @db.Text
+  interviewNotes  Json?
+  attachments     Json?
+  contactName     String?
+  contactEmail    String?
+  contactPhone    String?
+  createdAt       DateTime  @default(now())
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interviewQAs    InterviewQA[]
 }
 
 model InterviewQA {

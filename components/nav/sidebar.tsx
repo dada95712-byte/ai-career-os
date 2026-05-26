@@ -32,7 +32,7 @@ const navItems = [
   },
   {
     href: '/career-match',
-    label: 'Job Pipeline',
+    label: 'Application Tracker',
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />
