@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model User {
@@ -33,6 +32,20 @@ model User {
   interviewSessions InterviewSession[]
   workJournals      WorkJournal[]
   dailyProgress     DailyProgress[]
+
+  // Profile sections
+  profileBasic        ProfileBasic?
+  profileEducations   ProfileEducation[]
+  profileExperiences  ProfileExperience[]
+  profileInternships  ProfileInternship[]
+  profileProjects     ProfileProject[]
+  profileLanguages    ProfileLanguage[]
+  profileSkills       ProfileSkill[]
+  profileCertificates ProfileCertificate[]
+  profileActivities   ProfileActivity[]
+  profileConferences  ProfileConference[]
+  profileCustoms      ProfileCustom[]
+  profileAttachments  ProfileAttachment[]
 }
 
 model Account {
@@ -86,14 +99,18 @@ model Resume {
 }
 
 model Skill {
-  id        String   @id @default(cuid())
-  userId    String
-  name      String
-  category  String?
-  level     String   @default("intermediate")
-  source    String   @default("manual")
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id               String   @id @default(cuid())
+  userId           String
+  name             String
+  category         String?
+  level            String   @default("intermediate")
+  source           String   @default("manual")
+  journalFrequency Int      @default(0)
+  journalIds       String[] @default([])
+  createdAt        DateTime @default(now())
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model Experience {
@@ -216,4 +233,205 @@ model WorkJournal {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ── Profile Section Models ─────────────────────────────────────────────────────
+
+model ProfileBasic {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  nameZh       String?
+  nameEn       String?
+  email        String?
+  phone        String?
+  address      String?
+  linkedinUrl  String?
+  portfolioUrl String?
+  websiteUrl   String?
+  summaryZh    String?  @db.Text
+  summaryEn    String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_basic")
+}
+
+model ProfileEducation {
+  id          String   @id @default(cuid())
+  userId      String
+  schoolName  String
+  degree      String?
+  major       String?
+  gpa         String?
+  startDate   String?
+  endDate     String?
+  isCurrent   Boolean  @default(false)
+  description String?  @db.Text
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_education")
+}
+
+model ProfileExperience {
+  id          String   @id @default(cuid())
+  userId      String
+  company     String
+  title       String?
+  location    String?
+  startDate   String?
+  endDate     String?
+  isCurrent   Boolean  @default(false)
+  description String?  @db.Text
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_experience")
+}
+
+model ProfileInternship {
+  id          String   @id @default(cuid())
+  userId      String
+  company     String
+  title       String?
+  location    String?
+  startDate   String?
+  endDate     String?
+  isCurrent   Boolean  @default(false)
+  description String?  @db.Text
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_internship")
+}
+
+model ProfileProject {
+  id          String   @id @default(cuid())
+  userId      String
+  projectName String
+  role        String?
+  url         String?
+  startDate   String?
+  endDate     String?
+  description String?  @db.Text
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_project")
+}
+
+model ProfileLanguage {
+  id          String   @id @default(cuid())
+  userId      String
+  language    String
+  proficiency String   @default("intermediate")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_language")
+}
+
+model ProfileSkill {
+  id        String   @id @default(cuid())
+  userId    String
+  skillName String
+  category  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_skill")
+}
+
+model ProfileCertificate {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String
+  issuer        String?
+  issueDate     String?
+  expiryDate    String?
+  credentialUrl String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_certificate")
+}
+
+model ProfileActivity {
+  id           String   @id @default(cuid())
+  userId       String
+  organization String
+  role         String?
+  startDate    String?
+  endDate      String?
+  description  String?  @db.Text
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_activity")
+}
+
+model ProfileConference {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  role        String   @default("attendee")
+  date        String?
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_conference")
+}
+
+model ProfileCustom {
+  id           String   @id @default(cuid())
+  userId       String
+  sectionTitle String
+  content      String?  @db.Text
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_custom")
+}
+
+model ProfileAttachment {
+  id          String   @id @default(cuid())
+  userId      String
+  fileName    String
+  fileUrl     String
+  fileType    String?
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("profile_attachment")
 }
