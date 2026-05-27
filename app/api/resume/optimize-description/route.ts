@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { callAI } from '@/lib/ai-client'
+import { callAI, isRateLimitError } from '@/lib/ai-client'
 import { extractJSON } from '@/lib/extract-json'
 
 export async function POST(req: NextRequest) {
@@ -37,6 +37,9 @@ export async function POST(req: NextRequest) {
     const result = extractJSON(response)
     return NextResponse.json(result)
   } catch (err) {
+    if (isRateLimitError(err)) {
+      return NextResponse.json({ error: 'rate_limit', message: 'AI 服務目前使用量較高，請稍後再試' }, { status: 429 })
+    }
     console.error('Optimize description error:', err)
     return NextResponse.json({ error: '優化失敗，請再試一次' }, { status: 500 })
   }

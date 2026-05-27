@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { extractJSON } from '@/lib/extract-json'
+import { isRateLimitError } from '@/lib/ai-client'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -25,30 +26,45 @@ async function callWithSearch(
     { role: 'user',   content: userPrompt },
   ]
 
-  const tryFetch = async (usePlugin: boolean) => {
+  const doFetch = async (usePlugin: boolean, maxRetries = 3): Promise<string> => {
     const body: Record<string, unknown> = {
       model: 'meta-llama/llama-3.3-70b-instruct:free',
       messages,
     }
     if (usePlugin) body.plugins = [{ id: 'web' }]
 
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = await res.json()
-    const content = data?.choices?.[0]?.message?.content
-    if (!content) throw new Error('Empty response')
-    return content as string
+    let lastErr: Error | undefined
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.status === 429) {
+        const retryAfter = res.headers.get('retry-after')
+        const waitMs = retryAfter
+          ? parseInt(retryAfter) * 1000
+          : Math.pow(2, attempt) * 1000 + Math.random() * 500
+        console.warn(`[CompanyAnalysis] 429，等待 ${Math.round(waitMs)}ms（第 ${attempt + 1}/${maxRetries} 次）`)
+        await new Promise(r => setTimeout(r, waitMs))
+        lastErr = Object.assign(new Error('rate_limit: HTTP 429'), { status: 429 })
+        continue
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const data = await res.json()
+      const content = data?.choices?.[0]?.message?.content
+      if (!content) throw new Error('Empty response')
+      return content as string
+    }
+    throw Object.assign(new Error(`rate_limit: company-analysis 在 ${maxRetries} 次重試後仍返回 429`), { status: 429 })
   }
 
   // Try with web search plugin; fall back to standard call
   try {
-    return await tryFetch(true)
-  } catch {
-    return await tryFetch(false)
+    return await doFetch(true)
+  } catch (err) {
+    if (isRateLimitError(err)) throw err  // propagate rate limit; don't retry without plugin
+    return await doFetch(false)
   }
 }
 
@@ -135,6 +151,12 @@ export async function POST(req: NextRequest) {
     const result = extractJSON(raw)
     return NextResponse.json(result)
   } catch (err) {
+    if (isRateLimitError(err)) {
+      return NextResponse.json(
+        { error: 'rate_limit', message: 'AI 服務目前使用量較高，請稍後再試' },
+        { status: 429 }
+      )
+    }
     console.error('Company analysis error:', err)
     return NextResponse.json({ error: '分析失敗，請再試一次' }, { status: 500 })
   }

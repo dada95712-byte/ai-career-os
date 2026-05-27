@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { callAI } from '@/lib/ai-client'
+import { callAI, isRateLimitError } from '@/lib/ai-client'
 import { extractJSON } from '@/lib/extract-json'
 
 export async function POST(req: NextRequest) {
@@ -81,6 +81,9 @@ ${resumeText.slice(0, 3000)}`
       keywords: Array.isArray(result.keywords) ? result.keywords : [],
     })
   } catch (err) {
+    if (isRateLimitError(err)) {
+      return NextResponse.json({ error: 'rate_limit', message: 'AI 服務目前使用量較高，請稍後再試' }, { status: 429 })
+    }
     console.error('Resume score error:', err)
     return NextResponse.json({ error: '評分失敗' }, { status: 500 })
   }

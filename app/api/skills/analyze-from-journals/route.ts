@@ -1,4 +1,4 @@
-import { callAI } from '@/lib/ai-client'
+import { callAI, isRateLimitError } from '@/lib/ai-client'
 import { NextResponse } from 'next/server'
 import { extractJSON } from '@/lib/extract-json'
 
@@ -32,6 +32,9 @@ export async function POST(req: Request) {
     }))
     return NextResponse.json({ skills })
   } catch (err) {
+    if (isRateLimitError(err)) {
+      return NextResponse.json({ error: 'rate_limit', message: 'AI 服務目前使用量較高，請稍後再試' }, { status: 429 })
+    }
     console.error('[skills/analyze-from-journals]', err)
     return NextResponse.json({ error: '分析失敗，請稍後再試' }, { status: 500 })
   }

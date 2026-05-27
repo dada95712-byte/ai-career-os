@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { callAI } from '@/lib/ai-client'
+import { callAI, isRateLimitError } from '@/lib/ai-client'
 import { extractJSON } from '@/lib/extract-json'
 
 export async function POST(
@@ -116,6 +116,9 @@ ${jdSlice}
       analyzedAt: new Date().toISOString(),
     })
   } catch (err) {
+    if (isRateLimitError(err)) {
+      return NextResponse.json({ error: 'rate_limit', message: 'AI 服務目前使用量較高，請稍後再試' }, { status: 429 })
+    }
     console.error('Analyze match error:', err)
     return NextResponse.json({ error: '分析失敗，請再試一次' }, { status: 500 })
   }
