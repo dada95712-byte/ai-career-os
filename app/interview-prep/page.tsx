@@ -57,6 +57,15 @@ interface InterviewSession {
 }
 interface RealRecord {
   id: string; question: string; answer: string; score?: number; feedback?: string; date: string
+  interview_date?: string; company?: string; title?: string
+}
+interface BookmarkedQuestion {
+  id: string; question: string; questionEn?: string
+  type: 'behavioral' | 'technical' | 'situational' | 'general'
+  question_type?: QuestionType; framework?: Framework
+  userAnswer: string; aiScore?: number; aiFeedback?: string
+  strengths?: string[]; suggestions?: string[]; optimizedAnswer?: string
+  savedAt: string; fromRole?: string
 }
 interface PracticeResult {
   answer: string; score: number
@@ -403,7 +412,7 @@ declare global {
 // ── Component ──────────────────────────────────────────────────────────────────
 
 export default function InterviewPrepPage() {
-  const [tab, setTab] = useState<'mock' | 'qa' | 'record'>('mock')
+  const [tab, setTab] = useState<'mock' | 'record' | 'bank'>('mock')
 
   // Mock interview — session flow
   const [mockStep, setMockStep] = useState<'loading' | 'sessions' | 'setup' | 'list' | 'practice' | 'report'>('loading')
@@ -467,7 +476,19 @@ export default function InterviewPrepPage() {
   const [records, setRecords]         = useState<RealRecord[]>([])
   const [recQuestion, setRecQuestion] = useState('')
   const [recAnswer, setRecAnswer]     = useState('')
+  const [recDate, setRecDate]         = useState(() => new Date().toISOString().slice(0, 10))
+  const [recCompany, setRecCompany]   = useState('')
+  const [recTitle, setRecTitle]       = useState('')
   const [recEvaluating, setRecEvaluating] = useState(false)
+  const [trackerCompanies, setTrackerCompanies] = useState<string[]>([])
+  const [trackerTitles, setTrackerTitles]       = useState<Record<string, string[]>>({})
+
+  // Personal question bank
+  const [bookmarks, setBookmarks]         = useState<BookmarkedQuestion[]>([])
+  const [bankTypeFilter, setBankTypeFilter] = useState<'all' | 'behavioral' | 'technical' | 'situational' | 'general'>('all')
+
+  // PDF generation
+  const [pdfGenerating, setPdfGenerating] = useState(false)
 
   // Application Tracker integration
   const [fromJobId, setFromJobId]       = useState<string | null>(null)
@@ -478,11 +499,10 @@ export default function InterviewPrepPage() {
   const [trackerJdLoading, setTrackerJdLoading] = useState(false)
   const [jdPanelOpen, setJdPanelOpen]   = useState(false)
 
-  const printRef     = useRef<HTMLDivElement>(null)
-  const mockListRef  = useRef<HTMLDivElement>(null)
-  const answerRef    = useRef<HTMLTextAreaElement>(null)
-  const handlePrint      = useReactToPrint({ contentRef: printRef })
-  const handleMockPrint  = useReactToPrint({ contentRef: mockListRef })
+  const printRef      = useRef<HTMLDivElement>(null)
+  const pdfContentRef = useRef<HTMLDivElement>(null)
+  const answerRef     = useRef<HTMLTextAreaElement>(null)
+  const handlePrint   = useReactToPrint({ contentRef: printRef })
 
   // Voice / speech
   const [voiceActive, setVoiceActive] = useState(false)
@@ -492,6 +512,27 @@ export default function InterviewPrepPage() {
   useEffect(() => {
     const saved = localStorage.getItem('interview-records')
     if (saved) setRecords(JSON.parse(saved))
+  }, [])
+
+  useEffect(() => {
+    const saved = localStorage.getItem('interview-bookmarks')
+    if (saved) setBookmarks(JSON.parse(saved))
+  }, [])
+
+  useEffect(() => {
+    try {
+      const apps: { company?: string; title?: string }[] = JSON.parse(localStorage.getItem('job-tracker-apps') ?? '[]')
+      const companies = [...new Set(apps.map(a => a.company).filter(Boolean) as string[])]
+      const titleMap: Record<string, string[]> = {}
+      apps.forEach(a => {
+        if (a.company && a.title) {
+          if (!titleMap[a.company]) titleMap[a.company] = []
+          if (!titleMap[a.company].includes(a.title)) titleMap[a.company].push(a.title)
+        }
+      })
+      setTrackerCompanies(companies)
+      setTrackerTitles(titleMap)
+    } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
@@ -795,13 +836,90 @@ export default function InterviewPrepPage() {
     try {
       const res  = await fetch('/api/interview/evaluate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question: recQuestion, answer: recAnswer }) })
       const data = await res.json()
-      const rec: RealRecord = { id: genId(), question: recQuestion, answer: recAnswer, score: data.score, feedback: data.feedback, date: new Date().toISOString() }
-      saveRecords([rec, ...records]); setRecQuestion(''); setRecAnswer('')
+      const rec: RealRecord = {
+        id: genId(), question: recQuestion, answer: recAnswer,
+        score: data.score, feedback: data.feedback, date: new Date().toISOString(),
+        interview_date: recDate || undefined,
+        company: recCompany.trim() || undefined,
+        title: recTitle.trim() || undefined,
+      }
+      saveRecords([rec, ...records])
+      setRecQuestion(''); setRecAnswer('')
+      setRecDate(new Date().toISOString().slice(0, 10))
+      setRecCompany(''); setRecTitle('')
     } catch { /* silent */ }
     finally { setRecEvaluating(false) }
   }
 
   function deleteRecord(id: string) { saveRecords(records.filter((r) => r.id !== id)) }
+
+  const saveBookmarks = useCallback((next: BookmarkedQuestion[]) => {
+    setBookmarks(next)
+    localStorage.setItem('interview-bookmarks', JSON.stringify(next))
+  }, [])
+
+  function bookmarkQ(q: Question) {
+    if (!q.userAnswer) return
+    const bm: BookmarkedQuestion = {
+      id: genId(),
+      question: q.question, questionEn: q.questionEn,
+      type: q.type, question_type: q.question_type, framework: q.framework,
+      userAnswer: q.userAnswer,
+      aiScore: q.aiScore, aiFeedback: q.aiFeedback,
+      strengths: q.strengths, suggestions: q.suggestions, optimizedAnswer: q.optimizedAnswer,
+      savedAt: new Date().toISOString(), fromRole: role || undefined,
+    }
+    saveBookmarks([bm, ...bookmarks.filter((b) => b.question !== bm.question)])
+  }
+
+  function bookmarkQuestion() {
+    if (!selectedQ) return
+    const q: Question = { ...selectedQ, userAnswer: selectedQ.userAnswer ?? answer }
+    bookmarkQ(q)
+  }
+
+  async function downloadInterviewPDF() {
+    const answered = questions.filter((q) => q.aiScore !== undefined)
+    if (answered.length === 0 || !pdfContentRef.current) return
+    setPdfGenerating(true)
+    try {
+      const html2canvas = (await import('html2canvas')).default
+      const { jsPDF } = await import('jspdf')
+      const el = pdfContentRef.current
+      el.style.display = 'block'
+      await new Promise((r) => setTimeout(r, 50))
+      const canvas = await html2canvas(el, {
+        scale: 2, useCORS: true, backgroundColor: '#ffffff',
+        width: el.offsetWidth, height: el.scrollHeight, logging: false,
+      })
+      el.style.display = 'none'
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pdfW = 210; const pageH = 297
+      const totalPdfH = (canvas.height / canvas.width) * pdfW
+      const imgData = canvas.toDataURL('image/png')
+      if (totalPdfH <= pageH) {
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfW, totalPdfH)
+      } else {
+        const pagePixelH = Math.floor((pageH / pdfW) * canvas.width)
+        let yPx = 0; let firstPage = true
+        while (yPx < canvas.height) {
+          const sliceH = Math.min(pagePixelH, canvas.height - yPx)
+          const pageCanvas = document.createElement('canvas')
+          pageCanvas.width = canvas.width; pageCanvas.height = sliceH
+          const ctx = pageCanvas.getContext('2d')
+          if (ctx) ctx.drawImage(canvas, 0, yPx, canvas.width, sliceH, 0, 0, canvas.width, sliceH)
+          if (!firstPage) pdf.addPage()
+          const slicePdfH = (sliceH / canvas.width) * pdfW
+          pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, 0, pdfW, slicePdfH)
+          yPx += sliceH; firstPage = false
+        }
+      }
+      const companyName = company || fromCompany || '面試'
+      const dateStr = new Date().toISOString().slice(0, 10)
+      pdf.save(`${companyName}-${role || '練習'}-面試練習-${dateStr}.pdf`)
+    } catch { /* silent */ }
+    finally { setPdfGenerating(false) }
+  }
 
   // ── Timer helpers ─────────────────────────────────────────────────────────
   function stopTimer() { setTimerPhase('idle'); setTimerSec(0) }
@@ -974,6 +1092,7 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
         {([
           ['mock',   '⬟ 模擬面試'],
           ['record', '🎙 實際記錄'],
+          ['bank',   '⭐ 個人題庫'],
         ] as const).map(([t, label]) => (
           <button key={t} onClick={() => { setTab(t); setSelectedQ(null); setAnswer('') }}
             className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${tab === t ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'}`}>
@@ -1404,7 +1523,7 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
 
               {/* Question cards */}
               {!generating && (
-                <div ref={mockListRef} className="space-y-3 print:p-6">
+                <div className="space-y-3">
                   {questions.length > 0 && (
                     <p className="text-xs text-ink-400 print:mb-4 hidden print:block">{role}{company ? ` · ${company}` : ''} — 模擬面試題目</p>
                   )}
@@ -1468,10 +1587,27 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
               {/* PDF export + finish interview */}
               {!generating && questions.length > 0 && (
                 <div className="flex items-center gap-3 flex-wrap">
-                  <button onClick={() => handleMockPrint()}
-                    className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
-                    📥 匯出所有題目 PDF
-                  </button>
+                  {(() => {
+                    const answeredCount = questions.filter((q) => q.aiScore !== undefined).length
+                    const disabled = answeredCount === 0 || pdfGenerating
+                    return (
+                      <div className="relative group">
+                        <button
+                          onClick={() => void downloadInterviewPDF()}
+                          disabled={disabled}
+                          className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                          {pdfGenerating
+                            ? <><svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>生成中…</>
+                            : `📥 匯出練習記錄 PDF${answeredCount > 0 ? `（${answeredCount} 題）` : ''}`}
+                        </button>
+                        {answeredCount === 0 && (
+                          <div className="absolute bottom-full left-0 mb-1.5 hidden group-hover:block z-10 w-48 rounded-lg border border-warm-200 bg-white px-3 py-2 text-xs text-ink-500 shadow-md">
+                            至少完成 1 道題目後才能匯出
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })()}
                   {questions.filter((q) => q.aiScore !== undefined).length > 0 && (
                     <button onClick={generateReport}
                       className="flex items-center gap-2 rounded-xl bg-terra-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
@@ -1752,9 +1888,11 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                       </>
                     )}
 
-                    <button onClick={saveMockAnswer}
-                      className="flex items-center gap-2 rounded-xl border border-warm-200 bg-cream-50 px-4 py-2 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
-                      💾 儲存此題回答到個人題庫
+                    <button
+                      onClick={bookmarkQuestion}
+                      disabled={!selectedQ?.userAnswer && !answer.trim()}
+                      className="flex items-center gap-2 rounded-xl border border-honey-200 bg-honey-50 px-4 py-2 text-sm text-honey-700 hover:bg-honey-100 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                      ⭐ 收藏此題到個人題庫
                     </button>
                   </div>
 
@@ -1971,15 +2109,23 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                                 {i + 1}. {q.question}
                               </p>
                             </div>
-                            <button
-                              onClick={() => {
-                                const next = { ...improvedMap, [q.id]: !improvedMap[q.id] }
-                                setImprovedMap(next)
-                                setQuestions((prev) => prev.map((qu) => qu.id === q.id ? { ...qu, improved: !improvedMap[q.id] } : qu))
-                              }}
-                              className={`shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-all whitespace-nowrap ${improvedMap[q.id] ? 'bg-sage-50 border-sage-400 text-sage-600' : 'border-warm-200 text-ink-400 hover:border-warm-300'}`}>
-                              {improvedMap[q.id] ? '✓ 已改善' : '標記改善'}
-                            </button>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={() => bookmarkQ(q)}
+                                disabled={!q.userAnswer}
+                                className="rounded-full border border-honey-200 bg-honey-50 px-2.5 py-1 text-xs font-medium text-honey-700 hover:bg-honey-100 transition-all disabled:opacity-30 disabled:cursor-not-allowed whitespace-nowrap">
+                                ⭐ 收藏
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const next = { ...improvedMap, [q.id]: !improvedMap[q.id] }
+                                  setImprovedMap(next)
+                                  setQuestions((prev) => prev.map((qu) => qu.id === q.id ? { ...qu, improved: !improvedMap[q.id] } : qu))
+                                }}
+                                className={`rounded-full border px-3 py-1 text-xs font-medium transition-all whitespace-nowrap ${improvedMap[q.id] ? 'bg-sage-50 border-sage-400 text-sage-600' : 'border-warm-200 text-ink-400 hover:border-warm-300'}`}>
+                                {improvedMap[q.id] ? '✓ 已改善' : '標記改善'}
+                              </button>
+                            </div>
                           </div>
                           <div className="mt-3 space-y-2 border-t border-warm-100 pt-2">
                             <button
@@ -2016,9 +2162,10 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                   {/* Bottom actions */}
                   <div className="flex items-center gap-3 flex-wrap border-t border-warm-200 pt-4">
                     <button
-                      onClick={() => handleMockPrint()}
-                      className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
-                      📥 下載報告 PDF
+                      onClick={() => void downloadInterviewPDF()}
+                      disabled={pdfGenerating}
+                      className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors disabled:opacity-50">
+                      {pdfGenerating ? '生成中…' : '📥 匯出練習記錄 PDF'}
                     </button>
                     {answerLang === 'bilingual' && Object.keys(bilingualData).length > 0 && (
                       <button
@@ -2060,9 +2207,9 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                       🔄 重新練習
                     </button>
                     <button
-                      onClick={() => setTab('qa')}
-                      className="flex items-center gap-2 rounded-xl border border-warm-200 bg-cream-50 px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
-                      📚 查看常見題庫
+                      onClick={() => setTab('bank')}
+                      className="flex items-center gap-2 rounded-xl border border-honey-200 bg-honey-50 px-4 py-2.5 text-sm font-medium text-honey-700 hover:bg-honey-100 transition-colors">
+                      ⭐ 查看個人題庫
                     </button>
                     {fromJobId && (
                       saveTrackerStatus === 'saved' ? (
@@ -2101,27 +2248,66 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-ink-500">面試日期（必填）</label>
+                  <input
+                    type="date"
+                    value={recDate}
+                    onChange={(e) => setRecDate(e.target.value)}
+                    className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 focus:border-terra-400 focus:outline-none" />
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-ink-500">公司名稱（必填）</label>
+                  <input
+                    list="rec-company-list"
+                    value={recCompany}
+                    onChange={(e) => setRecCompany(e.target.value)}
+                    placeholder="例如：Google、台積電"
+                    className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none" />
+                  <datalist id="rec-company-list">
+                    {trackerCompanies.map((c) => <option key={c} value={c} />)}
+                  </datalist>
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-medium text-ink-500">應徵職位（必填）</label>
+                  <input
+                    list="rec-title-list"
+                    value={recTitle}
+                    onChange={(e) => setRecTitle(e.target.value)}
+                    placeholder="例如：前端工程師"
+                    className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none" />
+                  <datalist id="rec-title-list">
+                    {(trackerTitles[recCompany] ?? []).map((t) => <option key={t} value={t} />)}
+                  </datalist>
+                </div>
+              </div>
               <Input label="面試題目" placeholder="輸入實際被問到的問題..." value={recQuestion} onChange={(e) => setRecQuestion(e.target.value)} />
               <div className="space-y-2">
                 <Textarea label="你的回答" placeholder="記錄你當時的回答..." rows={5} value={recAnswer} onChange={(e) => setRecAnswer(e.target.value)} />
                 {voiceBtn('record')}
               </div>
-              <Button variant="primary" onClick={evaluateRecord} loading={recEvaluating} disabled={!recQuestion.trim() || !recAnswer.trim()}>
-                🤖 AI 評分 + 儲存到個人題庫
+              <Button variant="primary" onClick={evaluateRecord} loading={recEvaluating}
+                disabled={!recQuestion.trim() || !recAnswer.trim() || !recDate || !recCompany.trim() || !recTitle.trim()}>
+                🤖 AI 評分 + 儲存記錄
               </Button>
             </CardContent>
           </Card>
 
           {records.length > 0 && (
             <div ref={printRef} className="space-y-3 print:p-6">
-              <h2 className="text-sm font-semibold text-ink-600 print:text-base print:mb-4">我的面試題庫 ({records.length} 題)</h2>
+              <h2 className="text-sm font-semibold text-ink-600 print:text-base print:mb-4">面試紀錄 ({records.length} 題)</h2>
               {records.map((r) => (
                 <Card key={r.id}>
                   <CardContent className="pt-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                          {r.company && <span className="text-xs font-semibold text-terra-600 bg-terra-50 border border-terra-200 rounded-full px-2 py-0.5">{r.company}</span>}
+                          {r.title && <span className="text-xs text-ink-500">{r.title}</span>}
+                          <span className="text-xs text-ink-400">{r.interview_date ?? new Date(r.date).toLocaleDateString('zh-TW')}</span>
+                        </div>
                         <p className="text-sm font-semibold text-ink-700">{r.question}</p>
-                        <p className="text-xs text-ink-400 mt-0.5">{new Date(r.date).toLocaleDateString('zh-TW')}</p>
                         {r.score !== undefined && (
                           <div className="flex items-center gap-2 mt-2">
                             <span className={`text-lg font-bold ${scoreCol(r.score)}`}>{r.score}</span>
@@ -2148,11 +2334,143 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
             <div className="flex flex-col items-center justify-center py-20">
               <p className="text-4xl mb-3">🎙</p>
               <p className="text-sm text-ink-500">記錄你在真實面試中被問到的問題</p>
-              <p className="text-xs text-ink-400 mt-1">AI 評分後自動存入個人題庫，可匯出 PDF</p>
+              <p className="text-xs text-ink-400 mt-1">填寫面試日期、公司、職位後，AI 評分並儲存至此</p>
             </div>
           )}
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          PERSONAL QUESTION BANK
+      ══════════════════════════════════════════════════════════════════════ */}
+      {tab === 'bank' && (
+        <div className="space-y-5">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h2 className="text-base font-semibold text-ink-800">⭐ 個人題庫</h2>
+              <p className="text-xs text-ink-400 mt-0.5">從模擬面試收藏的好題目，共 {bookmarks.length} 題</p>
+            </div>
+            {bookmarks.length > 0 && (
+              <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 shadow-[var(--shadow-warm-xs)]">
+                {(['all', 'behavioral', 'technical', 'situational', 'general'] as const).map((t) => (
+                  <button key={t} onClick={() => setBankTypeFilter(t)}
+                    className={`rounded-lg px-3 py-1 text-xs font-medium transition-all whitespace-nowrap ${bankTypeFilter === t ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-700'}`}>
+                    {t === 'all' ? '全部' : TYPE[t]?.label ?? t}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {bookmarks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20">
+              <p className="text-4xl mb-3">⭐</p>
+              <p className="text-sm text-ink-500">尚無收藏題目</p>
+              <p className="text-xs text-ink-400 mt-1">在模擬面試中練習並評分後，點擊「⭐ 收藏此題」即可加入</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {bookmarks
+                .filter((b) => bankTypeFilter === 'all' || b.type === bankTypeFilter)
+                .map((b) => (
+                  <Card key={b.id}>
+                    <CardContent className="pt-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant={TYPE[b.type]?.color ?? 'default'}>{TYPE[b.type]?.label}</Badge>
+                            {b.aiScore !== undefined && (
+                              <span className={`text-xs font-semibold ${scoreCol(b.aiScore)}`}>{b.aiScore}/10</span>
+                            )}
+                            {b.fromRole && <span className="text-xs text-ink-400">來自：{b.fromRole}</span>}
+                            <span className="text-xs text-ink-300">{new Date(b.savedAt).toLocaleDateString('zh-TW')}</span>
+                          </div>
+                          <p className="text-sm font-semibold text-ink-800 leading-relaxed">{b.question}</p>
+                          {b.questionEn && <p className="text-xs text-ink-400 italic">{b.questionEn}</p>}
+                          {b.framework && (
+                            <span className="inline-block text-[10px] bg-honey-50 border border-honey-200 text-honey-700 rounded-full px-2 py-0.5">
+                              {FRAMEWORK_HINTS[b.framework]?.label ?? b.framework}
+                            </span>
+                          )}
+                          <div className="rounded-xl bg-cream-50 border border-warm-200 p-3">
+                            <p className="text-xs font-semibold text-ink-500 mb-1">我的最佳回答</p>
+                            <p className="text-sm text-ink-700 whitespace-pre-line leading-relaxed">{b.userAnswer}</p>
+                          </div>
+                          {b.strengths && b.strengths.length > 0 && (
+                            <div className="rounded-xl bg-sage-50 border border-sage-200 p-3">
+                              <p className="text-xs font-semibold text-sage-600 mb-1">✓ AI 評分優點</p>
+                              <ul className="space-y-1">
+                                {b.strengths.map((s, i) => (
+                                  <li key={i} className="text-xs text-ink-600 flex gap-1.5">
+                                    <span className="text-sage-500 shrink-0">✓</span>{s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {b.optimizedAnswer && (
+                            <div className="rounded-xl bg-terra-50 border border-terra-200 p-3">
+                              <p className="text-xs font-semibold text-terra-500 mb-1">✨ AI 優化版本</p>
+                              <p className="text-xs text-ink-600 whitespace-pre-line leading-relaxed">{b.optimizedAnswer}</p>
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => saveBookmarks(bookmarks.filter((bk) => bk.id !== b.id))}
+                          className="shrink-0 rounded-lg border border-warm-200 px-2.5 py-1 text-xs text-ink-400 hover:border-red-200 hover:text-red-400 transition-all whitespace-nowrap">
+                          移除
+                        </button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Hidden PDF content div (off-screen, rendered for html2canvas) ── */}
+      <div
+        ref={pdfContentRef}
+        style={{ display: 'none', position: 'absolute', left: '-9999px', top: 0, width: '794px', fontFamily: 'sans-serif', color: '#333' }}>
+        {/* Cover page */}
+        <div style={{ padding: '48px 56px 32px', borderBottom: '2px solid #e5e0d8', marginBottom: '32px' }}>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#1a1a1a', marginBottom: '8px' }}>面試練習記錄</div>
+          <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>公司：{company || fromCompany || '—'}</div>
+          <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>職位：{role || '—'}</div>
+          <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>求職情境：{SCENARIOS.find((s) => s.id === scenario)?.label ?? scenario}</div>
+          <div style={{ fontSize: '14px', color: '#666', marginBottom: '4px' }}>已完成題數：{questions.filter((q) => q.aiScore !== undefined).length} / {questions.length} 題</div>
+          <div style={{ fontSize: '12px', color: '#999', marginTop: '16px' }}>匯出時間：{new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+        </div>
+        {/* Per-question blocks */}
+        {questions.filter((q) => q.aiScore !== undefined).map((q, i) => (
+          <div key={q.id} style={{ padding: '24px 56px', borderBottom: '1px solid #f0ece6' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#888' }}>Q{i + 1}</span>
+              <span style={{ fontSize: '11px', background: '#f5f1eb', border: '1px solid #e5ddd0', borderRadius: '99px', padding: '2px 8px', color: '#666' }}>
+                {TYPE[q.type]?.label ?? q.type}
+              </span>
+              {q.aiScore !== undefined && (
+                <span style={{ fontSize: '13px', fontWeight: 'bold', color: q.aiScore >= 8 ? '#5a7a60' : q.aiScore >= 5 ? '#c49a35' : '#b85048' }}>
+                  {q.aiScore}/10
+                </span>
+              )}
+            </div>
+            <p style={{ fontSize: '14px', fontWeight: '600', color: '#1a1a1a', marginBottom: '4px', lineHeight: '1.6' }}>{q.question}</p>
+            {q.questionEn && <p style={{ fontSize: '12px', color: '#888', fontStyle: 'italic', marginBottom: '10px' }}>{q.questionEn}</p>}
+            <div style={{ background: '#faf8f5', border: '1px solid #e5e0d8', borderRadius: '8px', padding: '12px', marginBottom: '10px' }}>
+              <p style={{ fontSize: '11px', fontWeight: '600', color: '#888', marginBottom: '6px' }}>我的回答</p>
+              <p style={{ fontSize: '13px', color: '#333', lineHeight: '1.7', whiteSpace: 'pre-wrap' }}>{q.userAnswer}</p>
+            </div>
+            {q.aiFeedback && (
+              <div style={{ background: '#f5f7f5', border: '1px solid #c8d8cb', borderRadius: '8px', padding: '12px', marginBottom: '8px' }}>
+                <p style={{ fontSize: '11px', fontWeight: '600', color: '#5a7a60', marginBottom: '6px' }}>AI 評分回饋</p>
+                <p style={{ fontSize: '12px', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{q.aiFeedback}</p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
