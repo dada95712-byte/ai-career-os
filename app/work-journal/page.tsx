@@ -16,6 +16,13 @@ interface JournalEntry {
   tags?: string[]
 }
 
+interface InterviewMatch {
+  question_id: string
+  question_text: string
+  relevance_reason: string
+  star: { situation: string; task: string; action: string; result: string }
+}
+
 type EditorMode = 'star' | 'free'
 
 function genId() { return Math.random().toString(36).slice(2, 10) }
@@ -61,6 +68,8 @@ export default function WorkJournalPage() {
   const [tagInput, setTagInput] = useState('')
   const [aiTagging, setAiTagging] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [interviewAnalyzing, setInterviewAnalyzing] = useState(false)
+  const [interviewMatches, setInterviewMatches] = useState<InterviewMatch[] | null>(null)
   const titleRef = useRef<HTMLInputElement>(null)
 
   // ── Init ────────────────────────────────────────────────────────────────────
@@ -115,7 +124,26 @@ export default function WorkJournalPage() {
 
   function openDetail(entry: JournalEntry) {
     setDetailEntry(entry)
+    setInterviewMatches(null)
     setView('detail')
+  }
+
+  async function analyzeForInterview(entry: JournalEntry) {
+    const content = [entry.situation, entry.task, entry.action, entry.result, entry.content]
+      .filter(Boolean).join('\n')
+    if (content.trim().length < 20) return
+    setInterviewAnalyzing(true)
+    setInterviewMatches(null)
+    try {
+      const res = await fetch('/api/journals/analyze-for-interview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+      const data = await res.json()
+      setInterviewMatches(data.matched_questions ?? [])
+    } catch { setInterviewMatches([]) }
+    finally { setInterviewAnalyzing(false) }
   }
 
   function updateField(field: keyof JournalEntry, value: string) {
@@ -337,6 +365,73 @@ export default function WorkJournalPage() {
         ) : (
           <p className="text-sm text-ink-400 py-4 text-center">（無內容）</p>
         )}
+
+        {/* ── Interview analysis panel ── */}
+        <div className="rounded-2xl border border-warm-200 bg-white overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-warm-100">
+            <div>
+              <h2 className="text-sm font-semibold text-ink-800">🎤 AI 面試題配對</h2>
+              <p className="text-xs text-ink-400 mt-0.5">找出這篇日誌最適合回答的面試題，並生成 STAR 草稿</p>
+            </div>
+            <button
+              onClick={() => analyzeForInterview(e)}
+              disabled={interviewAnalyzing}
+              className="h-8 flex items-center gap-1.5 rounded-xl border border-warm-200 bg-white px-3 text-xs text-ink-500 hover:border-terra-300 hover:text-terra-600 transition-colors disabled:opacity-50"
+            >
+              {interviewAnalyzing ? <Spinner /> : '🤖'} {interviewMatches ? '重新分析' : '開始分析'}
+            </button>
+          </div>
+
+          {interviewAnalyzing ? (
+            <div className="flex items-center gap-2 text-sm text-terra-500 py-10 justify-center">
+              <Spinner className="h-5 w-5" /> AI 正在配對面試題...
+            </div>
+          ) : interviewMatches === null ? (
+            <div className="py-8 text-center">
+              <p className="text-sm text-ink-400">點擊「開始分析」，AI 會從 15 道常見面試題中找出最相關的，並生成 STAR 草稿</p>
+            </div>
+          ) : interviewMatches.length === 0 ? (
+            <div className="py-8 text-center">
+              <p className="text-sm text-ink-400">日誌內容不足以配對到常見面試題，建議補充更多細節</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-warm-100">
+              {interviewMatches.map((m) => {
+                const starParam = encodeURIComponent(JSON.stringify(m.star))
+                const qParam = encodeURIComponent(m.question_text)
+                const href = `/interview-prep?question=${qParam}&star_draft=${starParam}&from_journal=${e.id}`
+                return (
+                  <div key={m.question_id} className="px-5 py-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-ink-800">{m.question_text}</p>
+                        <p className="text-xs text-ink-400 mt-0.5">{m.relevance_reason}</p>
+                      </div>
+                      <a
+                        href={href}
+                        className="shrink-0 rounded-xl bg-terra-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)] whitespace-nowrap"
+                      >
+                        → 練習這題
+                      </a>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {([
+                        ['S', m.star.situation, 'bg-sage-50 border-sage-200 text-sage-800'],
+                        ['T', m.star.task,      'bg-honey-50 border-honey-400 text-ink-700'],
+                        ['A', m.star.action,    'bg-terra-50 border-terra-200 text-terra-800'],
+                        ['R', m.star.result,    'bg-cream-100 border-warm-200 text-ink-700'],
+                      ] as [string, string, string][]).map(([label, text, cls]) => (
+                        <div key={label} className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${cls}`}>
+                          <span className="font-bold mr-1">{label}</span>{text}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
     )
   }

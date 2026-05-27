@@ -850,7 +850,7 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
               <span>📓</span>
               <span className="flex-1">來自 Work Journal，已帶入 STAR 草稿供參考</span>
               {journalLinkedFromId && (
-                <a href={`/career-profile?tab=journal`} className="text-xs text-sage-500 hover:text-sage-700 whitespace-nowrap transition-colors">← 返回日誌</a>
+                <a href="/work-journal" className="text-xs text-sage-500 hover:text-sage-700 whitespace-nowrap transition-colors">← 返回日誌</a>
               )}
             </div>
           )}
