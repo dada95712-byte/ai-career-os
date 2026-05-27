@@ -313,6 +313,48 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <div><label className={LBL}>{label}</label>{children}</div>
 }
 
+// ── Bullet textarea ───────────────────────────────────────────────────────────
+
+function BulletTextarea({ value, onChange, rows = 5 }: { value: string; onChange: (v: string) => void; rows?: number }) {
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    const ta = e.currentTarget
+    const { selectionStart, selectionEnd, value: v } = ta
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      const newVal = v.slice(0, selectionStart) + '\n• ' + v.slice(selectionEnd)
+      onChange(newVal)
+      requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = selectionStart + 3 })
+    } else if (e.key === 'Backspace' && selectionStart === selectionEnd) {
+      const lineStart = v.lastIndexOf('\n', selectionStart - 1) + 1
+      if (v.slice(lineStart, selectionStart) === '• ') {
+        e.preventDefault()
+        const newVal = v.slice(0, lineStart > 0 ? lineStart - 1 : 0) + v.slice(selectionStart)
+        onChange(newVal)
+        requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = lineStart > 0 ? lineStart - 1 : 0 })
+      }
+    }
+  }
+
+  function handleFocus(e: React.FocusEvent<HTMLTextAreaElement>) {
+    if (!e.target.value) {
+      onChange('• ')
+      requestAnimationFrame(() => { e.target.selectionStart = e.target.selectionEnd = 2 })
+    }
+  }
+
+  return (
+    <textarea
+      className={INP + ' resize-none'}
+      rows={rows}
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      onKeyDown={handleKeyDown}
+      onFocus={handleFocus}
+      placeholder={'• 以動詞開頭描述工作內容\n• 例如：管理 5 人團隊，負責產品規劃'}
+    />
+  )
+}
+
 // ── Sortable tab item ─────────────────────────────────────────────────────────
 
 function SortableTab({ id, label, active, onClick }: { id: SectionId; label: string; active: boolean; onClick: () => void }) {
@@ -467,11 +509,21 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
   const [downloading, setDownloading] = useState(false)
   const [scoring, setScoring]         = useState(false)
   const [scoreResult, setScoreResult] = useState<ScoreReport | null>(null)
-  const [showScoreDrawer, setShowScoreDrawer] = useState(false)
   const [generatingSummary, setGeneratingSummary] = useState(false)
-  const [optimizingId, setOptimizingId]           = useState<string | null>(null)
   const [newSkill, setNewSkill]       = useState('')
   const [previewScale, setPreviewScale] = useState(0.7)
+  // Feature 1: auto-save
+  const [autoSaveStatus, setAutoSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const skipFirstRef  = useRef(true)
+  // Feature 3B: optimize modal
+  const [optimizeModal, setOptimizeModal] = useState<{
+    expId: string; loading: boolean
+    versions: { label: string; bullets: string[] }[] | null
+    editMode: boolean; editedBullets: string[][]
+  } | null>(null)
+  // Feature 4: score panel
+  const [showScorePanel, setShowScorePanel] = useState(false)
 
   const previewRef          = useRef<HTMLDivElement>(null)
   const previewContainerRef = useRef<HTMLDivElement>(null)
@@ -491,6 +543,23 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
   }, [fullPreview])
 
   useEffect(() => { if (editingName) nameInputRef.current?.focus() }, [editingName])
+
+  // Feature 1: auto-save debounce
+  useEffect(() => {
+    if (skipFirstRef.current) { skipFirstRef.current = false; return }
+    setAutoSaveStatus('saving')
+    clearTimeout(autoSaveTimer.current)
+    autoSaveTimer.current = setTimeout(() => {
+      try {
+        onSave(toSaved(resume), resumeName || resume.name || '我的履歷')
+        setAutoSaveStatus('saved')
+        setTimeout(() => setAutoSaveStatus('idle'), 2000)
+      } catch { setAutoSaveStatus('failed'); setTimeout(() => setAutoSaveStatus('idle'), 3000) }
+    }, 1500)
+  }, [resume, resumeName]) // eslint-disable-line
+
+  // Feature 4: auto-open score panel when score is available
+  useEffect(() => { if (scoreResult) setShowScorePanel(true) }, [scoreResult])
 
   // ── Updaters ────────────────────────────────────────────────────────────────
 
@@ -660,7 +729,7 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
       const data = await res.json()
       if (!data.error) {
         setScoreResult(data as ScoreReport)
-        setShowScoreDrawer(true)
+        setShowScorePanel(true)
         const scoredAt = new Date().toISOString()
         onScoreUpdate?.(data.score, data.atsScore, scoredAt)
       }
@@ -683,16 +752,20 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
 
   async function handleOptimizeExp(id: string) {
     const exp = resume.experiences.find(e => e.id === id); if (!exp) return
-    setOptimizingId(id)
+    setOptimizeModal({ expId: id, loading: true, versions: null, editMode: false, editedBullets: [] })
     try {
-      const res = await fetch('/api/resume/optimize', {
+      const res = await fetch('/api/resume/optimize-description', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: exp.title, company: exp.company, description: exp.description, lang: resume.lang }),
+        body: JSON.stringify({ original_content: exp.description, title: exp.title, company: exp.company }),
       })
       const data = await res.json()
-      if (data.description) updExp(id, 'description', data.description)
-    } catch { /* silent */ }
-    finally { setOptimizingId(null) }
+      if (data.versions) {
+        setOptimizeModal(prev => prev ? {
+          ...prev, loading: false, versions: data.versions,
+          editedBullets: data.versions.map((v: { bullets: string[] }) => [...v.bullets]),
+        } : null)
+      } else { setOptimizeModal(null) }
+    } catch { setOptimizeModal(null) }
   }
 
   // ── Edit panel ────────────────────────────────────────────────────────────────
@@ -704,18 +777,6 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
     <div className="h-full flex overflow-hidden">
       {/* Sortable vertical section list */}
       <div className="w-[108px] shrink-0 bg-cream-100 border-r border-warm-200 overflow-y-auto py-3 px-1.5">
-        {/* Preset selector */}
-        <div className="px-0.5 pb-2 mb-1.5 border-b border-warm-200">
-          <p className="text-[9px] text-ink-400 mb-1 font-medium uppercase tracking-wide px-1">套用範本</p>
-          <select
-            className="w-full text-[11px] rounded-md border border-warm-200 bg-white px-1.5 py-1 text-ink-600 focus:outline-none focus:border-terra-400"
-            value=""
-            onChange={e => { if (e.target.value) applyPreset(e.target.value) }}
-          >
-            <option value="">選擇範本…</option>
-            {PRESETS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select>
-        </div>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSectionDragEnd}>
           <SortableContext items={resume.sectionOrder} strategy={verticalListSortingStrategy}>
             {resume.sectionOrder.map(id => (
@@ -815,12 +876,12 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className={LBL + ' mb-0'}>工作描述</label>
-                    <button onClick={() => handleOptimizeExp(exp.id)} disabled={optimizingId === exp.id}
+                    <button onClick={() => handleOptimizeExp(exp.id)} disabled={!!(optimizeModal?.expId === exp.id && optimizeModal?.loading)}
                       className="flex items-center gap-1 rounded-md border border-terra-200 bg-terra-50 px-2 py-1 text-[10px] text-terra-600 hover:bg-terra-100 transition-all disabled:opacity-60">
-                      {optimizingId === exp.id ? <><SpinSm />優化中…</> : '🤖 AI 優化'}
+                      {optimizeModal?.expId === exp.id && optimizeModal?.loading ? <><SpinSm />優化中…</> : '🤖 AI 優化'}
                     </button>
                   </div>
-                  <textarea className={INP + ' resize-none'} rows={5} value={exp.description} onChange={e => updExp(exp.id, 'description', e.target.value)} />
+                  <BulletTextarea value={exp.description} onChange={v => updExp(exp.id, 'description', v)} />
                 </div>
               </div>
             ))}
@@ -1086,12 +1147,17 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
         )}
 
         <div className="flex items-center gap-2 shrink-0">
+          {autoSaveStatus !== 'idle' && !fullPreview && (
+            <span className={`hidden sm:inline text-xs transition-colors ${autoSaveStatus === 'saving' ? 'text-ink-400' : autoSaveStatus === 'saved' ? 'text-sage-600' : 'text-red-500'}`}>
+              {autoSaveStatus === 'saving' ? '儲存中…' : autoSaveStatus === 'saved' ? '✓ 已自動儲存' : '儲存失敗'}
+            </span>
+          )}
           {scoreResult && !fullPreview && (
-            <button onClick={() => setShowScoreDrawer(true)}
-              className="hidden sm:flex items-center gap-2 rounded-lg border border-warm-200 bg-cream-100 px-3 py-1.5 hover:border-terra-300 transition-all">
+            <button onClick={() => setShowScorePanel(p => !p)}
+              className={`hidden sm:flex items-center gap-2 rounded-lg border px-3 py-1.5 transition-all ${showScorePanel ? 'border-terra-300 bg-terra-50' : 'border-warm-200 bg-cream-100 hover:border-terra-300'}`}>
               <span className="text-sm font-bold text-terra-500">{scoreResult.score}</span>
               <span className="text-xs text-ink-400">/ 100</span>
-              <span className="text-xs text-terra-400 underline underline-offset-2">查看報告</span>
+              <span className="text-xs text-terra-400">📊</span>
             </button>
           )}
           {!fullPreview && (
@@ -1122,18 +1188,41 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
         <div className={`${!fullPreview && mobileView === 'edit' ? 'hidden' : 'flex'} md:flex flex-col flex-1 overflow-hidden relative`}>
           {previewPanel}
         </div>
+        {/* Feature 4: persistent score side panel (desktop) */}
+        {showScorePanel && scoreResult && !fullPreview && (
+          <div className="hidden md:flex flex-col w-[280px] shrink-0 border-l border-warm-200 overflow-hidden">
+            <ScoreDrawer mode="panel" report={scoreResult} lang={resume.lang} scoring={scoring}
+              resumeText={toSaved(resume).rawText}
+              onClose={() => setShowScorePanel(false)}
+              onNavigate={(s) => { setSection(s); if (fullPreview) setFullPreview(false) }}
+              onRescore={() => handleScore()} />
+          </div>
+        )}
       </div>
 
-      {/* Score report drawer */}
-      {showScoreDrawer && scoreResult && (
-        <ScoreDrawer
-          report={scoreResult}
-          lang={resume.lang}
-          scoring={scoring}
-          resumeText={toSaved(resume).rawText}
-          onClose={() => setShowScoreDrawer(false)}
-          onNavigate={(s) => { setShowScoreDrawer(false); setSection(s); if (fullPreview) setFullPreview(false) }}
-          onRescore={() => { setShowScoreDrawer(false); handleScore() }}
+      {/* Feature 5: score bottom sheet (mobile) */}
+      {showScorePanel && scoreResult && !fullPreview && (
+        <div className="md:hidden fixed bottom-0 inset-x-0 z-[60] bg-white rounded-t-2xl shadow-2xl overflow-hidden" style={{ height: '70vh' }}>
+          <div className="flex justify-center pt-2 pb-0.5 shrink-0">
+            <button onClick={() => setShowScorePanel(false)} className="w-10 h-1.5 rounded-full bg-warm-300 hover:bg-warm-400 transition-colors" />
+          </div>
+          <ScoreDrawer mode="sheet" report={scoreResult} lang={resume.lang} scoring={scoring}
+            resumeText={toSaved(resume).rawText}
+            onClose={() => setShowScorePanel(false)}
+            onNavigate={(s) => { setShowScorePanel(false); setSection(s) }}
+            onRescore={() => handleScore()} />
+        </div>
+      )}
+
+      {/* Feature 3B: AI optimize modal */}
+      {optimizeModal && (
+        <OptimizeModal
+          modal={optimizeModal}
+          onClose={() => setOptimizeModal(null)}
+          onApply={(text) => {
+            updExp(optimizeModal.expId, 'description', text)
+            setOptimizeModal(null)
+          }}
         />
       )}
     </div>
@@ -1176,7 +1265,7 @@ function DimBar({ label, score }: { label: string; score: number }) {
 }
 
 function ScoreDrawer({
-  report, lang, scoring, resumeText, onClose, onNavigate, onRescore,
+  report, lang, scoring, resumeText, onClose, onNavigate, onRescore, mode,
 }: {
   report: ScoreReport
   lang: 'zh' | 'en'
@@ -1185,6 +1274,7 @@ function ScoreDrawer({
   onClose: () => void
   onNavigate: (s: SectionId) => void
   onRescore: () => void
+  mode?: 'panel' | 'sheet'
 }) {
   const [reportLang, setReportLang] = useState<'zh' | 'en'>(lang)
   const [visible, setVisible] = useState(true)
@@ -1268,10 +1358,8 @@ function ScoreDrawer({
     doc.save(isZh ? '履歷評分報告.pdf' : 'resume-score-report.pdf')
   }
 
-  return (
-    <>
-      <div className="fixed inset-0 z-[60] bg-black/30" onClick={onClose} />
-      <div className="fixed right-0 top-0 bottom-0 z-[61] w-full max-w-[480px] bg-white shadow-2xl flex flex-col overflow-hidden">
+  const panelContent = (
+    <div className={mode ? 'h-full flex flex-col overflow-hidden bg-white' : 'fixed right-0 top-0 bottom-0 z-[61] w-full max-w-[480px] bg-white shadow-2xl flex flex-col overflow-hidden'}>
         <div className="flex items-center gap-3 px-6 py-4 border-b border-warm-200 shrink-0">
           <h2 className="text-base font-bold text-ink-800 flex-1">
             {isZh ? '📊 AI 評分報告' : '📊 AI Score Report'}
@@ -1382,6 +1470,105 @@ function ScoreDrawer({
               : (isZh ? '重新評分' : 'Re-score')}
           </button>
         </div>
+    </div>
+  )
+
+  if (mode) return panelContent
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[60] bg-black/30" onClick={onClose} />
+      {panelContent}
+    </>
+  )
+}
+
+// ── Optimize modal (Feature 3B) ───────────────────────────────────────────────
+
+function OptimizeModal({
+  modal, onClose, onApply,
+}: {
+  modal: {
+    expId: string; loading: boolean
+    versions: { label: string; bullets: string[] }[] | null
+    editMode: boolean; editedBullets: string[][]
+  }
+  onClose: () => void
+  onApply: (text: string) => void
+}) {
+  const [selected, setSelected] = useState(0)
+  const [edited, setEdited] = useState<string[][]>(
+    modal.versions ? modal.versions.map(v => [...v.bullets]) : []
+  )
+
+  useEffect(() => {
+    if (modal.versions && edited.length === 0) {
+      setEdited(modal.versions.map(v => [...v.bullets]))
+    }
+  }, [modal.versions]) // eslint-disable-line
+
+  function applySelected() {
+    const bullets = modal.versions ? (edited[selected] ?? modal.versions[selected].bullets) : []
+    onApply(bullets.map(b => `• ${b.replace(/^•\s*/, '')}`).join('\n'))
+  }
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[70] bg-black/40" onClick={onClose} />
+      {/* Feature 5: fullscreen on mobile, centered modal on desktop */}
+      <div className="fixed inset-0 z-[71] flex flex-col bg-white sm:inset-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[680px] sm:max-h-[82vh] sm:rounded-2xl sm:shadow-2xl overflow-hidden">
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-warm-200 shrink-0">
+          <h2 className="flex-1 text-base font-bold text-ink-800">🤖 AI 工作描述優化</h2>
+          <button onClick={onClose} className="text-ink-400 hover:text-ink-700 text-xl leading-none">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {modal.loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3 text-ink-400">
+              <SpinSm /><p className="text-sm">AI 生成優化版本中…</p>
+            </div>
+          ) : modal.versions ? modal.versions.map((ver, vi) => (
+            <div key={vi} onClick={() => setSelected(vi)}
+              className={`rounded-xl border-2 p-4 cursor-pointer transition-all ${selected === vi ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-400'}`}>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs font-semibold text-terra-700 bg-terra-100 rounded-full px-2.5 py-0.5">{ver.label}</span>
+                {selected === vi && <span className="text-[10px] text-terra-600 font-medium">✓ 已選擇</span>}
+              </div>
+              <div className="space-y-1.5">
+                {(edited[vi] ?? ver.bullets).map((b, bi) => (
+                  <div key={bi} className="flex items-start gap-1.5">
+                    <span className="text-terra-400 mt-0.5 shrink-0 text-sm">•</span>
+                    {selected === vi ? (
+                      <input
+                        className="flex-1 text-xs text-ink-700 bg-transparent border-b border-warm-200 focus:border-terra-400 focus:outline-none py-0.5 min-w-0"
+                        value={b}
+                        onChange={e => {
+                          const next = [...(edited[vi] ?? ver.bullets)]
+                          next[bi] = e.target.value
+                          const all = [...edited]; all[vi] = next; setEdited(all)
+                        }}
+                        onClick={ev => ev.stopPropagation()}
+                      />
+                    ) : (
+                      <p className="text-xs text-ink-700 leading-relaxed">{b}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )) : null}
+        </div>
+
+        {!modal.loading && modal.versions && (
+          <div className="shrink-0 border-t border-warm-200 px-5 py-4 flex gap-2">
+            <button onClick={onClose} className="flex-1 rounded-lg border border-warm-300 bg-white py-2.5 text-sm font-medium text-ink-600 hover:bg-cream-100 transition-colors">
+              取消
+            </button>
+            <button onClick={applySelected} className="flex-1 rounded-lg bg-terra-500 py-2.5 text-sm font-medium text-white hover:bg-terra-600 transition-colors">
+              套用此版本
+            </button>
+          </div>
+        )}
       </div>
     </>
   )
