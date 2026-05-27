@@ -1001,6 +1001,11 @@ export default function ProfileLibraryPage() {
             onChange={e => { const f = e.target.files?.[0]; if (f) { handleImportFile(f); e.target.value = '' } }} />
         </div>
 
+        {/* Data source explanation */}
+        <div className="bg-sage-50 border-l-4 border-l-sage-400 rounded-xl px-4 py-3 text-sm text-sage-700">
+          個人檔案庫是你所有職涯資料的唯一來源，Resume Lab 建立的所有履歷都從這裡取得資料。
+        </div>
+
         {/* Progress bar */}
         <div className="rounded-2xl border border-warm-200 bg-white p-4">
           <div className="flex items-center justify-between mb-1.5">

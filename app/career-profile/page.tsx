@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -169,6 +170,13 @@ export default function CareerProfilePage() {
   const [jdText, setJdText] = useState('')
   const [editBanner, setEditBanner] = useState('')
 
+  // Profile data awareness (Steps 2, 3, 4)
+  const [hasProfileData, setHasProfileData] = useState(true)
+  const [profileCompleteness, setProfileCompleteness] = useState(0)
+  const [jdSubMode, setJdSubMode] = useState<'paste' | 'tracker' | null>(null)
+  const [trackerApps, setTrackerApps] = useState<{ id: string; company?: string; title?: string; jdFullText?: string }[]>([])
+  const [selectedTrackerAppId, setSelectedTrackerAppId] = useState('')
+
   // Skills are managed in /dashboard/skills — only needed here for localStorage merge on resume import
 
   // ── Journal state ─────────────────────────────────────────────────────────────
@@ -229,6 +237,25 @@ export default function CareerProfilePage() {
       setEntries(es)
       setCompanyHistory([...new Set(es.map((e) => e.company).filter(Boolean))])
     }
+
+    // Profile completeness
+    try {
+      const basic = JSON.parse(localStorage.getItem('profile-basic') ?? 'null') as Record<string, string> | null
+      const hasAny = !!(basic && Object.values(basic).some((v) => v))
+      setHasProfileData(hasAny)
+      let f = 0; const t = 20
+      if (basic) ['nameZh', 'nameEn', 'email', 'phone', 'address', 'linkedinUrl', 'portfolioUrl', 'websiteUrl'].forEach((k) => { if (basic[k]) f++ })
+      ;['profile-education', 'profile-experience', 'profile-internship', 'profile-project', 'profile-certificate', 'profile-activity', 'profile-conference'].forEach((key) => {
+        try { if ((JSON.parse(localStorage.getItem(key) ?? '[]') as unknown[]).length > 0) f++ } catch { /* */ }
+      })
+      const sm = JSON.parse(localStorage.getItem('profile-skillmap') ?? '{}') as Record<string, string[]>
+      if (Object.values(sm).some((a) => a.length > 0)) f++
+      if ((JSON.parse(localStorage.getItem('profile-language') ?? '[]') as unknown[]).length > 0) f++
+      if (localStorage.getItem('profile-summary-zh')) f++
+      if (localStorage.getItem('profile-summary-en')) f++
+      setProfileCompleteness(Math.round((f / t) * 100))
+    } catch { /* ignore */ }
+    try { setTrackerApps(JSON.parse(localStorage.getItem('job-tracker-apps') ?? '[]')) } catch { /* ignore */ }
 
     // Multi-resume format (new)
     const rawResumes = localStorage.getItem('career-resumes')
@@ -602,6 +629,29 @@ export default function CareerProfilePage() {
       {tab === 'resume' && (
         <div className="space-y-5">
 
+          {/* ── Profile completeness status bar (Step 4) ── */}
+          {profileCompleteness < 60 ? (
+            <div className="flex items-center justify-between gap-4 rounded-xl bg-honey-50 border border-honey-200 px-4 py-3">
+              <p className="text-sm text-honey-700">
+                ⚠️ 個人檔案庫完整度 <span className="font-bold">{profileCompleteness}%</span>，建議補充更多資料以產出更完整的履歷
+              </p>
+              <Link href="/profile-library"
+                className="shrink-0 text-sm font-medium text-honey-700 underline-offset-2 hover:underline whitespace-nowrap transition-colors">
+                前往補充 →
+              </Link>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-4 rounded-xl bg-sage-50 border border-sage-200 px-4 py-3">
+              <p className="text-sm text-sage-700">
+                ✓ 個人檔案庫已就緒（完整度 <span className="font-bold">{profileCompleteness}%</span>）
+              </p>
+              <Link href="/profile-library"
+                className="shrink-0 text-sm font-medium text-sage-600 underline-offset-2 hover:underline whitespace-nowrap transition-colors">
+                查看/編輯 →
+              </Link>
+            </div>
+          )}
+
           {/* ── LEVEL 1: Resume List ──────────────────────────────────────────── */}
           {resumeView === 'list' && (
             <div className="space-y-5">
@@ -706,144 +756,183 @@ export default function CareerProfilePage() {
           {resumeView === 'create' && (
             <div className="space-y-6">
               {/* Back + title */}
-              <button onClick={() => { setResumeView('list'); setCreateMode('none'); setResumeError('') }}
+              <button onClick={() => { setResumeView('list'); setCreateMode('none'); setChooserOpt(null); setJdSubMode(null); setResumeError('') }}
                 className="flex items-center gap-1 text-sm text-ink-400 hover:text-ink-700 transition-colors">
                 ← 返回
               </button>
               <div>
-                <h2 className="text-xl font-bold text-ink-900">打造您的完美履歷</h2>
-                <p className="text-sm text-ink-500 mt-1">選擇一種方式開始</p>
+                <h2 className="text-xl font-bold text-ink-900">建立新履歷</h2>
+                <p className="text-sm text-ink-500 mt-1">選擇履歷類型，AI 從個人檔案庫取得資料自動生成</p>
               </div>
 
-              {/* Two entry cards */}
-              <div className="flex justify-center">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full" style={{ maxWidth: '832px' }}>
-                  {/* Card 1: Upload */}
-                  <button className={entryCardCls(createMode === 'upload')} onClick={() => { setCreateMode('upload'); setResumeError('') }}>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-terra-50 border border-terra-100 text-xl">↑</div>
-                    <div>
-                      <p className="font-semibold text-ink-800 text-sm">上傳履歷</p>
-                      <p className="text-xs text-ink-400 mt-1 leading-relaxed">自動解析並最佳化<br/>支援 PDF、DOC、DOCX</p>
-                    </div>
-                  </button>
-
-                  {/* Card 2: Manual build → chooser */}
-                  <button className={entryCardCls(createMode === 'chooser' || createMode === 'loading')} onClick={() => { setCreateMode('chooser'); setChooserOpt(null); setResumeError('') }}>
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-honey-50 border border-amber-100 text-xl">📄</div>
-                    <div>
-                      <p className="font-semibold text-ink-800 text-sm">建立履歷</p>
-                      <p className="text-xs text-ink-400 mt-1 leading-relaxed">AI 生成或空白開始</p>
-                    </div>
-                  </button>
+              {/* Step 2: No-profile-data notice */}
+              {!hasProfileData && (
+                <div className="bg-cream-50 border border-warm-200 border-dashed rounded-xl p-6 text-center space-y-3">
+                  <p className="text-2xl">📁</p>
+                  <p className="font-semibold text-ink-700">還沒有個人檔案庫資料？</p>
+                  <p className="text-sm text-ink-500">先前往個人檔案庫上傳履歷或填寫資料，<br/>Resume Lab 將自動引用你的資料建立履歷</p>
+                  <Link href="/profile-library"
+                    className="inline-block mt-1 rounded-xl bg-terra-500 px-5 py-2 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                    前往個人檔案庫 →
+                  </Link>
                 </div>
-              </div>
-
-              {/* ── Upload expanded ── */}
-              {createMode === 'upload' && (
-                <Card>
-                  <CardContent className="pt-5 space-y-4">
-                    <div
-                      className={`flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-12 cursor-pointer transition-all ${dragging ? 'border-terra-400 bg-terra-50' : 'border-warm-300 hover:border-terra-300 hover:bg-terra-50/50'}`}
-                      onClick={() => fileRef.current?.click()}
-                      onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
-                      onDragLeave={() => setDragging(false)}
-                      onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) handleFile(f) }}>
-                      <span className="text-3xl mb-2">↑</span>
-                      <p className="text-sm font-medium text-ink-600">拖曳或點擊上傳</p>
-                      <p className="text-xs text-ink-400 mt-1">PDF · DOCX · DOC · 最大 10MB</p>
-                      {parsing && <div className="mt-3 flex items-center gap-2 text-sm text-terra-500"><Spinner />AI 解析中...</div>}
-                    </div>
-                    <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" className="hidden"
-                      onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
-                    {resumeError && <p className="text-sm text-red-400">{resumeError}</p>}
-                  </CardContent>
-                </Card>
               )}
 
-              {/* ── Chooser ── */}
-              {createMode === 'chooser' && (
-                <div className="space-y-3 max-w-lg mx-auto">
-                  {/* Option A: From profile library */}
-                  <button
-                    className={`w-full flex items-start gap-4 rounded-2xl border-2 p-4 text-left transition-all ${chooserOpt === 'profile' ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-terra-200 hover:bg-terra-50/40'}`}
-                    onClick={() => setChooserOpt(chooserOpt === 'profile' ? null : 'profile')}
-                  >
-                    <span className="text-2xl leading-none mt-0.5">📋</span>
-                    <div>
-                      <p className="font-semibold text-ink-800 text-sm">從個人檔案庫建立</p>
-                      <p className="text-xs text-ink-400 mt-0.5">AI 依據你的完整個人資料自動生成履歷</p>
-                    </div>
-                  </button>
-                  {chooserOpt === 'profile' && (
-                    <div className="ml-4 p-4 rounded-xl border border-warm-100 bg-cream-50 space-y-3">
+              {/* Step 3: Two large cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                {/* Card 1: 通用履歷 */}
+                <div className={`bg-white border border-warm-200 rounded-xl p-8 space-y-4 flex flex-col ${!hasProfileData ? 'opacity-60 pointer-events-none' : ''}`}>
+                  <div className="space-y-2">
+                    <p className="text-xl font-bold text-ink-900">📄 通用履歷</p>
+                    <p className="text-sm text-ink-500">從個人檔案庫建立完整版本，適合主動投遞或人脈推薦</p>
+                  </div>
+                  <div className="flex-1" />
+                  {chooserOpt === 'profile' ? (
+                    <div className="space-y-3 border-t border-warm-100 pt-4">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm text-ink-600 shrink-0">語言：</span>
+                        <span className="text-xs text-ink-500 shrink-0">語言：</span>
                         {(['zh', 'en', 'both'] as const).map((l) => (
                           <button key={l} onClick={() => setResumeLang(l)}
-                            className={`rounded-lg px-3 py-1 text-xs font-medium transition-all ${resumeLang === l ? 'bg-terra-500 text-white' : 'border border-warm-200 bg-white text-ink-600 hover:border-terra-300'}`}>
+                            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${resumeLang === l ? 'bg-terra-500 text-white' : 'border border-warm-200 bg-white text-ink-600 hover:border-terra-300'}`}>
                             {l === 'zh' ? '繁體中文' : l === 'en' ? 'English' : '兩份都要'}
                           </button>
                         ))}
                       </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => buildFromProfile(resumeLang)}
+                          className="flex-1 h-10 rounded-xl bg-terra-500 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                          開始建立 →
+                        </button>
+                        <button onClick={() => setChooserOpt(null)}
+                          className="h-10 px-3 rounded-xl border border-warm-200 text-sm text-ink-400 hover:text-ink-700 transition-colors">
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => { setChooserOpt('profile'); setResumeError('') }}
+                      className="w-full h-11 rounded-xl bg-terra-500 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                      建立通用履歷 →
+                    </button>
+                  )}
+                </div>
+
+                {/* Card 2: 客製化履歷 */}
+                <div className="bg-terra-50 border border-terra-200 rounded-xl p-8 space-y-4 flex flex-col">
+                  <div className="space-y-2">
+                    <p className="text-xl font-bold text-ink-900">🎯 客製化履歷</p>
+                    <p className="text-sm text-ink-500">針對特定職缺 JD 優化，提高 ATS 通過率</p>
+                  </div>
+                  <div className="flex-1" />
+                  {chooserOpt !== 'jd' ? (
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => buildFromProfile(resumeLang)}
-                        className="h-9 rounded-xl bg-terra-500 px-5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
-                        開始建立 →
+                        onClick={() => { setChooserOpt('jd'); setJdSubMode('paste'); setResumeError('') }}
+                        className="flex-1 rounded-xl border-2 border-terra-300 bg-white py-2.5 text-sm font-medium text-terra-700 hover:bg-terra-100 transition-colors">
+                        貼上 JD 開始
+                      </button>
+                      <button
+                        onClick={() => { setChooserOpt('jd'); setJdSubMode('tracker'); setResumeError(''); setSelectedTrackerAppId('') }}
+                        className="flex-1 rounded-xl border-2 border-terra-300 bg-white py-2.5 text-sm font-medium text-terra-700 hover:bg-terra-100 transition-colors">
+                        從 Tracker 選擇
                       </button>
                     </div>
-                  )}
+                  ) : null}
+                </div>
+              </div>
 
-                  {/* Option B: JD customization */}
-                  <button
-                    className={`w-full flex items-start gap-4 rounded-2xl border-2 p-4 text-left transition-all ${chooserOpt === 'jd' ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-terra-200 hover:bg-terra-50/40'}`}
-                    onClick={() => setChooserOpt(chooserOpt === 'jd' ? null : 'jd')}
-                  >
-                    <span className="text-2xl leading-none mt-0.5">🎯</span>
-                    <div>
-                      <p className="font-semibold text-ink-800 text-sm">針對 JD 客製化</p>
-                      <p className="text-xs text-ink-400 mt-0.5">貼上職位描述，AI 自動選擇最相關的內容</p>
+              {/* Expanded: JD paste */}
+              {chooserOpt === 'jd' && jdSubMode === 'paste' && (
+                <div className="rounded-xl border border-terra-200 bg-white p-5 space-y-3">
+                  <p className="text-sm font-semibold text-ink-700">貼上職位描述（JD）</p>
+                  <Textarea
+                    value={jdText}
+                    onChange={(e) => setJdText(e.target.value)}
+                    placeholder="貼上職位描述（JD）..."
+                    rows={6}
+                    className="resize-none"
+                  />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-ink-500 shrink-0">語言：</span>
+                    {(['zh', 'en', 'both'] as const).map((l) => (
+                      <button key={l} onClick={() => setResumeLang(l)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${resumeLang === l ? 'bg-terra-500 text-white' : 'border border-warm-200 bg-white text-ink-600 hover:border-terra-300'}`}>
+                        {l === 'zh' ? '繁體中文' : l === 'en' ? 'English' : '兩份都要'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => customizeForJD(resumeLang)}
+                      disabled={!jdText.trim()}
+                      className="flex-1 h-10 rounded-xl bg-terra-500 text-sm font-semibold text-white hover:bg-terra-700 transition-colors disabled:opacity-50 shadow-[var(--shadow-warm-sm)]">
+                      開始客製化 →
+                    </button>
+                    <button onClick={() => { setChooserOpt(null); setJdSubMode(null) }}
+                      className="h-10 px-3 rounded-xl border border-warm-200 text-sm text-ink-400 hover:text-ink-700 transition-colors">
+                      取消
+                    </button>
+                  </div>
+                  {resumeError && <p className="text-sm text-red-400">{resumeError}</p>}
+                </div>
+              )}
+
+              {/* Expanded: Application Tracker picker */}
+              {chooserOpt === 'jd' && jdSubMode === 'tracker' && (
+                <div className="rounded-xl border border-terra-200 bg-white p-5 space-y-3">
+                  <p className="text-sm font-semibold text-ink-700">從 Application Tracker 選擇職缺</p>
+                  {trackerApps.length === 0 ? (
+                    <div className="py-6 text-center space-y-2">
+                      <p className="text-sm text-ink-400">Application Tracker 尚無紀錄</p>
+                      <Link href="/career-match"
+                        className="text-sm text-terra-600 hover:text-terra-700 underline underline-offset-2 transition-colors">
+                        前往 Application Tracker →
+                      </Link>
                     </div>
-                  </button>
-                  {chooserOpt === 'jd' && (
-                    <div className="ml-4 p-4 rounded-xl border border-warm-100 bg-cream-50 space-y-3">
-                      <Textarea
-                        value={jdText}
-                        onChange={(e) => setJdText(e.target.value)}
-                        placeholder="貼上職位描述（JD）..."
-                        rows={5}
-                        className="resize-none"
-                      />
+                  ) : (
+                    <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                      {trackerApps.map((app) => (
+                        <button key={app.id}
+                          onClick={() => {
+                            setSelectedTrackerAppId(app.id)
+                            setJdText(app.jdFullText ?? '')
+                          }}
+                          className={`w-full flex items-start gap-3 rounded-xl border-2 p-3 text-left transition-all ${selectedTrackerAppId === app.id ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-terra-200'}`}>
+                          <span className="text-base mt-0.5">🏢</span>
+                          <div>
+                            <p className="text-sm font-semibold text-ink-800">{app.company || '（無公司名稱）'}</p>
+                            {app.title && <p className="text-xs text-ink-400">{app.title}</p>}
+                            {!app.jdFullText && <p className="text-xs text-terra-400 mt-0.5">⚠️ 此職缺尚未填寫 JD</p>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {selectedTrackerAppId && jdText && (
+                    <div className="space-y-2 pt-2 border-t border-warm-100">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm text-ink-600 shrink-0">語言：</span>
+                        <span className="text-xs text-ink-500 shrink-0">語言：</span>
                         {(['zh', 'en', 'both'] as const).map((l) => (
                           <button key={l} onClick={() => setResumeLang(l)}
-                            className={`rounded-lg px-3 py-1 text-xs font-medium transition-all ${resumeLang === l ? 'bg-terra-500 text-white' : 'border border-warm-200 bg-white text-ink-600 hover:border-terra-300'}`}>
+                            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${resumeLang === l ? 'bg-terra-500 text-white' : 'border border-warm-200 bg-white text-ink-600 hover:border-terra-300'}`}>
                             {l === 'zh' ? '繁體中文' : l === 'en' ? 'English' : '兩份都要'}
                           </button>
                         ))}
                       </div>
                       <button
                         onClick={() => customizeForJD(resumeLang)}
-                        disabled={!jdText.trim()}
-                        className="h-9 rounded-xl bg-terra-500 px-5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)] disabled:opacity-50">
+                        className="w-full h-10 rounded-xl bg-terra-500 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
                         開始客製化 →
                       </button>
                     </div>
                   )}
-
-                  {/* Option C: Blank */}
-                  <button
-                    className="w-full flex items-start gap-4 rounded-2xl border-2 border-warm-200 bg-white hover:border-terra-200 hover:bg-terra-50/40 p-4 text-left transition-all"
-                    onClick={() => goToEditor(EMPTY_RESUME, '新履歷', 'manual')}
-                  >
-                    <span className="text-2xl leading-none mt-0.5">✏️</span>
-                    <div>
-                      <p className="font-semibold text-ink-800 text-sm">空白開始</p>
-                      <p className="text-xs text-ink-400 mt-0.5">從空白開始，自由填寫你的履歷</p>
-                    </div>
+                  <button onClick={() => { setChooserOpt(null); setJdSubMode(null); setSelectedTrackerAppId('') }}
+                    className="text-sm text-ink-400 hover:text-ink-600 transition-colors">
+                    ← 取消
                   </button>
-
-                  {resumeError && <p className="text-sm text-red-400 text-center">{resumeError}</p>}
+                  {resumeError && <p className="text-sm text-red-400">{resumeError}</p>}
                 </div>
               )}
 
