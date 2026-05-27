@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { PageTooltip } from '@/components/onboarding/page-tooltip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -8,21 +8,18 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ProgressBar } from '@/components/ui/progress-ring'
 import Link from 'next/link'
-import { useReactToPrint } from 'react-to-print'
 
 interface SalaryData { role: string; industry: string; experience: string; median: number; p25: number; p75: number; source: string; notes: string }
 interface Trend { industry: string; trend: 'up' | 'stable' | 'down'; hotJobs: string[]; notes: string }
-interface CompanyReport {
-  background: { founded: string; size: string; location: string; business: string }
-  businessModel: { revenue: string; targetCustomers: string; valueProposition: string }
-  swot: { strengths: string[]; weaknesses: string[]; opportunities: string[]; threats: string[] }
-  marketAnalysis: string
-  industryTrends: string
-  companyUpdates: string
-  dataSources: string[]
-  analyzedAt: string
+interface DeepReport {
+  basicInfo: string
+  culture: string
+  rolePosition: string
+  interviewProcess: string
+  salaryNegotiation: string
+  competitors: string[]
+  roleTrend?: { recruitmentHeat: string; topSkills: string[]; threeMonthTrend: string }
 }
-interface SavedReport { company: string; report: CompanyReport; hasWebData: boolean; savedAt: string }
 
 const TREND_CFG = {
   up:     { icon: '↑', label: '需求上升', color: 'text-sage-600', badge: 'success' as const },
@@ -38,39 +35,60 @@ const STATS = [
 ]
 
 const PIPELINE_ROWS = [
-  { label: '已投遞', count: 4, max: 10, color: 'bg-sky-500' },
-  { label: '面試邀請', count: 1, max: 10, color: 'bg-violet-500' },
-  { label: '技術面試', count: 0, max: 10, color: 'bg-honey-500' },
+  { label: '已投遞',    count: 4, max: 10, color: 'bg-sky-500' },
+  { label: '面試邀請',  count: 1, max: 10, color: 'bg-violet-500' },
+  { label: '技術面試',  count: 0, max: 10, color: 'bg-honey-500' },
   { label: '收到 Offer', count: 0, max: 10, color: 'bg-sage-500' },
 ]
+
+const INDUSTRIES = ['科技業', '金融業', '電商/零售業', '製造業', '醫療/生技', '媒體/廣告', '顧問/服務業', '教育', '政府/非營利', '其他']
+
+function Skel({ lines = 3 }: { lines?: number }) {
+  return (
+    <div className="animate-pulse space-y-2">
+      {Array.from({ length: lines }).map((_, i) => (
+        <div key={i} className={`h-3 bg-warm-200 rounded ${i === 0 ? 'w-full' : i % 2 === 0 ? 'w-4/5' : 'w-3/5'}`} />
+      ))}
+    </div>
+  )
+}
 
 export default function CareerIntelligencePage() {
   const [tab, setTab] = useState<'salary' | 'trends' | 'analytics' | 'company'>('salary')
 
-  // Salary
+  // Salary tab
   const [salaryRole, setSalaryRole] = useState('')
   const [experience, setExperience] = useState('')
   const [salaryData, setSalaryData] = useState<SalaryData | null>(null)
   const [loadingSalary, setLoadingSalary] = useState(false)
 
-  // Trends
+  // Trends tab
   const [trends, setTrends] = useState<Trend[]>([])
   const [loadingTrends, setLoadingTrends] = useState(false)
 
-  // Company analysis
-  const [companyName, setCompanyName] = useState('')
-  const [analyzing, setAnalyzing] = useState(false)
-  const [currentReport, setCurrentReport] = useState<SavedReport | null>(null)
-  const [savedReports, setSavedReports] = useState<SavedReport[]>(() => {
-    if (typeof window === 'undefined') return []
-    try { return JSON.parse(localStorage.getItem('company-reports') ?? '[]') } catch { return [] }
-  })
-  const [companyError, setCompanyError] = useState('')
-  const reportRef = useRef<HTMLDivElement>(null)
+  // Company tab — tracker origin
+  const [trackerJobId, setTrackerJobId] = useState('')
+  const [trackerCompany, setTrackerCompany] = useState('')
+  const [trackerTitle, setTrackerTitle] = useState('')
+  const [trackerIndustry, setTrackerIndustry] = useState('')
 
-  const handlePrintReport = useReactToPrint({ contentRef: reportRef })
+  // Company tab — Block A (salary)
+  const [trackerSalary, setTrackerSalary] = useState<SalaryData | null>(null)
+  const [trackerSalaryLoading, setTrackerSalaryLoading] = useState(false)
+
+  // Company tab — Blocks B+C (deep analysis)
+  const [deepReport, setDeepReport] = useState<DeepReport | null>(null)
+  const [deepReportLoading, setDeepReportLoading] = useState(false)
+  const [deepReportError, setDeepReportError] = useState('')
+
+  // Company tab — manual entry form
+  const [formCompany, setFormCompany] = useState('')
+  const [formTitle, setFormTitle] = useState('')
+  const [formIndustry, setFormIndustry] = useState('')
 
   const fmt = (n: number) => new Intl.NumberFormat('zh-TW').format(n)
+
+  // ── Functions ──────────────────────────────────────────────────────────────
 
   async function querySalary() {
     if (!salaryRole.trim()) return
@@ -91,38 +109,61 @@ export default function CareerIntelligencePage() {
     finally { setLoadingTrends(false) }
   }
 
-  async function analyzeCompany() {
-    if (!companyName.trim()) return
-    setAnalyzing(true); setCompanyError(''); setCurrentReport(null)
+  async function loadTrackerSalary(role: string) {
+    setTrackerSalaryLoading(true); setTrackerSalary(null)
     try {
-      const res = await fetch('/api/company/analyze', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ company: companyName }),
+      const res = await fetch(`/api/salary?${new URLSearchParams({ role, experience: '不限' })}`)
+      setTrackerSalary(await res.json())
+    } catch { /* silent */ }
+    finally { setTrackerSalaryLoading(false) }
+  }
+
+  async function loadDeepReport(company: string, title: string, jdContent: string) {
+    setDeepReportLoading(true); setDeepReport(null); setDeepReportError('')
+    try {
+      const res = await fetch('/api/analytics/company-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company, title, jd_content: jdContent }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? '分析失敗')
-      const saved: SavedReport = { ...data, savedAt: new Date().toISOString() }
-      setCurrentReport(saved)
-      setSavedReports((p) => {
-        const filtered = p.filter((r) => r.company !== companyName)
-        const next = [saved, ...filtered].slice(0, 10)
-        localStorage.setItem('company-reports', JSON.stringify(next))
-        return next
-      })
-    } catch (e) { setCompanyError((e as Error).message) }
-    finally { setAnalyzing(false) }
+      setDeepReport(data)
+    } catch (e) { setDeepReportError((e as Error).message) }
+    finally { setDeepReportLoading(false) }
   }
 
-  function loadSavedReport(r: SavedReport) {
-    setCurrentReport(r); setCompanyName(r.company)
+  function clearTrackerLink() {
+    setTrackerCompany(''); setTrackerJobId(''); setTrackerTitle(''); setTrackerIndustry('')
+    setTrackerSalary(null); setDeepReport(null); setDeepReportError('')
+    if (typeof window !== 'undefined') window.history.replaceState({}, '', '/career-intelligence')
   }
 
-  const SWOT_CFG = [
-    { key: 'strengths' as const,    label: '優勢 Strengths',    color: 'bg-sage-500/10 text-sage-700 border-sage-200' },
-    { key: 'weaknesses' as const,   label: '劣勢 Weaknesses',   color: 'bg-red-500/10 text-red-700 border-red-200' },
-    { key: 'opportunities' as const, label: '機會 Opportunities', color: 'bg-sky-500/10 text-sky-700 border-sky-200' },
-    { key: 'threats' as const,      label: '威脅 Threats',      color: 'bg-honey-500/10 text-honey-600 border-amber-200' },
-  ]
+  function startManualAnalysis() {
+    if (!formCompany.trim()) return
+    setTrackerCompany(formCompany); setTrackerTitle(formTitle)
+    setTrackerIndustry(formIndustry); setTrackerJobId('')
+    if (formTitle) loadTrackerSalary(formTitle)
+    loadDeepReport(formCompany, formTitle, '')
+  }
+
+  // URL params — auto-switch tab and trigger analysis
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const p = new URLSearchParams(window.location.search)
+    const company = p.get('company') ?? ''
+    if (!company) return
+    const jobId   = p.get('jobId')   ?? ''
+    const title   = p.get('title')   ?? ''
+    const industry = p.get('industry') ?? ''
+    setTrackerCompany(company); setTrackerJobId(jobId)
+    setTrackerTitle(title); setTrackerIndustry(industry)
+    setTab('company')
+    if (title) loadTrackerSalary(title)
+    loadDeepReport(company, title, '')
+  }, [])
+
+  // ── JSX ────────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-4 md:p-8 space-y-5">
@@ -132,6 +173,7 @@ export default function CareerIntelligencePage() {
         <p className="mt-1 text-sm text-ink-500">薪資行情 · 產業趨勢 · 公司分析 · 求職儀表板</p>
       </div>
 
+      {/* Tab bar */}
       <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-full sm:w-fit shadow-[var(--shadow-warm-xs)] overflow-x-auto">
         {([
           ['salary',    '💰 薪資查詢'],
@@ -146,7 +188,7 @@ export default function CareerIntelligencePage() {
         ))}
       </div>
 
-      {/* ── Salary ─────────────────────────────────────────── */}
+      {/* ── Salary ─────────────────────────────────────────────────────────── */}
       {tab === 'salary' && (
         <div className="space-y-5 max-w-2xl">
           <Card>
@@ -166,9 +208,9 @@ export default function CareerIntelligencePage() {
               <CardContent className="space-y-6">
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { label: 'P25 低標', val: salaryData.p25, dim: true },
+                    { label: 'P25 低標', val: salaryData.p25,    dim: true  },
                     { label: '中位數',   val: salaryData.median, dim: false },
-                    { label: 'P75 高標', val: salaryData.p75, dim: true },
+                    { label: 'P75 高標', val: salaryData.p75,    dim: true  },
                   ].map((tier) => (
                     <div key={tier.label} className={`rounded-2xl p-4 text-center ${tier.dim ? 'bg-cream-100' : 'bg-terra-50 border border-terra-400/30'}`}>
                       <p className={`text-xs mb-1 ${tier.dim ? 'text-ink-500' : 'text-terra-500 font-medium'}`}>{tier.label}</p>
@@ -188,7 +230,7 @@ export default function CareerIntelligencePage() {
         </div>
       )}
 
-      {/* ── Trends ─────────────────────────────────────────── */}
+      {/* ── Trends ─────────────────────────────────────────────────────────── */}
       {tab === 'trends' && (
         <div className="space-y-5">
           <Button variant="outline" onClick={loadTrends} loading={loadingTrends}>🔄 載入最新產業趨勢</Button>
@@ -225,160 +267,247 @@ export default function CareerIntelligencePage() {
         </div>
       )}
 
-      {/* ── Company Analysis ──────────────────────────────── */}
+      {/* ── Company Analysis ────────────────────────────────────────────────── */}
       {tab === 'company' && (
-        <div className="space-y-5">
-          <div className="grid gap-5 lg:grid-cols-3">
-            {/* Left: input + history */}
-            <div className="space-y-4">
+        <div className="space-y-4">
+          {trackerCompany ? (
+            <>
+              {/* Sage banner — only when navigated from tracker */}
+              {trackerJobId && (
+                <div className="flex items-center gap-3 rounded-xl border border-sage-200 bg-sage-50 px-4 py-3">
+                  <span className="text-sm text-sage-700">
+                    📋 來自 Application Tracker：<strong>{trackerCompany}</strong>
+                    {trackerTitle && ` — ${trackerTitle}`}
+                  </span>
+                  <button onClick={clearTrackerLink}
+                    className="ml-auto shrink-0 text-xs text-ink-400 hover:text-ink-600 transition-colors">
+                    ✕ 清除
+                  </button>
+                </div>
+              )}
+
+              {/* Company header */}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap flex-1">
+                  <div className="rounded-xl bg-terra-50 border border-terra-100 px-4 py-2">
+                    <p className="text-xs text-ink-400">公司</p>
+                    <p className="font-semibold text-ink-800">{trackerCompany}</p>
+                  </div>
+                  {trackerTitle && (
+                    <div className="rounded-xl bg-cream-100 border border-warm-200 px-4 py-2">
+                      <p className="text-xs text-ink-400">職位</p>
+                      <p className="font-medium text-ink-700">{trackerTitle}</p>
+                    </div>
+                  )}
+                  {trackerIndustry && (
+                    <div className="rounded-xl bg-cream-100 border border-warm-200 px-4 py-2">
+                      <p className="text-xs text-ink-400">產業</p>
+                      <p className="font-medium text-ink-700">{trackerIndustry}</p>
+                    </div>
+                  )}
+                </div>
+                <button onClick={clearTrackerLink}
+                  className="shrink-0 text-xs text-ink-400 hover:text-terra-500 transition-colors">
+                  重新搜尋
+                </button>
+              </div>
+
+              {/* Block A: 薪資行情 */}
               <Card>
-                <CardHeader><CardTitle>目標公司分析</CardTitle></CardHeader>
-                <CardContent className="space-y-3">
-                  <Input placeholder="輸入公司名稱，例如：台積電、LINE" value={companyName} onChange={(e) => setCompanyName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && analyzeCompany()} />
-                  <Button variant="primary" onClick={analyzeCompany} loading={analyzing} disabled={!companyName.trim()}>
-                    🔍 開始分析
-                  </Button>
-                  {companyError && <p className="text-sm text-red-400">{companyError}</p>}
+                <CardHeader><CardTitle>💰 薪資行情</CardTitle></CardHeader>
+                <CardContent>
+                  {trackerSalaryLoading && <Skel lines={5} />}
+                  {!trackerSalaryLoading && trackerSalary && (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-3 gap-3">
+                        {[
+                          { label: 'P25 低標', val: trackerSalary.p25,    dim: true  },
+                          { label: '中位數',   val: trackerSalary.median, dim: false },
+                          { label: 'P75 高標', val: trackerSalary.p75,    dim: true  },
+                        ].map((tier) => (
+                          <div key={tier.label} className={`rounded-2xl p-4 text-center ${tier.dim ? 'bg-cream-100' : 'bg-terra-50 border border-terra-400/30'}`}>
+                            <p className={`text-xs mb-1 ${tier.dim ? 'text-ink-500' : 'text-terra-500 font-medium'}`}>{tier.label}</p>
+                            <p className={`text-lg font-bold ${tier.dim ? 'text-ink-600' : 'text-terra-600'}`}>{fmt(tier.val)}</p>
+                            <p className="text-xs text-ink-400 mt-0.5">NTD / 月</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="rounded-xl bg-cream-100 px-3 py-2">
+                          <p className="text-xs text-ink-400">年薪估算（月薪×14）</p>
+                          <p className="text-sm font-semibold text-ink-700">{fmt(trackerSalary.median * 14)} NTD</p>
+                        </div>
+                        <div className="rounded-xl bg-cream-100 px-3 py-2">
+                          <p className="text-xs text-ink-400">產業別</p>
+                          <p className="text-sm font-medium text-ink-700">{trackerSalary.industry || trackerIndustry || '—'}</p>
+                        </div>
+                      </div>
+                      {trackerSalary.notes && (
+                        <p className="text-xs text-ink-500 leading-relaxed">{trackerSalary.notes}</p>
+                      )}
+                    </div>
+                  )}
+                  {!trackerSalaryLoading && !trackerSalary && (
+                    <p className="text-sm text-ink-400">
+                      {trackerTitle ? '薪資查詢失敗，請稍後再試' : '未提供職位名稱，無法查詢薪資行情'}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
 
-              {savedReports.length > 0 && (
-                <Card>
-                  <CardHeader><CardTitle>歷史分析</CardTitle></CardHeader>
-                  <CardContent className="space-y-2">
-                    {savedReports.map((r) => (
-                      <button key={r.company + r.savedAt} onClick={() => loadSavedReport(r)}
-                        className={`w-full text-left rounded-xl border p-3 transition-all text-sm ${currentReport?.company === r.company ? 'border-terra-300 bg-terra-50' : 'border-warm-200 hover:border-warm-300'}`}>
-                        <p className="font-medium text-ink-700">{r.company}</p>
-                        <p className="text-xs text-ink-400 mt-0.5">{new Date(r.savedAt).toLocaleDateString('zh-TW')}</p>
-                      </button>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {/* Right: report */}
-            <div className="lg:col-span-2">
-              {analyzing && (
-                <Card>
-                  <CardContent className="py-16 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <svg className="h-8 w-8 animate-spin text-terra-500" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                      <p className="text-sm text-ink-500">AI 正在分析 {companyName} 的公開資料...</p>
-                      <p className="text-xs text-ink-400">通常需要 10–30 秒</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {currentReport && !analyzing && (
-                <div className="space-y-4">
+              {/* Block B: 產業趨勢 */}
+              <Card>
+                <CardHeader>
                   <div className="flex items-center justify-between">
-                    <div>
-                      <h2 className="text-lg font-bold text-ink-800">{currentReport.company}</h2>
-                      <p className="text-xs text-ink-400 mt-0.5">
-                        {currentReport.hasWebData ? '✓ 含網路搜尋資料' : '基於 AI 知識庫'} · 分析於 {new Date(currentReport.report.analyzedAt).toLocaleDateString('zh-TW')}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={analyzeCompany} loading={analyzing}>重新分析</Button>
-                      <Button size="sm" variant="outline" onClick={() => handlePrintReport()}>匯出 PDF</Button>
-                    </div>
+                    <CardTitle>📊 產業趨勢</CardTitle>
+                    <span className="rounded-full border border-honey-200 bg-honey-50 px-2 py-0.5 text-xs text-honey-600">AI 分析，僅供參考</span>
                   </div>
-
-                  <div ref={reportRef} className="space-y-4 print:p-6">
-                    {/* Background */}
-                    <Card>
-                      <CardHeader><CardTitle>🏢 公司背景</CardTitle></CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 gap-3 mb-3">
-                          {[
-                            { label: '成立年份', val: currentReport.report.background.founded },
-                            { label: '員工規模', val: currentReport.report.background.size },
-                            { label: '總部地點', val: currentReport.report.background.location },
-                          ].map((f) => (
-                            <div key={f.label} className="rounded-xl bg-cream-100 px-3 py-2">
-                              <p className="text-xs text-ink-400">{f.label}</p>
-                              <p className="text-sm font-medium text-ink-700 mt-0.5">{f.val || '—'}</p>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="text-sm text-ink-600 leading-relaxed">{currentReport.report.background.business}</p>
-                      </CardContent>
-                    </Card>
-
-                    {/* Business model */}
-                    <Card>
-                      <CardHeader><CardTitle>💡 商業模式</CardTitle></CardHeader>
-                      <CardContent className="space-y-3">
-                        {[
-                          { label: '收入來源', val: currentReport.report.businessModel.revenue },
-                          { label: '目標客群', val: currentReport.report.businessModel.targetCustomers },
-                          { label: '核心價值主張', val: currentReport.report.businessModel.valueProposition },
-                        ].map((f) => (
-                          <div key={f.label}>
-                            <p className="text-xs font-medium text-ink-400 mb-0.5">{f.label}</p>
-                            <p className="text-sm text-ink-600">{f.val || '—'}</p>
+                </CardHeader>
+                <CardContent>
+                  {deepReportLoading && <Skel lines={5} />}
+                  {!deepReportLoading && deepReport?.roleTrend && (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-ink-500">招募熱度：</span>
+                        <Badge variant={
+                          deepReport.roleTrend.recruitmentHeat === '高' ? 'success' :
+                          deepReport.roleTrend.recruitmentHeat === '低' ? 'danger' : 'default'
+                        }>
+                          {deepReport.roleTrend.recruitmentHeat}
+                        </Badge>
+                      </div>
+                      {(deepReport.roleTrend.topSkills?.length ?? 0) > 0 && (
+                        <div>
+                          <p className="text-xs text-ink-400 mb-1.5">熱門技能（Top 5）</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {deepReport.roleTrend.topSkills.map((s) => <Badge key={s} variant="terra">{s}</Badge>)}
                           </div>
-                        ))}
-                      </CardContent>
-                    </Card>
-
-                    {/* SWOT */}
-                    <Card>
-                      <CardHeader><CardTitle>⬡ SWOT 分析</CardTitle></CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {SWOT_CFG.map(({ key, label, color }) => (
-                            <div key={key} className={`rounded-xl border p-3 ${color}`}>
-                              <p className="text-xs font-semibold mb-2">{label}</p>
-                              <ul className="space-y-1">
-                                {(currentReport.report.swot[key] ?? []).map((item, i) => (
-                                  <li key={i} className="text-xs flex items-start gap-1.5">
-                                    <span className="mt-0.5 shrink-0">·</span>{item}
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          ))}
                         </div>
-                      </CardContent>
-                    </Card>
+                      )}
+                      <div>
+                        <p className="text-xs text-ink-400 mb-1">近 3 個月趨勢</p>
+                        <p className="text-sm text-ink-600 leading-relaxed">{deepReport.roleTrend.threeMonthTrend}</p>
+                      </div>
+                    </div>
+                  )}
+                  {!deepReportLoading && deepReport && !deepReport.roleTrend && (
+                    <p className="text-sm text-ink-400">無趨勢資料</p>
+                  )}
+                </CardContent>
+              </Card>
 
-                    {/* Market, Industry, Updates */}
-                    {[
-                      { icon: '📈', title: '市場 / 產品 / 服務分析', content: currentReport.report.marketAnalysis },
-                      { icon: '📰', title: '產業近期趨勢', content: currentReport.report.industryTrends },
-                      { icon: '🔔', title: '公司近期動態', content: currentReport.report.companyUpdates },
-                    ].map(({ icon, title, content }) => (
-                      <Card key={title}>
+              {/* Block C: 公司深度分析 */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-ink-800">🏢 公司深度分析</h3>
+                  {!deepReportLoading && deepReport && (
+                    <span className="text-xs text-ink-400">標注「需自行確認」之資訊請自行查證</span>
+                  )}
+                </div>
+
+                {deepReportLoading && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <Card key={i}><CardContent className="pt-5"><Skel lines={4} /></CardContent></Card>
+                    ))}
+                  </div>
+                )}
+
+                {deepReportError && (
+                  <div className="flex items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                    <p className="text-sm text-red-500">{deepReportError}</p>
+                    <button onClick={() => loadDeepReport(trackerCompany, trackerTitle, '')}
+                      className="ml-auto shrink-0 text-xs text-terra-500 hover:underline">重試</button>
+                  </div>
+                )}
+
+                {deepReport && !deepReportLoading && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {([
+                      { icon: '🏢', title: '基本資訊',  key: 'basicInfo'         },
+                      { icon: '🎭', title: '企業文化',  key: 'culture'           },
+                      { icon: '🎯', title: '職位定位',  key: 'rolePosition'      },
+                      { icon: '📝', title: '面試情報',  key: 'interviewProcess'  },
+                      { icon: '💰', title: '談薪建議',  key: 'salaryNegotiation' },
+                    ] as { icon: string; title: string; key: keyof DeepReport }[]).map(({ icon, title, key }) => (
+                      <Card key={key}>
                         <CardHeader><CardTitle>{icon} {title}</CardTitle></CardHeader>
-                        <CardContent><p className="text-sm text-ink-600 leading-relaxed">{content || '—'}</p></CardContent>
+                        <CardContent>
+                          <p className="text-sm text-ink-600 leading-relaxed whitespace-pre-line">
+                            {String(deepReport[key] ?? '—')}
+                          </p>
+                        </CardContent>
                       </Card>
                     ))}
-
-                    {currentReport.report.dataSources?.length > 0 && (
-                      <p className="text-xs text-ink-400">資料來源：{currentReport.report.dataSources.join('、')}</p>
+                    {(deepReport.competitors?.length ?? 0) > 0 && (
+                      <Card>
+                        <CardHeader><CardTitle>🏆 主要競爭對手</CardTitle></CardHeader>
+                        <CardContent>
+                          <div className="flex flex-wrap gap-2">
+                            {deepReport.competitors.map((c) => (
+                              <button key={c}
+                                onClick={() => {
+                                  setTrackerSalary(null); setDeepReport(null); setDeepReportError('')
+                                  setTrackerCompany(c); setTrackerTitle(''); setTrackerIndustry(''); setTrackerJobId('')
+                                  loadDeepReport(c, '', '')
+                                }}
+                                className="rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-sm text-ink-700 hover:border-terra-300 hover:bg-terra-50 transition-all">
+                                {c} →
+                              </button>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
                     )}
                   </div>
-                </div>
-              )}
-
-              {!currentReport && !analyzing && (
-                <div className="flex flex-col items-center justify-center py-24">
-                  <p className="text-4xl mb-3">🏢</p>
-                  <p className="text-sm text-ink-500">輸入公司名稱，AI 產出六大區塊分析報告</p>
-                  <p className="text-xs text-ink-400 mt-1">結合 Serper 網路搜尋 + AI 分析</p>
-                </div>
-              )}
+                )}
+              </div>
+            </>
+          ) : (
+            /* Manual entry form */
+            <div className="max-w-lg space-y-5">
+              <Card>
+                <CardHeader><CardTitle>開始分析目標公司</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  <Input
+                    label="公司名稱 *"
+                    placeholder="例如：台積電、LINE Taiwan、Shopee"
+                    value={formCompany}
+                    onChange={(e) => setFormCompany(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && startManualAnalysis()}
+                  />
+                  <Input
+                    label="應徵職位（選填）"
+                    placeholder="例如：軟體工程師、產品經理"
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                  />
+                  <div>
+                    <label className="block text-xs font-medium text-ink-500 mb-1.5">產業別（選填）</label>
+                    <select
+                      className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                      value={formIndustry}
+                      onChange={(e) => setFormIndustry(e.target.value)}>
+                      <option value="">請選擇（可略）</option>
+                      {INDUSTRIES.map((ind) => <option key={ind} value={ind}>{ind}</option>)}
+                    </select>
+                  </div>
+                  <Button variant="primary" onClick={startManualAnalysis} loading={deepReportLoading} disabled={!formCompany.trim()}>
+                    🔍 開始分析
+                  </Button>
+                </CardContent>
+              </Card>
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <p className="text-4xl mb-3">🏢</p>
+                <p className="text-sm text-ink-500">AI 提供薪資行情、產業趨勢、企業文化、面試情報、談薪建議</p>
+                <p className="text-xs text-ink-400 mt-1">也可從 Application Tracker「面試準備」Tab 直接連動</p>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
-      {/* ── Analytics ──────────────────────────────────────── */}
+      {/* ── Analytics (dashboard) ───────────────────────────────────────────── */}
       {tab === 'analytics' && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

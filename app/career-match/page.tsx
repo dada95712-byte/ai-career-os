@@ -639,7 +639,7 @@ export default function ApplicationTrackerPage() {
                 🎤 針對此職缺生成面試題目 →
               </Link>
               <Link
-                href={`/career-intelligence?company=${encodeURIComponent(app.company)}`}
+                href={`/career-intelligence?jobId=${encodeURIComponent(app.id)}&company=${encodeURIComponent(app.company)}&title=${encodeURIComponent(app.jobTitle)}&industry=`}
                 className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-4 py-3 text-sm font-medium text-ink-700 hover:border-terra-300 hover:bg-terra-50 transition-all">
                 🏢 分析此公司 →
               </Link>
