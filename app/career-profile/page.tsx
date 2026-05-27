@@ -49,6 +49,11 @@ interface JournalEntry {
   content?: string
   tags: string[]; images: JournalImage[]; createdAt: string
 }
+interface StarDraft { situation: string; task: string; action: string; result: string }
+interface MatchedQuestion {
+  question_id: string; question_text: string; relevance_reason: string; star: StarDraft
+}
+interface InterviewMaterial { matched_questions: MatchedQuestion[] }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -169,7 +174,14 @@ export default function CareerProfilePage() {
   // ── Journal state ─────────────────────────────────────────────────────────────
   const [entries, setEntries] = useState<JournalEntry[]>([])
   const [draft, setDraft] = useState<JournalEntry>(emptyEntry())
-  const [journalView, setJournalView] = useState<'list' | 'form'>('list')
+  const [journalView, setJournalView] = useState<'list' | 'form' | 'detail'>('list')
+  const [detailEntry, setDetailEntry] = useState<JournalEntry | null>(null)
+  const [interviewMaterialsCache, setInterviewMaterialsCache] = useState<Record<string, InterviewMaterial>>({})
+  const [analyzingForInterview, setAnalyzingForInterview] = useState(false)
+  const [materialPanelOpen, setMaterialPanelOpen] = useState(false)
+  const [expandedQIds, setExpandedQIds] = useState<Set<string>>(new Set())
+  const [starEdits, setStarEdits] = useState<Record<string, Partial<StarDraft>>>({})
+  const [editingFields, setEditingFields] = useState<Record<string, string>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'company-asc' | 'company-desc'>('date-desc')
   const [filterDateFrom, setFilterDateFrom] = useState('')
@@ -444,11 +456,56 @@ export default function CareerProfilePage() {
   }
 
   function closeJournalForm() {
-    setJournalView('list'); setEditingId(null); setDraft(emptyEntry())
+    setJournalView(detailEntry ? 'detail' : 'list'); setEditingId(null); setDraft(emptyEntry())
     setAiStep(1); setAiTopic(''); setAiQaIdx(0); setAiAnswers([]); setAiCurrentAnswer('')
   }
   function deleteEntry(id: string) { const next = entries.filter((e) => e.id !== id); setEntries(next); autoSave('career-journal', next) }
   function editEntry(e: JournalEntry) { setDraft({ ...e }); setEditingId(e.id); setJournalView('form') }
+
+  function getEntryContent(entry: JournalEntry): string {
+    if (entry.template === 'star') {
+      return [entry.situation, entry.task, entry.action, entry.result].filter(Boolean).join('\n')
+    }
+    return entry.content ?? ''
+  }
+
+  function openDetail(entry: JournalEntry, autoOpenMaterial = false) {
+    setDetailEntry(entry)
+    setJournalView('detail')
+    setMaterialPanelOpen(autoOpenMaterial)
+    setExpandedQIds(new Set())
+    setStarEdits({})
+    setEditingFields({})
+  }
+
+  async function analyzeForInterview(entry: JournalEntry) {
+    setAnalyzingForInterview(true)
+    const parts = [`標題：${entry.title}`]
+    if (entry.company) parts.push(`公司：${entry.company}`)
+    if (entry.jobTitle) parts.push(`職位：${entry.jobTitle}`)
+    if (entry.template === 'star') {
+      if (entry.situation) parts.push(`背景（S）：${entry.situation}`)
+      if (entry.task) parts.push(`任務（T）：${entry.task}`)
+      if (entry.action) parts.push(`行動（A）：${entry.action}`)
+      if (entry.result) parts.push(`結果（R）：${entry.result}`)
+    } else {
+      if (entry.content) parts.push(`內容：${entry.content}`)
+    }
+    try {
+      const res = await fetch('/api/journals/analyze-for-interview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: parts.join('\n') }),
+      })
+      const data = await res.json()
+      setInterviewMaterialsCache((prev) => ({ ...prev, [entry.id]: data }))
+    } catch { /* silent */ }
+    finally { setAnalyzingForInterview(false) }
+  }
+
+  function buildStarText(q: MatchedQuestion): string {
+    const star = { ...q.star, ...(starEdits[q.question_id] ?? {}) }
+    return `Q: ${q.question_text}\n\nS（背景）：${star.situation}\n\nT（任務）：${star.task}\n\nA（行動）：${star.action}\n\nR（結果）：${star.result}`
+  }
 
   async function generateAiDraft(answers: string[]) {
     const topic = AI_TOPICS.find(t => t.id === aiTopic)
@@ -975,11 +1032,218 @@ export default function CareerProfilePage() {
                         <button onClick={() => deleteEntry(entry.id)} className="rounded-lg border border-warm-200 bg-white px-2.5 py-1 text-xs text-ink-400 hover:border-red-200 hover:text-red-400 transition-all">刪除</button>
                       </div>
                     </div>
+                    {getEntryContent(entry).length > 50 && (
+                      <div className="mt-2 flex justify-end">
+                        <button
+                          onClick={() => openDetail(entry, true)}
+                          className="text-sm text-terra-500 hover:text-terra-700 transition-colors">
+                          ✨ 轉為面試素材
+                        </button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════════════
+          JOURNAL DETAIL VIEW
+      ══════════════════════════════════════════════════════════════════════════ */}
+      {tab === 'journal' && journalView === 'detail' && detailEntry && (
+        <div className="space-y-5 max-w-[800px] mx-auto">
+          {/* Top bar */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { setJournalView('list'); setDetailEntry(null) }}
+              className="flex items-center gap-1.5 rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-800 transition-colors">
+              ← 返回
+            </button>
+            <h2 className="text-base font-semibold text-ink-800 flex-1 truncate">{detailEntry.title || '（無標題）'}</h2>
+            <button
+              onClick={() => editEntry(detailEntry)}
+              className="rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
+              ✏️ 編輯
+            </button>
+          </div>
+
+          {/* Meta */}
+          <div className="flex items-center gap-2 flex-wrap text-xs text-ink-400">
+            {detailEntry.company && <span>{detailEntry.company}</span>}
+            {detailEntry.jobTitle && <><span>·</span><span>{detailEntry.jobTitle}</span></>}
+            <span>·</span><span>{fmtDate(detailEntry.date)}</span>
+            <Badge variant="outline">{detailEntry.template === 'star' ? '⭐ STAR' : detailEntry.template === 'ai' ? '🤖 AI引導' : '📝 自由'}</Badge>
+          </div>
+
+          {/* Content */}
+          <Card>
+            <CardContent className="pt-5 pb-5 space-y-4">
+              {detailEntry.template === 'star' ? (
+                <>
+                  {([
+                    ['S', '背景 Situation', detailEntry.situation, 'bg-sage-50 border-sage-200'],
+                    ['T', '任務 Task', detailEntry.task, 'bg-honey-50 border-honey-200'],
+                    ['A', '行動 Action', detailEntry.action, 'bg-terra-50 border-terra-200'],
+                    ['R', '結果 Result', detailEntry.result, 'bg-cream-100 border-warm-200'],
+                  ] as [string, string, string | undefined, string][]).map(([label, title, text, cls]) => text ? (
+                    <div key={label} className={`rounded-xl border p-4 ${cls}`}>
+                      <p className="text-[10px] font-bold text-ink-400 uppercase tracking-widest mb-1">{title}</p>
+                      <p className="text-sm text-ink-700 leading-relaxed whitespace-pre-wrap">{text}</p>
+                    </div>
+                  ) : null)}
+                </>
+              ) : (
+                <p className="text-sm text-ink-700 leading-relaxed whitespace-pre-wrap">{detailEntry.content}</p>
+              )}
+              {detailEntry.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {detailEntry.tags.map((t) => <Badge key={t} variant="terra">{t}</Badge>)}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 🎯 面試素材 collapsible section */}
+          <div className="rounded-2xl border border-warm-200 bg-white overflow-hidden">
+            <button
+              onClick={() => setMaterialPanelOpen((p) => !p)}
+              className="w-full flex items-center justify-between px-5 py-4 hover:bg-cream-50 transition-colors">
+              <div className="flex items-center gap-2">
+                <span className="text-base font-semibold text-ink-800">🎯 面試素材</span>
+                {interviewMaterialsCache[detailEntry.id]?.matched_questions?.length > 0 && (
+                  <span className="text-xs bg-terra-50 text-terra-600 border border-terra-200 rounded-full px-2 py-0.5">
+                    {interviewMaterialsCache[detailEntry.id].matched_questions.length} 題
+                  </span>
+                )}
+              </div>
+              <span className="text-ink-400 text-sm">{materialPanelOpen ? '▲' : '▼'}</span>
+            </button>
+
+            {materialPanelOpen && (
+              <div className="px-5 pb-5 space-y-4 border-t border-warm-200">
+                {!interviewMaterialsCache[detailEntry.id] && !analyzingForInterview && (
+                  <div className="pt-4 flex flex-col items-center gap-3">
+                    <p className="text-sm text-ink-500 text-center">分析這篇日誌，找出可用於哪些面試題的素材</p>
+                    <button
+                      onClick={() => void analyzeForInterview(detailEntry)}
+                      className="rounded-xl bg-terra-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                      🔍 分析此日誌
+                    </button>
+                  </div>
+                )}
+
+                {analyzingForInterview && (
+                  <div className="pt-4 flex flex-col items-center gap-3 py-8">
+                    <Spinner className="h-6 w-6 text-terra-500" />
+                    <p className="text-sm text-ink-400">AI 正在分析這篇日誌可用於哪些面試題...</p>
+                  </div>
+                )}
+
+                {interviewMaterialsCache[detailEntry.id] && !analyzingForInterview && (
+                  <div className="pt-4 space-y-4">
+                    {(() => {
+                      const material = interviewMaterialsCache[detailEntry.id]
+                      const questions = material?.matched_questions ?? []
+                      if (questions.length === 0) {
+                        return <p className="text-sm text-ink-400 text-center py-4">這篇日誌較難直接對應常見面試題，建議補充更多具體細節後再分析。</p>
+                      }
+                      return (
+                        <>
+                          <p className="text-sm text-ink-600">這篇日誌適合用來回答以下 <strong>{questions.length}</strong> 道面試題</p>
+                          <div className="space-y-3">
+                            {questions.map((q) => {
+                              const isExpanded = expandedQIds.has(q.question_id)
+                              const star = { ...q.star, ...(starEdits[q.question_id] ?? {}) }
+                              return (
+                                <div key={q.question_id} className="rounded-xl border border-warm-200 bg-cream-50 overflow-hidden">
+                                  <button
+                                    onClick={() => setExpandedQIds((prev) => {
+                                      const next = new Set(prev)
+                                      if (next.has(q.question_id)) next.delete(q.question_id)
+                                      else next.add(q.question_id)
+                                      return next
+                                    })}
+                                    className="w-full text-left px-4 py-3 hover:bg-cream-100 transition-colors">
+                                    <p className="text-sm font-semibold text-ink-800">Q. {q.question_text}</p>
+                                    <p className="text-xs text-ink-400 mt-0.5">相關原因：{q.relevance_reason}</p>
+                                    <p className="text-xs text-terra-500 mt-1">{isExpanded ? '▲ 收起 STAR 草稿' : '▼ 展開 STAR 草稿'}</p>
+                                  </button>
+
+                                  {isExpanded && (
+                                    <div className="px-4 pb-4 space-y-3 border-t border-warm-200">
+                                      {([
+                                        ['situation', 'S', '背景 Situation', 'bg-sage-50 border-sage-200 text-sage-700'],
+                                        ['task', 'T', '任務 Task', 'bg-honey-50 border-honey-200 text-honey-700'],
+                                        ['action', 'A', '行動 Action', 'bg-terra-50 border-terra-200 text-terra-700'],
+                                        ['result', 'R', '結果 Result', 'bg-cream-100 border-warm-300 text-ink-600'],
+                                      ] as [keyof StarDraft, string, string, string][]).map(([field, label, title, cls]) => {
+                                        const editKey = `${q.question_id}-${field}`
+                                        const isEditing = editingFields[editKey] !== undefined
+                                        return (
+                                          <div key={field} className={`rounded-xl border p-3 mt-3 ${cls}`}>
+                                            <div className="flex items-center justify-between mb-1.5">
+                                              <p className="text-[10px] font-bold uppercase tracking-widest">{title}</p>
+                                              <button
+                                                onClick={() => {
+                                                  if (isEditing) {
+                                                    setStarEdits((p) => ({ ...p, [q.question_id]: { ...(p[q.question_id] ?? {}), [field]: editingFields[editKey] } }))
+                                                    setEditingFields((p) => { const n = { ...p }; delete n[editKey]; return n })
+                                                  } else {
+                                                    setEditingFields((p) => ({ ...p, [editKey]: star[field] }))
+                                                  }
+                                                }}
+                                                className="text-[10px] text-ink-400 hover:text-ink-700 transition-colors">
+                                                {isEditing ? '✓ 完成' : '✏️ 編輯'}
+                                              </button>
+                                            </div>
+                                            {isEditing ? (
+                                              <textarea
+                                                rows={3}
+                                                value={editingFields[editKey]}
+                                                onChange={(e) => setEditingFields((p) => ({ ...p, [editKey]: e.target.value }))}
+                                                className="w-full rounded-lg border border-warm-300 bg-white px-3 py-2 text-xs text-ink-800 focus:border-terra-400 focus:outline-none resize-y leading-relaxed"
+                                              />
+                                            ) : (
+                                              <p className="text-xs text-ink-700 leading-relaxed">{star[field]}</p>
+                                            )}
+                                          </div>
+                                        )
+                                      })}
+
+                                      {/* Card actions */}
+                                      <div className="flex items-center gap-2 flex-wrap pt-1">
+                                        <button
+                                          onClick={() => void navigator.clipboard.writeText(buildStarText(q))}
+                                          className="flex items-center gap-1.5 rounded-lg border border-warm-200 bg-white px-3 py-2 text-xs text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
+                                          📋 複製 STAR 草稿
+                                        </button>
+                                        <a
+                                          href={`/interview-prep?question=${encodeURIComponent(q.question_text)}&star_draft=${encodeURIComponent(JSON.stringify(star))}&from_journal=${encodeURIComponent(detailEntry.id)}`}
+                                          className="flex items-center gap-1.5 rounded-lg border border-terra-200 bg-terra-50 px-3 py-2 text-xs font-medium text-terra-600 hover:bg-terra-100 transition-colors">
+                                          🎤 前往 Interview Arena 練習 →
+                                        </a>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <button
+                            onClick={() => void analyzeForInterview(detailEntry)}
+                            className="text-xs text-ink-400 hover:text-ink-600 transition-colors">
+                            🔄 重新分析
+                          </button>
+                        </>
+                      )
+                    })()}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

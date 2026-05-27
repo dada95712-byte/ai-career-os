@@ -314,6 +314,12 @@ export default function InterviewPrepPage() {
   const [showEn, setShowEn]           = useState(false)
   const [showMockOptimized, setShowMockOptimized] = useState(false)
 
+  // Journal-linked mode
+  const [journalLinkedQ, setJournalLinkedQ] = useState<string | null>(null)
+  const [journalLinkedStar, setJournalLinkedStar] = useState<{situation: string; task: string; action: string; result: string} | null>(null)
+  const [journalLinkedFromId, setJournalLinkedFromId] = useState<string | null>(null)
+  const [starDraftPanelOpen, setStarDraftPanelOpen] = useState(true)
+
   // Interviewer style + mode
   const [interviewerStyle, setInterviewerStyle] = useState<InterviewerStyle>('friendly')
   const [interviewMode, setInterviewMode] = useState<InterviewMode>('practice')
@@ -385,13 +391,25 @@ export default function InterviewPrepPage() {
     const jobId   = params.get('jobId')
     const title   = params.get('title')
     const company = params.get('company')
+    const question = params.get('question')
+    const starDraftRaw = params.get('star_draft')
+    const fromJournal = params.get('from_journal')
+
     if (jobId && title && company) {
-      setFromJobId(jobId)
-      setFromTitle(title)
-      setFromCompany(company)
-      setRole(title)
-      setCompany(company)
-      setMockStep('setup')
+      setFromJobId(jobId); setFromTitle(title); setFromCompany(company)
+      setRole(title); setCompany(company); setMockStep('setup')
+    } else if (question && starDraftRaw) {
+      try {
+        const starDraft = JSON.parse(starDraftRaw)
+        setJournalLinkedQ(question)
+        setJournalLinkedStar(starDraft)
+        setJournalLinkedFromId(fromJournal)
+        const syntheticQ: Question = { id: 'journal-' + Date.now().toString(36), question, type: 'behavioral' }
+        setQuestions([syntheticQ])
+        setSelectedQ(syntheticQ)
+        setMockPracticeIdx(0)
+        setMockStep('practice')
+      } catch { /* invalid star_draft param */ }
     }
   }, [])
 
@@ -826,6 +844,17 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
       ══════════════════════════════════════════════════════════════════════ */}
       {tab === 'mock' && (
         <>
+          {/* ── Journal-linked banner ── */}
+          {journalLinkedQ && (
+            <div className="flex items-center gap-2 rounded-xl border border-sage-200 bg-sage-50 px-4 py-3 text-sm text-sage-700 mb-4">
+              <span>📓</span>
+              <span className="flex-1">來自 Work Journal，已帶入 STAR 草稿供參考</span>
+              {journalLinkedFromId && (
+                <a href={`/career-profile?tab=journal`} className="text-xs text-sage-500 hover:text-sage-700 whitespace-nowrap transition-colors">← 返回日誌</a>
+              )}
+            </div>
+          )}
+
           {/* ── Loading ── */}
           {mockStep === 'loading' && (
             <div className="flex items-center justify-center py-20">
@@ -1345,6 +1374,32 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                   className="w-full min-h-[200px] rounded-xl border border-warm-300 bg-white px-4 py-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none resize-y leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed" />
                 {answerLang === 'bilingual' && (
                   <p className="text-xs text-ink-300">💡 用你最自然的中文回答即可，不需要顧慮英文表達</p>
+                )}
+                {journalLinkedStar && (
+                  <div className="rounded-xl border border-sage-200 overflow-hidden">
+                    <button
+                      onClick={() => setStarDraftPanelOpen((p) => !p)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 bg-sage-50 hover:bg-sage-100 transition-colors text-left">
+                      <span className="text-xs font-semibold text-sage-700">📓 參考草稿（來自 Work Journal）</span>
+                      <span className="text-xs text-sage-500">{starDraftPanelOpen ? '▲ 收起' : '▼ 展開'}</span>
+                    </button>
+                    {starDraftPanelOpen && (
+                      <div className="px-4 pb-3 pt-1 space-y-2 bg-white">
+                        <p className="text-[11px] text-ink-400 pt-1">以下草稿僅供參考，請用自己的話回答</p>
+                        {([
+                          ['S', '背景', journalLinkedStar.situation, 'text-sage-700'],
+                          ['T', '任務', journalLinkedStar.task, 'text-honey-700'],
+                          ['A', '行動', journalLinkedStar.action, 'text-terra-700'],
+                          ['R', '結果', journalLinkedStar.result, 'text-ink-600'],
+                        ] as [string, string, string, string][]).map(([label, title, text]) => (
+                          <div key={label} className="flex gap-2 text-xs leading-relaxed">
+                            <span className="shrink-0 font-bold text-ink-400 w-4">{label}</span>
+                            <span className="text-ink-600">{text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
                 {followUpStep === 'none' && (
                   <div className="flex items-center gap-3">
