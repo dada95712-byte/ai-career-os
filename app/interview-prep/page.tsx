@@ -345,6 +345,9 @@ export default function InterviewPrepPage() {
   const [fromTitle, setFromTitle]       = useState<string | null>(null)
   const [fromCompany, setFromCompany]   = useState<string | null>(null)
   const [saveTrackerStatus, setSaveTrackerStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [trackerJd, setTrackerJd]       = useState<string>('')
+  const [trackerJdLoading, setTrackerJdLoading] = useState(false)
+  const [jdPanelOpen, setJdPanelOpen]   = useState(false)
 
   const printRef     = useRef<HTMLDivElement>(null)
   const mockListRef  = useRef<HTMLDivElement>(null)
@@ -382,6 +385,17 @@ export default function InterviewPrepPage() {
       setMockStep('setup')
     }
   }, [])
+
+  useEffect(() => {
+    if (!fromJobId) { setTrackerJd(''); return }
+    setTrackerJdLoading(true)
+    try {
+      const apps: { id: string; jdFullText?: string }[] = JSON.parse(localStorage.getItem('job-tracker-apps') ?? '[]')
+      const app = apps.find((a) => a.id === fromJobId)
+      setTrackerJd(app?.jdFullText ?? '')
+    } catch { setTrackerJd('') }
+    finally { setTrackerJdLoading(false) }
+  }, [fromJobId])
 
   // Timer countdown
   useEffect(() => {
@@ -859,8 +873,8 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
             </div>
           )}
 
-          {/* ── Setup form ── */}
-          {mockStep === 'setup' && (
+          {/* ── Setup form (no tracker) ── */}
+          {mockStep === 'setup' && !fromJobId && (
             <div className="flex justify-center pt-4">
               <div className="w-full max-w-[600px] space-y-5">
                 {sessions.length > 0 && (
@@ -873,42 +887,13 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                   <h2 className="text-xl font-bold text-ink-900">設定你的面試情境</h2>
                   <p className="text-sm text-ink-400">AI 將根據職位與題數生成客製化題目</p>
                 </div>
-
-                {/* Tracker banner */}
-                {fromJobId && fromTitle && fromCompany && (
-                  <div className="flex items-center gap-2 rounded-xl border border-sage-200 bg-sage-50 px-4 py-3 text-sm text-sage-700">
-                    <span>📋</span>
-                    <span className="flex-1">來自 Application Tracker：<strong>{fromCompany}</strong> — <strong>{fromTitle}</strong></span>
-                    <button
-                      onClick={clearTrackerLink}
-                      className="ml-2 text-xs text-sage-500 hover:text-sage-700 whitespace-nowrap transition-colors">
-                      ✕ 清除，重新設定
-                    </button>
-                  </div>
-                )}
-
                 <Card>
                   <CardContent className="pt-6 space-y-4">
-                    {fromJobId ? (
-                      <>
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-medium text-ink-500">目標職位</label>
-                          <div className="rounded-xl border border-warm-200 bg-cream-100 px-3 py-2 text-sm text-ink-700">{role}</div>
-                        </div>
-                        <div className="space-y-1.5">
-                          <label className="block text-xs font-medium text-ink-500">公司名稱</label>
-                          <div className="rounded-xl border border-warm-200 bg-cream-100 px-3 py-2 text-sm text-ink-700">{company}</div>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <Input label="目標職位（必填）" placeholder="例如：資深前端工程師、產品經理" value={role}
-                          onChange={(e) => setRole(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && generateQuestions()} />
-                        <Input label="公司名稱（選填）" placeholder="例如：LINE、台積電、Shopee" value={company}
-                          onChange={(e) => setCompany(e.target.value)} />
-                      </>
-                    )}
+                    <Input label="目標職位（必填）" placeholder="例如：資深前端工程師、產品經理" value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && generateQuestions()} />
+                    <Input label="公司名稱（選填）" placeholder="例如：LINE、台積電、Shopee" value={company}
+                      onChange={(e) => setCompany(e.target.value)} />
                     <div className="space-y-1.5">
                       <label className="block text-xs font-medium text-ink-500">題目數量</label>
                       <div className="flex gap-2">
@@ -974,6 +959,156 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                     </p>
                   </CardContent>
                 </Card>
+              </div>
+            </div>
+          )}
+
+          {/* ── Setup form (from Tracker — two-column) ── */}
+          {mockStep === 'setup' && fromJobId && fromTitle && fromCompany && (
+            <div className="space-y-3 pt-2">
+              {/* Sage banner */}
+              <div className="flex items-center gap-2 rounded-xl border border-sage-200 bg-sage-50 px-4 py-3 text-sm text-sage-700">
+                <span>📋</span>
+                <span className="flex-1">來自 Application Tracker：<strong>{fromCompany}</strong> — <strong>{fromTitle}</strong></span>
+                <button onClick={clearTrackerLink}
+                  className="ml-2 text-xs text-sage-500 hover:text-sage-700 whitespace-nowrap transition-colors">
+                  ✕ 清除，重新設定
+                </button>
+              </div>
+
+              {/* Two-column panel */}
+              <div className="flex flex-col md:flex-row rounded-2xl border border-warm-200 bg-white overflow-hidden">
+
+                {/* ── Left: Job info ── */}
+                <div className="md:w-1/2 border-b md:border-b-0 md:border-r border-warm-200">
+                  {/* Mobile toggle header */}
+                  <button
+                    className="w-full flex items-center justify-between px-6 py-4 md:cursor-default"
+                    onClick={() => setJdPanelOpen((v) => !v)}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-ink-900 text-left">職缺資訊</p>
+                      <p className="text-xs text-ink-400 mt-0.5 text-left hidden md:block">請確認以下資訊正確後再開始面試</p>
+                    </div>
+                    <span className="text-ink-300 text-xs md:hidden">{jdPanelOpen ? '▲' : '▼'}</span>
+                  </button>
+
+                  <div className={`px-6 pb-6 space-y-3 ${jdPanelOpen ? 'block' : 'hidden'} md:block`}>
+                    <p className="text-xs text-ink-400 md:hidden">請確認以下資訊正確後再開始面試</p>
+
+                    {/* Company */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-medium text-ink-500">公司</label>
+                        <span className="text-[10px] text-ink-300">來自 Application Tracker</span>
+                      </div>
+                      <div className="rounded-lg border border-warm-200 bg-cream-50 px-4 py-3 text-sm text-ink-700">{fromCompany}</div>
+                    </div>
+
+                    {/* Title */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-medium text-ink-500">職位</label>
+                      <div className="rounded-lg border border-warm-200 bg-cream-50 px-4 py-3 text-sm text-ink-700">{fromTitle}</div>
+                    </div>
+
+                    {/* JD */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-medium text-ink-500">職務說明 JD</label>
+                      {trackerJdLoading ? (
+                        <div className="rounded-lg border border-warm-200 bg-cream-50 px-4 py-3 space-y-2">
+                          <div className="h-3 bg-warm-200 rounded animate-pulse w-3/4" />
+                          <div className="h-3 bg-warm-200 rounded animate-pulse w-full" />
+                          <div className="h-3 bg-warm-200 rounded animate-pulse w-2/3" />
+                        </div>
+                      ) : trackerJd ? (
+                        <div className="rounded-lg border border-warm-200 bg-cream-50 px-4 py-3 text-xs text-ink-600 leading-relaxed overflow-y-auto whitespace-pre-wrap" style={{ maxHeight: 320 }}>
+                          {trackerJd}
+                        </div>
+                      ) : (
+                        <div className="rounded-lg border border-warm-200 bg-cream-50 px-4 py-3 text-sm text-ink-300">
+                          此職缺尚未填寫職務說明
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Hint */}
+                    <div className="border-l-4 border-sage-400 bg-sage-50 rounded px-3 py-2 text-sm text-sage-700">
+                      AI 將根據以上 JD 內容生成針對性面試題目
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Right: Settings ── */}
+                <div className="md:w-1/2 p-6 space-y-5 flex flex-col">
+                  <div>
+                    <p className="text-sm font-medium text-ink-900">設定面試情境</p>
+                    <p className="text-xs text-ink-400 mt-0.5">AI 將根據職位與題數生成客製化題目</p>
+                  </div>
+
+                  {/* Question count */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-ink-500">題目數量</label>
+                    <div className="flex gap-2">
+                      {([
+                        [10, '10 題', '快速練習'],
+                        [15, '15 題', '標準'],
+                        [20, '20 題', '完整練習'],
+                      ] as const).map(([n, label, sub]) => (
+                        <button key={n} onClick={() => setQuestionCount(n)}
+                          className={`flex-1 rounded-xl border py-2.5 text-center transition-all ${questionCount === n ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                          <p className={`text-sm font-semibold ${questionCount === n ? 'text-terra-700' : 'text-ink-700'}`}>{label}</p>
+                          <p className="text-[10px] text-ink-400 mt-0.5">{sub}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Language */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-ink-500">回答語言</label>
+                    <div className="flex gap-1 rounded-lg border border-warm-200 bg-cream-50 p-0.5 w-fit">
+                      {(['zh', 'en'] as const).map((l) => (
+                        <button key={l} onClick={() => setAnswerLang(l)}
+                          className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${answerLang === l ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-400 hover:text-ink-600'}`}>
+                          {l === 'zh' ? '中文' : 'English'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Interviewer style */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-ink-500">面試官風格</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {INTERVIEWER_STYLES.map((s) => (
+                        <button key={s.id} onClick={() => setInterviewerStyle(s.id)}
+                          className={`flex flex-col items-center gap-1 rounded-xl border p-3 text-center transition-all ${interviewerStyle === s.id ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                          <span className="text-xl">{s.emoji}</span>
+                          <span className={`text-xs font-semibold ${interviewerStyle === s.id ? 'text-terra-700' : 'text-ink-700'}`}>{s.label}</span>
+                          <span className="text-[10px] text-ink-400 leading-tight">{s.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Start button — pushed to bottom */}
+                  <div className="mt-auto pt-2">
+                    <button
+                      onClick={generateQuestions}
+                      disabled={generating}
+                      className="w-full rounded-xl bg-terra-500 py-3 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)] disabled:opacity-60 flex items-center justify-center gap-2">
+                      {generating ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                          </svg>
+                          AI 正在根據 JD 生成客製化題目...
+                        </>
+                      ) : '開始面試練習 →'}
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           )}
