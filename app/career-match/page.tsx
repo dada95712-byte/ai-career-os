@@ -174,21 +174,46 @@ function deadlineDays(deadline?: string): number | null {
 function loadProfileSkills(): string[] {
   try {
     const skills = new Set<string>()
-    const rr = localStorage.getItem('career-resumes')
-    if (rr) {
-      const resumes = JSON.parse(rr)
-      if (Array.isArray(resumes)) resumes.forEach((r: Record<string, unknown>) => {
-        if (Array.isArray(r.skills)) (r.skills as string[]).forEach(s => skills.add(s))
-      })
-    }
-    const pr = localStorage.getItem('profile-skills')
-    if (pr) {
-      const ps = JSON.parse(pr)
-      if (Array.isArray(ps)) ps.forEach((s: string | { name?: string }) => {
+
+    // Source 1: career-skills (Dashboard Skills page) → [{name, category}]
+    const cs = localStorage.getItem('career-skills')
+    if (cs) {
+      const arr = JSON.parse(cs)
+      if (Array.isArray(arr)) arr.forEach((s: string | { name?: string }) => {
         if (typeof s === 'string') skills.add(s)
         else if (s?.name) skills.add(s.name)
       })
     }
+
+    // Source 2: profile-skillmap (Profile Library) → Record<category, string[]>
+    const sm = localStorage.getItem('profile-skillmap')
+    if (sm) {
+      const map = JSON.parse(sm) as Record<string, string[]>
+      Object.values(map).forEach(arr => {
+        if (Array.isArray(arr)) arr.forEach(s => { if (s) skills.add(s) })
+      })
+    }
+
+    // Source 3: career-journal-skills (AI-analyzed from journals)
+    const js = localStorage.getItem('career-journal-skills')
+    if (js) {
+      const arr = JSON.parse(js)
+      if (Array.isArray(arr)) arr.forEach((s: string | { name?: string }) => {
+        if (typeof s === 'string') skills.add(s)
+        else if (s?.name) skills.add(s.name)
+      })
+    }
+
+    // Source 4: career-resumes (parsed resume skill lists)
+    const rr = localStorage.getItem('career-resumes')
+    if (rr) {
+      const resumes = JSON.parse(rr)
+      if (Array.isArray(resumes)) resumes.forEach((r: Record<string, unknown>) => {
+        const data = (r.data ?? r) as Record<string, unknown>
+        if (Array.isArray(data.skills)) (data.skills as string[]).forEach(s => { if (s) skills.add(s) })
+      })
+    }
+
     return [...skills].filter(Boolean)
   } catch { return [] }
 }

@@ -191,8 +191,8 @@ export default function SkillMapPage() {
           <div className="py-10 text-center space-y-2">
             <p className="text-2xl">📓</p>
             <p className="text-sm text-ink-400">尚未從日誌分析技能</p>
-            <Link href="/dashboard/skills" className="inline-block mt-1 text-sm text-terra-500 hover:text-terra-700 transition-colors">
-              前往 Skill Map 分析日誌 →
+            <Link href="/work-journal" className="inline-block mt-1 text-sm text-terra-500 hover:text-terra-700 transition-colors">
+              前往 Work Journal 記錄日誌 →
             </Link>
           </div>
         ) : (
