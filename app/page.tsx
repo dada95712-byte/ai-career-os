@@ -9,10 +9,6 @@ const FEATURES = [
   { emoji: '🤖', title: 'AI 教練',  sub: '24hr 對話教練 · 個人化職涯建議',      color: 'bg-terra-50  border-terra-100' },
 ]
 
-const TESTIMONIALS = [
-  { text: '上傳履歷後 AI 給的建議非常具體，我照著改之後回覆率提高了很多。', name: 'Joyce C.', role: '前端工程師' },
-  { text: '模擬面試功能真的讓我練習了很多次，實際面試時不再緊張了。', name: 'David L.', role: '產品經理' },
-]
 
 export default function LandingPage() {
   return (
@@ -58,7 +54,6 @@ export default function LandingPage() {
               進入 Dashboard
             </Link>
           </div>
-          <p className="mt-4 text-xs text-ink-300">無需信用卡 · 基本功能永久免費</p>
         </div>
       </section>
 
@@ -76,44 +71,6 @@ export default function LandingPage() {
                 <p className="text-xs text-ink-400 leading-relaxed">{f.sub}</p>
               </div>
             ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Testimonials */}
-      <section className="bg-white border-y border-warm-200 px-6 py-16">
-        <div className="mx-auto max-w-3xl">
-          <h2 className="mb-10 text-center text-xl font-bold text-ink-900">真實用戶回饋</h2>
-          <div className="grid gap-5 sm:grid-cols-2">
-            {TESTIMONIALS.map((t, i) => (
-              <div key={i} className="rounded-2xl border border-warm-200 bg-cream-50 p-5 border-l-terra">
-                <p className="text-sm text-ink-600 leading-relaxed italic">&ldquo;{t.text}&rdquo;</p>
-                <div className="mt-4 flex items-center gap-2">
-                  <div className="h-6 w-6 rounded-full bg-terra-100 flex items-center justify-center text-xs font-semibold text-terra-600">
-                    {t.name[0]}
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-ink-700">{t.name}</p>
-                    <p className="text-[10px] text-ink-300">{t.role}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="px-6 py-20">
-        <div className="mx-auto max-w-xl text-center">
-          <div className="rounded-3xl border border-terra-100 bg-terra-50 p-12">
-            <div className="mb-4 text-4xl">🌱</div>
-            <h2 className="mb-3 text-xl font-bold text-ink-900">準備好開始你的求職旅程了嗎？</h2>
-            <p className="mb-8 text-sm text-ink-400 leading-relaxed">3 分鐘完成設定，立即獲得個人化求職建議</p>
-            <Link href="/onboarding"
-              className="inline-block rounded-xl bg-terra-500 px-8 py-3.5 text-base font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-md)]">
-              免費開始使用
-            </Link>
           </div>
         </div>
       </section>
