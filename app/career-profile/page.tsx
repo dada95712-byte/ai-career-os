@@ -41,6 +41,10 @@ interface ResumeEntry {
   createdAt: string
   updatedAt: string
   data: ParsedResume
+  resumeType?: 'profile' | 'jd'
+  linkedJobCompany?: string
+  linkedJobTitle?: string
+  jdMatchHighlights?: string[]
 }
 interface JournalImage { url: string; aiDescription?: string; uploadedAt: string }
 interface JournalEntry {
@@ -177,6 +181,19 @@ export default function CareerProfilePage() {
   const [trackerApps, setTrackerApps] = useState<{ id: string; company?: string; title?: string; jdFullText?: string }[]>([])
   const [selectedTrackerAppId, setSelectedTrackerAppId] = useState('')
 
+  // Task 3: completeness modal + language modal + review fields + JD highlights
+  const [showCompletenessModal, setShowCompletenessModal] = useState(false)
+  const [completenessIssues, setCompletenessIssues] = useState<string[]>([])
+  const [showLangModal, setShowLangModal] = useState(false)
+  const [resumeListFilter, setResumeListFilter] = useState<'all' | 'profile' | 'jd'>('all')
+  const [reviewFields, setReviewFields] = useState<string[]>([])
+  const [pendingJdHighlights, setPendingJdHighlights] = useState<string[]>([])
+  const [pendingResumeType, setPendingResumeType] = useState<ResumeEntry['resumeType']>(undefined)
+  const [pendingLinkedJobCompany, setPendingLinkedJobCompany] = useState('')
+  const [pendingLinkedJobTitle, setPendingLinkedJobTitle] = useState('')
+  const [profileSkillsList, setProfileSkillsList] = useState<string[]>([])
+  const [profileExpList, setProfileExpList] = useState<{ company: string; title: string }[]>([])
+
   // Skills are managed in /dashboard/skills — only needed here for localStorage merge on resume import
 
   // ── Journal state ─────────────────────────────────────────────────────────────
@@ -298,7 +315,50 @@ export default function CareerProfilePage() {
     return profile
   }
 
+  function checkCompletenessLocal(): string[] {
+    const issues: string[] = []
+    try {
+      const basic = JSON.parse(localStorage.getItem('profile-basic') ?? 'null') as Record<string, string> | null
+      if (!basic?.nameZh && !basic?.nameEn) issues.push('尚未填寫姓名（基本資料）')
+      const exp = JSON.parse(localStorage.getItem('profile-experience') ?? '[]') as unknown[]
+      const intern = JSON.parse(localStorage.getItem('profile-internship') ?? '[]') as unknown[]
+      const edu = JSON.parse(localStorage.getItem('profile-education') ?? '[]') as unknown[]
+      if (!exp.length && !intern.length && !edu.length) issues.push('尚未填寫工作經驗、實習或學歷')
+      const sm = JSON.parse(localStorage.getItem('profile-skillmap') ?? '{}') as Record<string, string[]>
+      const totalSkills = Object.values(sm).flat().length
+      if (totalSkills < 3) issues.push(`技能項目不足（目前 ${totalSkills} 項，建議至少 3 項）`)
+    } catch { /* ignore */ }
+    return issues
+  }
+
+  function handleStartProfileBuild() {
+    setResumeError('')
+    const issues = checkCompletenessLocal()
+    if (issues.length > 0) {
+      setCompletenessIssues(issues)
+      setShowCompletenessModal(true)
+    } else {
+      setShowLangModal(true)
+    }
+  }
+
+  function loadProfileSummaryForJD() {
+    try {
+      const sm = JSON.parse(localStorage.getItem('profile-skillmap') ?? '{}') as Record<string, string[]>
+      setProfileSkillsList(Object.values(sm).flat().slice(0, 20))
+      const exps = JSON.parse(localStorage.getItem('profile-experience') ?? '[]') as { company?: string; title?: string }[]
+      const interns = JSON.parse(localStorage.getItem('profile-internship') ?? '[]') as { company?: string; title?: string }[]
+      setProfileExpList(
+        [...exps, ...interns]
+          .filter((e) => e.company || e.title)
+          .slice(0, 5)
+          .map((e) => ({ company: e.company ?? '', title: e.title ?? '' }))
+      )
+    } catch { /* ignore */ }
+  }
+
   async function buildFromProfile(lang: 'zh' | 'en' | 'both') {
+    setShowLangModal(false)
     setCreateMode('loading')
     setResumeError('')
     try {
@@ -310,20 +370,23 @@ export default function CareerProfilePage() {
         ])
         const [zhData, enData] = await Promise.all([zhRes.json(), enRes.json()])
         const now = new Date().toISOString()
-        const zhEntry: ResumeEntry = { id: genId(), name: 'ZH 履歷（檔案庫）', language: 'zh', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...zhData.resume } }
-        const enEntry: ResumeEntry = { id: genId(), name: 'EN Resume (Library)', language: 'en', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...enData.resume } }
+        const zhEntry: ResumeEntry = { id: genId(), name: 'ZH 履歷（檔案庫）', language: 'zh', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...zhData.resume }, resumeType: 'profile' }
+        const enEntry: ResumeEntry = { id: genId(), name: 'EN Resume (Library)', language: 'en', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...enData.resume }, resumeType: 'profile' }
         persistResumes([...resumes, zhEntry, enEntry])
         setResumeView('list'); setCreateMode('none')
       } else {
         const res = await fetch('/api/resume/build-from-profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, language: lang }) })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error ?? '生成失敗')
+        const nrFields = (data.needs_review ?? []) as string[]
+        setReviewFields(nrFields)
+        setPendingJdHighlights([])
         setEditBanner('此履歷由個人檔案庫自動生成，請確認資訊正確性後再使用')
-        goToEditor({ ...EMPTY_RESUME, ...data.resume }, `${lang === 'en' ? 'EN Resume' : '履歷'}（檔案庫）`, 'manual')
+        goToEditor({ ...EMPTY_RESUME, ...data.resume }, `${lang === 'en' ? 'EN Resume' : '履歷'}（檔案庫）`, 'manual', 'profile')
       }
     } catch (err) {
       setResumeError((err as Error).message)
-      setCreateMode('chooser')
+      setCreateMode('none')
     }
   }
 
@@ -333,6 +396,7 @@ export default function CareerProfilePage() {
     setResumeError('')
     try {
       const profile = collectProfile()
+      const selectedApp = trackerApps.find((a) => a.id === selectedTrackerAppId)
       if (lang === 'both') {
         const [zhRes, enRes] = await Promise.all([
           fetch('/api/resume/customize-for-jd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, jd: jdText, language: 'zh' }) }),
@@ -340,9 +404,10 @@ export default function CareerProfilePage() {
         ])
         const [zhData, enData] = await Promise.all([zhRes.json(), enRes.json()])
         const jobTitle = zhData.jobTitle || enData.jobTitle || '客製化'
+        const highlights = (zhData.jd_match_highlights ?? enData.jd_match_highlights ?? []) as string[]
         const now = new Date().toISOString()
-        const zhEntry: ResumeEntry = { id: genId(), name: `${jobTitle} ZH 履歷`, language: 'zh', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...zhData.resume } }
-        const enEntry: ResumeEntry = { id: genId(), name: `${jobTitle} EN Resume`, language: 'en', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...enData.resume } }
+        const zhEntry: ResumeEntry = { id: genId(), name: `${jobTitle} ZH 履歷`, language: 'zh', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...zhData.resume }, resumeType: 'jd', linkedJobCompany: selectedApp?.company, linkedJobTitle: jobTitle, jdMatchHighlights: highlights }
+        const enEntry: ResumeEntry = { id: genId(), name: `${jobTitle} EN Resume`, language: 'en', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...enData.resume }, resumeType: 'jd', linkedJobCompany: selectedApp?.company, linkedJobTitle: jobTitle, jdMatchHighlights: highlights }
         persistResumes([...resumes, zhEntry, enEntry])
         setResumeView('list'); setCreateMode('none')
       } else {
@@ -350,12 +415,18 @@ export default function CareerProfilePage() {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error ?? '生成失敗')
         const jobTitle = data.jobTitle || '客製化'
+        const highlights = (data.jd_match_highlights ?? []) as string[]
+        setReviewFields([])
+        setPendingJdHighlights(highlights)
+        setPendingResumeType('jd')
+        setPendingLinkedJobCompany(selectedApp?.company ?? '')
+        setPendingLinkedJobTitle(jobTitle)
         setEditBanner(`此履歷針對「${jobTitle}」客製化，來源：個人檔案庫`)
-        goToEditor({ ...EMPTY_RESUME, ...data.resume }, `${jobTitle} 履歷`, 'manual')
+        goToEditor({ ...EMPTY_RESUME, ...data.resume }, `${jobTitle} 履歷`, 'manual', 'jd', selectedApp?.company, jobTitle, highlights)
       }
     } catch (err) {
       setResumeError((err as Error).message)
-      setCreateMode('chooser')
+      setCreateMode('none')
     }
   }
 
@@ -364,10 +435,18 @@ export default function CareerProfilePage() {
     localStorage.setItem('career-resumes', JSON.stringify(next))
   }
 
-  function goToEditor(data: ParsedResume, name: string, source: ResumeEntry['source']) {
+  function goToEditor(
+    data: ParsedResume, name: string, source: ResumeEntry['source'],
+    resumeType?: ResumeEntry['resumeType'],
+    linkedJobCompany?: string, linkedJobTitle?: string, jdMatchHighlights?: string[]
+  ) {
     setEditedResume(data); setEditingResumeId(null); setResumeName(name)
     setResumeError('')
     setResumeView('edit'); setCreateMode('none')
+    setPendingResumeType(resumeType)
+    setPendingLinkedJobCompany(linkedJobCompany ?? '')
+    setPendingLinkedJobTitle(linkedJobTitle ?? '')
+    setPendingJdHighlights(jdMatchHighlights ?? [])
     // Merge parsed resume skills into the shared skill library in localStorage
     try {
       const raw = localStorage.getItem('career-skills')
@@ -383,7 +462,9 @@ export default function CareerProfilePage() {
 
   function startEdit(entry: ResumeEntry) {
     setEditedResume(entry.data); setEditingResumeId(entry.id); setResumeName(entry.name)
-    setEditBanner(''); setResumeView('edit')
+    setEditBanner(''); setReviewFields([]); setPendingJdHighlights(entry.jdMatchHighlights ?? [])
+    setPendingResumeType(entry.resumeType); setPendingLinkedJobCompany(entry.linkedJobCompany ?? ''); setPendingLinkedJobTitle(entry.linkedJobTitle ?? '')
+    setResumeView('edit')
   }
 
   function deleteResume(id: string) {
@@ -663,6 +744,18 @@ export default function CareerProfilePage() {
                 </Button>
               </div>
 
+              {/* Filter tabs */}
+              {resumes.length > 0 && (
+                <div className="flex gap-1 p-1 bg-warm-100 rounded-lg w-fit">
+                  {([['all', '全部'], ['profile', '📄 通用'], ['jd', '🎯 客製化']] as const).map(([v, label]) => (
+                    <button key={v} onClick={() => setResumeListFilter(v)}
+                      className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${resumeListFilter === v ? 'bg-white text-ink-800 shadow-sm' : 'text-ink-500 hover:text-ink-700'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {/* Empty state */}
               {resumes.length === 0 && (
                 <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-warm-200 bg-white py-20 space-y-4">
@@ -675,7 +768,7 @@ export default function CareerProfilePage() {
 
               {/* Resume cards */}
               <div className="space-y-3">
-                {resumes.map((r) => {
+                {resumes.filter((r) => resumeListFilter === 'all' || r.resumeType === resumeListFilter || (resumeListFilter === 'profile' && !r.resumeType)).map((r) => {
                   const scoreColor =
                     r.score === null ? '' :
                     r.score >= 90 ? 'text-sage-600' :
@@ -696,9 +789,20 @@ export default function CareerProfilePage() {
                             <div className="flex items-center flex-wrap gap-2 mb-1.5">
                               <p className="font-semibold text-ink-700 text-sm">{r.name}</p>
                               {r.isPrimary && <Badge variant="success">主要履歷</Badge>}
+                              {r.resumeType === 'jd' ? (
+                                <span className="rounded-full bg-honey-100 border border-honey-300 px-2 py-0.5 text-[11px] font-medium text-honey-700">🎯 客製化</span>
+                              ) : (
+                                <span className="rounded-full bg-sage-50 border border-sage-200 px-2 py-0.5 text-[11px] font-medium text-sage-600">📄 通用</span>
+                              )}
                               <Badge variant="outline">{r.language === 'zh' ? '中文' : 'English'}</Badge>
-                              <Badge variant="outline">{r.source === 'upload' ? '上傳' : r.source === 'template' ? '範本' : r.source === 'linkedin' ? 'LinkedIn' : '手動'}</Badge>
                             </div>
+                            {r.resumeType === 'jd' && (r.linkedJobCompany || r.linkedJobTitle) && (
+                              <p className="text-xs text-ink-500 mb-1">
+                                {r.linkedJobCompany && <span>{r.linkedJobCompany}</span>}
+                                {r.linkedJobCompany && r.linkedJobTitle && <span className="mx-1 text-warm-300">·</span>}
+                                {r.linkedJobTitle && <span>{r.linkedJobTitle}</span>}
+                              </p>
+                            )}
                             {/* ── Second row: date · score ── */}
                             <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-xs text-ink-400">
                               <span>更新於 {fmtDate(r.updatedAt)}</span>
@@ -787,36 +891,11 @@ export default function CareerProfilePage() {
                     <p className="text-sm text-ink-500">從個人檔案庫建立完整版本，適合主動投遞或人脈推薦</p>
                   </div>
                   <div className="flex-1" />
-                  {chooserOpt === 'profile' ? (
-                    <div className="space-y-3 border-t border-warm-100 pt-4">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-ink-500 shrink-0">語言：</span>
-                        {(['zh', 'en', 'both'] as const).map((l) => (
-                          <button key={l} onClick={() => setResumeLang(l)}
-                            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${resumeLang === l ? 'bg-terra-500 text-white' : 'border border-warm-200 bg-white text-ink-600 hover:border-terra-300'}`}>
-                            {l === 'zh' ? '繁體中文' : l === 'en' ? 'English' : '兩份都要'}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => buildFromProfile(resumeLang)}
-                          className="flex-1 h-10 rounded-xl bg-terra-500 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
-                          開始建立 →
-                        </button>
-                        <button onClick={() => setChooserOpt(null)}
-                          className="h-10 px-3 rounded-xl border border-warm-200 text-sm text-ink-400 hover:text-ink-700 transition-colors">
-                          取消
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => { setChooserOpt('profile'); setResumeError('') }}
-                      className="w-full h-11 rounded-xl bg-terra-500 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
-                      建立通用履歷 →
-                    </button>
-                  )}
+                  <button
+                    onClick={handleStartProfileBuild}
+                    className="w-full h-11 rounded-xl bg-terra-500 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                    建立通用履歷 →
+                  </button>
                 </div>
 
                 {/* Card 2: 客製化履歷 */}
@@ -829,7 +908,7 @@ export default function CareerProfilePage() {
                   {chooserOpt !== 'jd' ? (
                     <div className="flex gap-2">
                       <button
-                        onClick={() => { setChooserOpt('jd'); setJdSubMode('paste'); setResumeError('') }}
+                        onClick={() => { setChooserOpt('jd'); setJdSubMode('paste'); setResumeError(''); loadProfileSummaryForJD() }}
                         className="flex-1 rounded-xl border-2 border-terra-300 bg-white py-2.5 text-sm font-medium text-terra-700 hover:bg-terra-100 transition-colors">
                         貼上 JD 開始
                       </button>
@@ -843,17 +922,55 @@ export default function CareerProfilePage() {
                 </div>
               </div>
 
-              {/* Expanded: JD paste */}
+              {/* Expanded: JD paste — split-column layout */}
               {chooserOpt === 'jd' && jdSubMode === 'paste' && (
-                <div className="rounded-xl border border-terra-200 bg-white p-5 space-y-3">
-                  <p className="text-sm font-semibold text-ink-700">貼上職位描述（JD）</p>
-                  <Textarea
-                    value={jdText}
-                    onChange={(e) => setJdText(e.target.value)}
-                    placeholder="貼上職位描述（JD）..."
-                    rows={6}
-                    className="resize-none"
-                  />
+                <div className="rounded-xl border border-terra-200 bg-white p-5 space-y-4">
+                  <p className="text-sm font-semibold text-ink-700">貼上職位描述（JD）並對照個人檔案庫</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Left: JD textarea */}
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-ink-500">職位描述（JD）</p>
+                      <Textarea
+                        value={jdText}
+                        onChange={(e) => setJdText(e.target.value)}
+                        placeholder="貼上職位描述（JD）..."
+                        rows={10}
+                        className="resize-none text-sm"
+                      />
+                    </div>
+                    {/* Right: Profile summary */}
+                    <div className="space-y-3 rounded-xl bg-cream-50 border border-warm-200 p-4">
+                      <p className="text-xs font-medium text-ink-500">個人檔案庫摘要（AI 將從此取材）</p>
+                      {profileSkillsList.length > 0 ? (
+                        <div>
+                          <p className="text-xs text-ink-400 mb-1.5">技能</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {profileSkillsList.map((s, i) => (
+                              <span key={i} className="rounded-full bg-white border border-warm-200 px-2 py-0.5 text-xs text-ink-600">{s}</span>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-ink-400">尚未填寫技能</p>
+                      )}
+                      {profileExpList.length > 0 && (
+                        <div>
+                          <p className="text-xs text-ink-400 mb-1.5">經驗</p>
+                          <div className="space-y-1">
+                            {profileExpList.map((e, i) => (
+                              <div key={i} className="text-xs text-ink-600">
+                                <span className="font-medium">{e.company}</span>
+                                {e.title && <span className="text-ink-400"> · {e.title}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {profileSkillsList.length === 0 && profileExpList.length === 0 && (
+                        <p className="text-xs text-ink-400">個人檔案庫尚無資料，建議先前往填寫</p>
+                      )}
+                    </div>
+                  </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-xs text-ink-500 shrink-0">語言：</span>
                     {(['zh', 'en', 'both'] as const).map((l) => (
@@ -940,7 +1057,10 @@ export default function CareerProfilePage() {
               {createMode === 'loading' && (
                 <div className="flex flex-col items-center justify-center py-16 gap-4">
                   <Spinner className="h-8 w-8 text-terra-500" />
-                  <p className="text-sm text-ink-500">AI 正在生成你的履歷...</p>
+                  <p className="text-sm font-medium text-ink-600">
+                    {chooserOpt === 'jd' ? '正在針對 JD 客製化履歷...' : '正在從個人檔案庫組裝履歷...'}
+                  </p>
+                  <p className="text-xs text-ink-400">AI 正在嚴格依照你的個人資料生成，請稍候</p>
                 </div>
               )}
 
@@ -951,10 +1071,27 @@ export default function CareerProfilePage() {
           {resumeView === 'edit' && (
             <>
               {editBanner && (
-                <div className="flex items-center gap-2 border-b border-orange-200 bg-orange-50 px-5 py-2.5 text-sm text-orange-700">
-                  <span>⚠️</span>
-                  <span className="flex-1">{editBanner}</span>
-                  <button onClick={() => setEditBanner('')} className="text-orange-400 hover:text-orange-600 transition-colors text-lg leading-none ml-2">✕</button>
+                <div className="border-b border-orange-200 bg-orange-50 px-5 py-2.5 text-sm text-orange-700">
+                  <div className="flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span className="flex-1">{editBanner}</span>
+                    <button onClick={() => { setEditBanner(''); setReviewFields([]) }} className="text-orange-400 hover:text-orange-600 transition-colors text-lg leading-none ml-2">✕</button>
+                  </div>
+                  {reviewFields.length > 0 && (
+                    <ul className="mt-2 ml-6 space-y-0.5 list-disc text-xs text-orange-600">
+                      {reviewFields.map((f, i) => <li key={i}>{f}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {pendingJdHighlights.length > 0 && (
+                <div className="rounded-xl border border-honey-200 bg-honey-50 px-4 py-3">
+                  <p className="text-xs font-semibold text-honey-700 mb-2">🎯 JD 關鍵詞（已在此履歷中優先排列）</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {pendingJdHighlights.map((kw, i) => (
+                      <span key={i} className="rounded-full bg-honey-100 border border-honey-300 px-2.5 py-0.5 text-xs text-honey-800">{kw}</span>
+                    ))}
+                  </div>
                 </div>
               )}
             <ResumeEditor
@@ -976,6 +1113,10 @@ export default function CareerProfilePage() {
                   createdAt: existing?.createdAt ?? now,
                   updatedAt: now,
                   data: data as ParsedResume,
+                  resumeType: existing?.resumeType ?? pendingResumeType,
+                  linkedJobCompany: existing?.linkedJobCompany ?? (pendingLinkedJobCompany || undefined),
+                  linkedJobTitle: existing?.linkedJobTitle ?? (pendingLinkedJobTitle || undefined),
+                  jdMatchHighlights: existing?.jdMatchHighlights ?? (pendingJdHighlights.length ? pendingJdHighlights : undefined),
                 }
                 const next = editingResumeId
                   ? resumes.map((r) => r.id === editingResumeId ? entry : r)
@@ -983,7 +1124,7 @@ export default function CareerProfilePage() {
                 persistResumes(next)
                 if (!editingResumeId) setEditingResumeId(newId)
               }}
-              onBack={() => { setResumeView('list'); setResumeError(''); setEditBanner('') }}
+              onBack={() => { setResumeView('list'); setResumeError(''); setEditBanner(''); setReviewFields([]); setPendingJdHighlights([]) }}
               onScoreUpdate={(score, atsScore, scoredAt) => {
                 const id = editingResumeId ?? resumes[resumes.length - 1]?.id
                 if (!id) return
@@ -1688,6 +1829,76 @@ export default function CareerProfilePage() {
               className="rounded-xl bg-terra-500 px-6 py-2.5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)] disabled:opacity-40 disabled:cursor-not-allowed">
               {editingId ? '更新日誌' : '✓ 儲存日誌'}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Completeness Modal ── */}
+      {showCompletenessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-xl p-6 space-y-5">
+            <div>
+              <p className="text-lg font-bold text-ink-900">個人檔案庫資料不完整</p>
+              <p className="text-sm text-ink-500 mt-1">以下項目尚未填寫，補充後可生成更完整的履歷：</p>
+            </div>
+            <ul className="space-y-2">
+              {completenessIssues.map((issue, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-ink-600">
+                  <span className="text-honey-500 mt-0.5">⚠️</span>
+                  <span>{issue}</span>
+                </li>
+              ))}
+            </ul>
+            <div className="flex flex-col gap-2">
+              <Link href="/profile-library"
+                className="block w-full text-center rounded-xl bg-terra-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]"
+                onClick={() => setShowCompletenessModal(false)}>
+                前往個人檔案庫填寫 →
+              </Link>
+              <button
+                onClick={() => { setShowCompletenessModal(false); setShowLangModal(true) }}
+                className="w-full rounded-xl border border-warm-200 px-5 py-2.5 text-sm text-ink-500 hover:text-ink-700 hover:border-warm-300 transition-colors">
+                仍要繼續建立
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Language Modal ── */}
+      {showLangModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-6 space-y-5">
+            <div>
+              <p className="text-lg font-bold text-ink-900">選擇履歷語言</p>
+              <p className="text-sm text-ink-500 mt-1">AI 將以所選語言生成履歷內容</p>
+            </div>
+            <div className="space-y-2">
+              {([['zh', '繁體中文', '生成一份繁體中文履歷'], ['en', 'English', 'Generate one English resume'], ['both', '兩份都要', '同時生成中英文各一份']] as const).map(([l, label, desc]) => (
+                <button key={l} onClick={() => setResumeLang(l)}
+                  className={`w-full flex items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition-all ${resumeLang === l ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-terra-200'}`}>
+                  <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0 ${resumeLang === l ? 'border-terra-500' : 'border-warm-300'}`}>
+                    {resumeLang === l && <div className="h-2 w-2 rounded-full bg-terra-500" />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-ink-800">{label}</p>
+                    <p className="text-xs text-ink-400">{desc}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => buildFromProfile(resumeLang)}
+                className="flex-1 rounded-xl bg-terra-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                開始建立 →
+              </button>
+              <button
+                onClick={() => setShowLangModal(false)}
+                className="rounded-xl border border-warm-200 px-4 py-2.5 text-sm text-ink-400 hover:text-ink-700 transition-colors">
+                取消
+              </button>
+            </div>
           </div>
         </div>
       )}
