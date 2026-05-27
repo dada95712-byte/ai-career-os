@@ -2,12 +2,16 @@
 
 import { useEffect, useState } from 'react'
 
-type PageKey = 'resume_lab' | 'skills' | 'application_tracker' | 'skill_map' | 'interviews' | 'analytics'
+type PageKey = 'resume_lab' | 'skills' | 'application_tracker' | 'skill_map' | 'interviews' | 'analytics' | 'work_journal'
 
 const TOOLTIP_CONTENT: Record<PageKey, { title: string; body: string }> = {
   resume_lab: {
     title: '📄 履歷管理中心',
     body: '這裡管理你所有的履歷。上傳後 AI 自動評分，找出 ATS 盲點，讓你的履歷通過篩選關卡。',
+  },
+  work_journal: {
+    title: '🔥 工作日誌',
+    body: '記錄每一段工作經歷與成就。用 STAR 格式整理故事，讓面試時能有條理地展現自己。',
   },
   skills: {
     title: '⚡ 你的技能資料庫',
