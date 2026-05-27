@@ -72,6 +72,7 @@ interface Application {
   contactPhone?: string
   notes?: string
   createdAt: string
+  linked_resume_id?: string
 }
 
 interface ExtractedJob {
@@ -201,6 +202,37 @@ function emptyDraft(): Omit<Application, 'id' | 'createdAt'> {
     interviewNotes: [], attachments: [],
     contactName: '', contactEmail: '', contactPhone: '',
   }
+}
+
+function getLinkedResume(resumeId: string): { id: string; name: string; score: number | null; createdAt: string } | null {
+  try {
+    const rr = localStorage.getItem('career-resumes')
+    if (!rr) return null
+    const arr = JSON.parse(rr) as { id: string; name: string; score: number | null; createdAt: string }[]
+    return arr.find((r) => r.id === resumeId) ?? null
+  } catch { return null }
+}
+
+function hasInterviewRecordsForJob(company: string, jobTitle: string): boolean {
+  try {
+    const rr = localStorage.getItem('interview-records')
+    if (!rr) return false
+    const records = JSON.parse(rr) as { company?: string; title?: string }[]
+    const q = (s: string) => s.toLowerCase()
+    return records.some(
+      (r) => (r.company && q(r.company).includes(q(company))) ||
+             (r.title && q(r.title).includes(q(jobTitle)))
+    )
+  } catch { return false }
+}
+
+function hasCompanyAnalysisForJob(company: string): boolean {
+  try {
+    const rr = localStorage.getItem('company-analyses')
+    if (!rr) return false
+    const obj = JSON.parse(rr) as Record<string, unknown>
+    return Object.keys(obj).some((k) => k.toLowerCase().includes(company.toLowerCase()))
+  } catch { return false }
 }
 
 type SortKey = 'company' | 'jobTitle' | 'status' | 'matchScore' | 'appliedAt' | 'salaryMin' | 'createdAt'
@@ -1062,6 +1094,55 @@ export default function ApplicationTrackerPage() {
               </CardContent>
             </Card>
 
+            {/* ── 📄 此職缺的履歷 (Step 1) ── */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>📄 此職缺的履歷</CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {app.linked_resume_id ? (() => {
+                  const res = getLinkedResume(app.linked_resume_id)
+                  return (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sage-500">✓</span>
+                        <span className="text-sm font-medium text-ink-700">已有客製化履歷</span>
+                      </div>
+                      {res && (
+                        <div className="rounded-xl border border-warm-200 bg-cream-50 px-4 py-3 space-y-1">
+                          <p className="text-sm font-medium text-ink-700">{res.name}</p>
+                          <div className="flex items-center gap-3 text-xs text-ink-400">
+                            <span>建立於 {relativeTime(res.createdAt)}</span>
+                            {res.score !== null && <span className={`font-medium ${res.score >= 80 ? 'text-sage-600' : res.score >= 60 ? 'text-honey-600' : 'text-terra-500'}`}>AI 評分：{res.score} 分</span>}
+                          </div>
+                        </div>
+                      )}
+                      <div className="flex gap-2 flex-wrap">
+                        <a href={`/career-profile`}
+                          className="rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-xs font-medium text-ink-600 hover:border-terra-300 hover:text-terra-600 transition-all">
+                          編輯履歷
+                        </a>
+                        <a href={`/career-profile?jobId=${app.id}&company=${encodeURIComponent(app.company)}&title=${encodeURIComponent(app.jobTitle)}`}
+                          className="rounded-lg border border-warm-200 bg-white px-3 py-1.5 text-xs font-medium text-ink-600 hover:border-terra-300 hover:text-terra-600 transition-all">
+                          重新生成
+                        </a>
+                      </div>
+                    </div>
+                  )
+                })() : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-ink-400">尚未為此職缺建立客製化履歷</p>
+                    <a href={`/career-profile?jobId=${app.id}&company=${encodeURIComponent(app.company)}&title=${encodeURIComponent(app.jobTitle)}`}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-terra-500 px-4 py-2 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+                      🎯 針對此職缺建立客製化履歷 →
+                    </a>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Important Dates */}
             <Card>
               <CardHeader><CardTitle>重要日期</CardTitle></CardHeader>
@@ -1121,6 +1202,56 @@ export default function ApplicationTrackerPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* ── 求職準備清單 (Step 5) ── */}
+            {(() => {
+              const hasResume     = !!app.linked_resume_id
+              const hasSkillGap   = !!app.matchAnalysis
+              const hasInterview  = hasInterviewRecordsForJob(app.company, app.jobTitle)
+              const hasCompanyAna = hasCompanyAnalysisForJob(app.company)
+              const allDone       = hasResume && hasSkillGap && hasInterview && hasCompanyAna
+              const items = [
+                { done: hasResume,     label: '建立客製化履歷',   action: !hasResume ? { label: '建立 →', href: `/career-profile?jobId=${app.id}&company=${encodeURIComponent(app.company)}&title=${encodeURIComponent(app.jobTitle)}` } : null },
+                { done: hasSkillGap,   label: '分析技能落差',     action: !hasSkillGap ? { label: '查看 JD 分析', onClick: () => setDetailTab('jd') } : null },
+                { done: hasInterview,  label: '面試題目準備',     action: !hasInterview ? { label: '開始練習 →', href: '/interview-prep' } : null },
+                { done: hasCompanyAna, label: '公司深度分析',     action: !hasCompanyAna ? { label: '查看分析 →', href: '/career-intelligence' } : null },
+              ]
+              return allDone ? (
+                <div className="rounded-xl bg-sage-50 border border-sage-200 px-4 py-4 text-center">
+                  <p className="text-sm font-semibold text-sage-700">🎉 此職缺的準備已完成，祝面試順利！</p>
+                </div>
+              ) : (
+                <Card>
+                  <CardHeader><CardTitle>✅ 求職準備進度</CardTitle></CardHeader>
+                  <CardContent className="space-y-2 pb-4">
+                    {items.map((item, i) => (
+                      <div key={i} className="flex items-center gap-3 py-1.5 border-b border-warm-100 last:border-0">
+                        <span className={`shrink-0 text-base ${item.done ? 'text-sage-500' : 'text-ink-300'}`}>
+                          {item.done ? '✅' : '☐'}
+                        </span>
+                        <span className={`flex-1 text-sm ${item.done ? 'text-sage-700 line-through opacity-60' : 'text-ink-700'}`}>
+                          {item.label}
+                        </span>
+                        {!item.done && item.action && (
+                          item.action.href ? (
+                            <a href={item.action.href}
+                              className="shrink-0 rounded-lg bg-terra-50 border border-terra-200 px-2.5 py-1 text-xs font-medium text-terra-600 hover:bg-terra-100 transition-colors whitespace-nowrap">
+                              {item.action.label}
+                            </a>
+                          ) : (
+                            <button type="button"
+                              onClick={item.action.onClick}
+                              className="shrink-0 rounded-lg bg-terra-50 border border-terra-200 px-2.5 py-1 text-xs font-medium text-terra-600 hover:bg-terra-100 transition-colors whitespace-nowrap">
+                              {item.action.label}
+                            </button>
+                          )
+                        )}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )
+            })()}
           </div>
         )}
 
@@ -1508,7 +1639,12 @@ export default function ApplicationTrackerPage() {
                         onDragStart={() => onDragStart(app.id)}
                         onClick={() => { setSelectedApp(app); setDetailTab('overview'); setMainView('detail') }}
                         className="cursor-pointer rounded-xl border border-warm-200 bg-white p-3 shadow-[var(--shadow-warm-xs)] hover:shadow-[var(--shadow-warm-sm)] hover:border-terra-200 transition-all">
-                        <p className="text-xs font-semibold text-ink-800 truncate">{app.company}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs font-semibold text-ink-800 truncate flex-1">{app.company}</p>
+                          {app.linked_resume_id && (
+                            <span title="已有客製化履歷" className="shrink-0 text-[11px]">📄</span>
+                          )}
+                        </div>
                         <p className="text-xs text-ink-500 truncate mt-0.5">{app.jobTitle}</p>
                         {app.matchScore !== undefined && (
                           <p className={`mt-2 text-xs font-bold ${scoreColor(app.matchScore)}`}>
@@ -1580,7 +1716,12 @@ export default function ApplicationTrackerPage() {
                 const col = STATUS_MAP[app.status]
                 return (
                   <tr key={app.id} className="border-b border-warm-100 hover:bg-cream-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-ink-800">{app.company}</td>
+                    <td className="px-4 py-3 font-medium text-ink-800">
+                      <span className="flex items-center gap-1.5">
+                        {app.company}
+                        {app.linked_resume_id && <span title="已有客製化履歷" className="text-sm">📄</span>}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-ink-600">{app.jobTitle}</td>
                     <td className="px-4 py-3 text-xs text-ink-500">{app.industry || '—'}</td>
                     <td className="px-4 py-3">

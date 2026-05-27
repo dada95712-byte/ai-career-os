@@ -181,6 +181,11 @@ export default function CareerProfilePage() {
   const [trackerApps, setTrackerApps] = useState<{ id: string; company?: string; title?: string; jdFullText?: string }[]>([])
   const [selectedTrackerAppId, setSelectedTrackerAppId] = useState('')
 
+  // Tracker linkage (Steps 2, 3)
+  const [trackerJobId, setTrackerJobId] = useState('')
+  const [trackerJobCompany, setTrackerJobCompany] = useState('')
+  const [trackerJobTitle, setTrackerJobTitle] = useState('')
+
   // Task 3: completeness modal + language modal + review fields + JD highlights
   const [showCompletenessModal, setShowCompletenessModal] = useState(false)
   const [completenessIssues, setCompletenessIssues] = useState<string[]>([])
@@ -248,6 +253,44 @@ export default function CareerProfilePage() {
   useEffect(() => {
     setIsMobile(window.innerWidth < 768)
 
+    // Read URL params for Tracker → Resume Lab deep-link (Step 2)
+    const params = new URLSearchParams(window.location.search)
+    const jobId = params.get('jobId')
+    const company = params.get('company') ?? ''
+    const title = params.get('title') ?? ''
+    if (jobId) {
+      setTrackerJobId(jobId)
+      setTrackerJobCompany(company)
+      setTrackerJobTitle(title)
+      // Auto-load JD from tracker
+      try {
+        const trackerRaw = localStorage.getItem('job-tracker-apps')
+        if (trackerRaw) {
+          const trackerApps = JSON.parse(trackerRaw) as { id: string; jdFullText?: string; company?: string; title?: string }[]
+          const trackerApp = trackerApps.find((a) => a.id === jobId)
+          if (trackerApp?.jdFullText) {
+            setJdText(trackerApp.jdFullText)
+          }
+        }
+      } catch { /* ignore */ }
+      // Auto-open JD paste mode
+      setTab('resume')
+      setResumeView('create')
+      setChooserOpt('jd')
+      setJdSubMode('paste')
+      // Load profile summary for the right panel
+      try {
+        const sm = JSON.parse(localStorage.getItem('profile-skillmap') ?? '{}') as Record<string, string[]>
+        setProfileSkillsList(Object.values(sm).flat().slice(0, 20))
+        const exps = JSON.parse(localStorage.getItem('profile-experience') ?? '[]') as { company?: string; title?: string }[]
+        const interns = JSON.parse(localStorage.getItem('profile-internship') ?? '[]') as { company?: string; title?: string }[]
+        setProfileExpList(
+          [...exps, ...interns].filter((e) => e.company || e.title).slice(0, 5)
+            .map((e) => ({ company: e.company ?? '', title: e.title ?? '' }))
+        )
+      } catch { /* ignore */ }
+    }
+
     const rawEntries = localStorage.getItem('career-journal')
     if (rawEntries) {
       const es: JournalEntry[] = JSON.parse(rawEntries)
@@ -313,6 +356,17 @@ export default function CareerProfilePage() {
       } catch { /* ignore */ }
     })
     return profile
+  }
+
+  function linkResumeToTrackerApp(jobId: string, resumeId: string) {
+    if (!jobId) return
+    try {
+      const raw = localStorage.getItem('job-tracker-apps')
+      if (!raw) return
+      const apps = JSON.parse(raw) as Record<string, unknown>[]
+      const updated = apps.map((a) => a.id === jobId ? { ...a, linked_resume_id: resumeId } : a)
+      localStorage.setItem('job-tracker-apps', JSON.stringify(updated))
+    } catch { /* ignore */ }
   }
 
   function checkCompletenessLocal(): string[] {
@@ -406,9 +460,11 @@ export default function CareerProfilePage() {
         const jobTitle = zhData.jobTitle || enData.jobTitle || '客製化'
         const highlights = (zhData.jd_match_highlights ?? enData.jd_match_highlights ?? []) as string[]
         const now = new Date().toISOString()
-        const zhEntry: ResumeEntry = { id: genId(), name: `${jobTitle} ZH 履歷`, language: 'zh', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...zhData.resume }, resumeType: 'jd', linkedJobCompany: selectedApp?.company, linkedJobTitle: jobTitle, jdMatchHighlights: highlights }
-        const enEntry: ResumeEntry = { id: genId(), name: `${jobTitle} EN Resume`, language: 'en', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...enData.resume }, resumeType: 'jd', linkedJobCompany: selectedApp?.company, linkedJobTitle: jobTitle, jdMatchHighlights: highlights }
+        const zhId = genId(); const enId = genId()
+        const zhEntry: ResumeEntry = { id: zhId, name: `${jobTitle} ZH 履歷`, language: 'zh', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...zhData.resume }, resumeType: 'jd', linkedJobCompany: selectedApp?.company, linkedJobTitle: jobTitle, jdMatchHighlights: highlights }
+        const enEntry: ResumeEntry = { id: enId, name: `${jobTitle} EN Resume`, language: 'en', score: null, atsScore: null, scoredAt: null, isPrimary: false, source: 'manual', createdAt: now, updatedAt: now, data: { ...EMPTY_RESUME, ...enData.resume }, resumeType: 'jd', linkedJobCompany: selectedApp?.company, linkedJobTitle: jobTitle, jdMatchHighlights: highlights }
         persistResumes([...resumes, zhEntry, enEntry])
+        if (trackerJobId) linkResumeToTrackerApp(trackerJobId, zhId)
         setResumeView('list'); setCreateMode('none')
       } else {
         const res = await fetch('/api/resume/customize-for-jd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, jd: jdText, language: lang }) })
@@ -865,8 +921,12 @@ export default function CareerProfilePage() {
                 ← 返回
               </button>
               <div>
-                <h2 className="text-xl font-bold text-ink-900">建立新履歷</h2>
-                <p className="text-sm text-ink-500 mt-1">選擇履歷類型，AI 從個人檔案庫取得資料自動生成</p>
+                <h2 className="text-xl font-bold text-ink-900">{trackerJobId ? '建立客製化履歷' : '建立新履歷'}</h2>
+                <p className="text-sm text-ink-500 mt-1">
+                  {trackerJobId
+                    ? `為「${trackerJobCompany}${trackerJobTitle ? ` — ${trackerJobTitle}` : ''}」量身打造履歷`
+                    : '選擇履歷類型，AI 從個人檔案庫取得資料自動生成'}
+                </p>
               </div>
 
               {/* Step 2: No-profile-data notice */}
@@ -882,8 +942,8 @@ export default function CareerProfilePage() {
                 </div>
               )}
 
-              {/* Step 3: Two large cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {/* Step 3: Two large cards (hidden when coming from Tracker) */}
+              <div className={`grid grid-cols-1 sm:grid-cols-2 gap-5 ${trackerJobId ? 'hidden' : ''}`}>
                 {/* Card 1: 通用履歷 */}
                 <div className={`bg-white border border-warm-200 rounded-xl p-8 space-y-4 flex flex-col ${!hasProfileData ? 'opacity-60 pointer-events-none' : ''}`}>
                   <div className="space-y-2">
@@ -929,7 +989,20 @@ export default function CareerProfilePage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Left: JD textarea */}
                     <div className="space-y-2">
-                      <p className="text-xs font-medium text-ink-500">職位描述（JD）</p>
+                      {trackerJobId ? (
+                        <div className="rounded-lg bg-sage-50 border border-sage-200 px-3 py-2 flex items-start gap-2">
+                          <span className="text-sage-500 shrink-0 mt-0.5">📋</span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-sage-700">來自 Application Tracker</p>
+                            <p className="text-xs text-sage-600 truncate">{trackerJobCompany}{trackerJobTitle ? ` — ${trackerJobTitle}` : ''}</p>
+                          </div>
+                          <button
+                            onClick={() => { setTrackerJobId(''); setTrackerJobCompany(''); setTrackerJobTitle(''); setJdText('') }}
+                            className="shrink-0 text-xs text-sage-400 hover:text-sage-700 transition-colors">✕ 清除</button>
+                        </div>
+                      ) : (
+                        <p className="text-xs font-medium text-ink-500">職位描述（JD）</p>
+                      )}
                       <Textarea
                         value={jdText}
                         onChange={(e) => setJdText(e.target.value)}
@@ -987,7 +1060,7 @@ export default function CareerProfilePage() {
                       className="flex-1 h-10 rounded-xl bg-terra-500 text-sm font-semibold text-white hover:bg-terra-700 transition-colors disabled:opacity-50 shadow-[var(--shadow-warm-sm)]">
                       開始客製化 →
                     </button>
-                    <button onClick={() => { setChooserOpt(null); setJdSubMode(null) }}
+                    <button onClick={() => { setChooserOpt(null); setJdSubMode(null); if (trackerJobId) { setTrackerJobId(''); setTrackerJobCompany(''); setTrackerJobTitle(''); setJdText('') } }}
                       className="h-10 px-3 rounded-xl border border-warm-200 text-sm text-ink-400 hover:text-ink-700 transition-colors">
                       取消
                     </button>
@@ -1084,6 +1157,16 @@ export default function CareerProfilePage() {
                   )}
                 </div>
               )}
+              {trackerJobId && (pendingResumeType === 'jd' || !editBanner) && (
+                <div className="flex items-center gap-2 rounded-xl border border-sage-200 bg-sage-50 px-4 py-2.5 text-sm text-sage-700">
+                  <span>🔗</span>
+                  <span className="flex-1">此履歷與 <strong>{trackerJobCompany}</strong>{trackerJobTitle ? ` ${trackerJobTitle}` : ''} 綁定</span>
+                  <Link href="/career-match"
+                    className="shrink-0 text-xs font-medium text-sage-600 hover:text-sage-800 underline-offset-2 hover:underline transition-colors whitespace-nowrap">
+                    查看職缺 →
+                  </Link>
+                </div>
+              )}
               {pendingJdHighlights.length > 0 && (
                 <div className="rounded-xl border border-honey-200 bg-honey-50 px-4 py-3">
                   <p className="text-xs font-semibold text-honey-700 mb-2">🎯 JD 關鍵詞（已在此履歷中優先排列）</p>
@@ -1122,7 +1205,10 @@ export default function CareerProfilePage() {
                   ? resumes.map((r) => r.id === editingResumeId ? entry : r)
                   : [...resumes, entry]
                 persistResumes(next)
-                if (!editingResumeId) setEditingResumeId(newId)
+                if (!editingResumeId) {
+                  setEditingResumeId(newId)
+                  if (trackerJobId) linkResumeToTrackerApp(trackerJobId, newId)
+                }
               }}
               onBack={() => { setResumeView('list'); setResumeError(''); setEditBanner(''); setReviewFields([]); setPendingJdHighlights([]) }}
               onScoreUpdate={(score, atsScore, scoredAt) => {
