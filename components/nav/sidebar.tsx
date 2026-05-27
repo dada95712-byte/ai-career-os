@@ -41,6 +41,16 @@ const navItems = [
     ),
   },
   {
+    href: '/work-journal',
+    label: 'Work Journal',
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 0 3-3h7z" />
+      </svg>
+    ),
+  },
+  {
     href: '/career-match',
     label: 'Application Tracker',
     icon: (
@@ -64,6 +74,15 @@ const navItems = [
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+    ),
+  },
+  {
+    href: '/career-coach',
+    label: 'AI 職涯教練',
+    icon: (
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z" />
       </svg>
     ),
   },
@@ -275,23 +294,6 @@ export function Sidebar() {
           {navItems.map((item) => (
             <li key={item.href}>
               <NavItem item={item} active={isActive(item.href)} collapsed={collapsed} />
-              {/* Skills sub-item under Resume Lab */}
-              {item.href === '/career-profile' && !collapsed && (
-                <Link href="/dashboard/skills"
-                  className={cn(
-                    'ml-6 mt-0.5 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs transition-all',
-                    pathname === '/dashboard/skills'
-                      ? 'text-terra-600 font-medium'
-                      : 'text-ink-400 hover:text-ink-600'
-                  )}
-                  style={{ background: pathname === '/dashboard/skills' ? 'rgba(201,121,65,0.08)' : 'transparent' }}
-                  onMouseEnter={e => { if (pathname !== '/dashboard/skills') e.currentTarget.style.background = 'rgba(201,121,65,0.05)' }}
-                  onMouseLeave={e => { if (pathname !== '/dashboard/skills') e.currentTarget.style.background = 'transparent' }}
-                >
-                  <span className="text-[10px]">⚡</span>
-                  <span>技能庫</span>
-                </Link>
-              )}
             </li>
           ))}
         </ul>

@@ -425,7 +425,7 @@ ${skills.map((s) => `${s.name}（${s.category}）`).join('、')}
         <span className="text-sm text-ink-500 shrink-0">你的技能將用於：</span>
         <Link href="/career-match" className="text-sm font-medium text-terra-600 hover:text-terra-800 transition-colors whitespace-nowrap">🎯 職缺匹配 →</Link>
         <span className="text-ink-300">·</span>
-        <Link href="/career-growth" className="text-sm font-medium text-terra-600 hover:text-terra-800 transition-colors whitespace-nowrap">📊 技能落差 →</Link>
+        <Link href="/career-growth" className="text-sm font-medium text-terra-600 hover:text-terra-800 transition-colors whitespace-nowrap">◈ Skill Map →</Link>
         <span className="text-ink-300">·</span>
         <Link href="/interview-prep" className="text-sm font-medium text-terra-600 hover:text-terra-800 transition-colors whitespace-nowrap">🎤 面試準備 →</Link>
       </div>
