@@ -14,10 +14,8 @@ type AppStatus =
   | 'saved'
   | 'applied'
   | 'hr_screen'
-  | 'written_test'
   | 'manager_interview'
   | 'gm_interview'
-  | 'bg_check'
   | 'offer'
   | 'rejected'
 
@@ -49,6 +47,7 @@ interface Application {
   id: string
   jobTitle: string
   company: string
+  industry?: string
   location?: string
   status: AppStatus
   sourcePlatform?: string
@@ -63,7 +62,6 @@ interface Application {
   deadline?: string
   appliedAt?: string
   hrScreenAt?: string
-  writtenTestAt?: string
   managerInterviewAt?: string
   gmInterviewAt?: string
   offerAt?: string
@@ -76,16 +74,32 @@ interface Application {
   createdAt: string
 }
 
+interface ExtractedJob {
+  company_zh?: string | null
+  company_en?: string | null
+  title_zh?: string | null
+  title_en?: string | null
+  location?: string | null
+  salary_min?: number | null
+  salary_max?: number | null
+  salary_text?: string | null
+  industry?: string | null
+  job_type?: string | null
+  deadline?: string | null
+  source_platform?: string | null
+  jd_content?: string | null
+  required_skills?: string[] | null
+  experience_required?: string | null
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const KANBAN_COLS: { status: AppStatus; label: string; colBg: string; dot: string }[] = [
   { status: 'saved',             label: '已儲存',     colBg: 'bg-warm-100',  dot: 'bg-zinc-400' },
   { status: 'applied',           label: '已投遞',     colBg: 'bg-honey-50',  dot: 'bg-honey-500' },
   { status: 'hr_screen',         label: '人資初篩',   colBg: 'bg-terra-50',  dot: 'bg-terra-300' },
-  { status: 'written_test',      label: '筆試/測驗',  colBg: 'bg-terra-50',  dot: 'bg-terra-400' },
   { status: 'manager_interview', label: '主管面試',   colBg: 'bg-terra-50',  dot: 'bg-terra-500' },
   { status: 'gm_interview',      label: '總經理面試', colBg: 'bg-terra-50',  dot: 'bg-terra-600' },
-  { status: 'bg_check',          label: '背景調查',   colBg: 'bg-terra-50',  dot: 'bg-ink-400' },
   { status: 'offer',             label: 'Offer',      colBg: 'bg-sage-50',   dot: 'bg-sage-500' },
   { status: 'rejected',          label: '未錄取',     colBg: 'bg-cream-200', dot: 'bg-red-400' },
 ]
@@ -98,12 +112,19 @@ const LOCATIONS = ['台北市', '新北市', '桃園市', '台中市', '台南�
 const PLATFORMS = ['104', 'LinkedIn', 'Cake.me', 'Yourator', '公司官網', '獵頭介紹', '其他']
 const APPS_KEY = 'job-tracker-apps'
 
+const INDUSTRIES = [
+  '科技/軟體', '半導體', '電子製造', '金融/銀行', '保險', '電商', '零售',
+  '醫療/生技', '製造業', '物流/供應鏈', '顧問/管理顧問', '廣告/行銷',
+  '媒體/出版', '教育', '政府/非營利', '新創', '外商',
+] as const
+
+const URL_LOAD_STEPS = ['正在讀取職缺頁面...', 'AI 正在擷取職缺資訊...', '整理完成，請確認資料'] as const
+
 const DATE_STAGES = [
   { key: 'createdAt',          label: '建立',        readonly: true,  warn: false },
   { key: 'appliedAt',          label: '投遞日期',    readonly: false, warn: false },
   { key: 'deadline',           label: '截止日期',    readonly: false, warn: true  },
   { key: 'hrScreenAt',         label: '人資初篩',    readonly: false, warn: false },
-  { key: 'writtenTestAt',      label: '筆試/測驗',   readonly: false, warn: false },
   { key: 'managerInterviewAt', label: '主管面試',    readonly: false, warn: false },
   { key: 'gmInterviewAt',      label: '總經理面試',  readonly: false, warn: false },
   { key: 'offerAt',            label: 'Offer 收到',  readonly: false, warn: false },
@@ -173,7 +194,7 @@ function loadProfileSkills(): string[] {
 
 function emptyDraft(): Omit<Application, 'id' | 'createdAt'> {
   return {
-    jobTitle: '', company: '', location: '', status: 'saved',
+    jobTitle: '', company: '', industry: '', location: '', status: 'saved',
     sourcePlatform: '', sourceUrl: '',
     salaryMin: undefined, salaryMax: undefined,
     deadline: '', notes: '', jdFullText: '',
@@ -202,7 +223,7 @@ export default function ApplicationTrackerPage() {
   const [mainView, setMainView] = useState<'main' | 'add' | 'detail'>('main')
   const [selectedApp, setSelectedApp] = useState<Application | null>(null)
   const [detailTab, setDetailTab] = useState<'overview' | 'jd' | 'interview' | 'notes'>('overview')
-  const [addTab, setAddTab] = useState<'paste' | 'manual'>('paste')
+  const [addTab, setAddTab] = useState<'url' | 'paste' | 'manual'>('url')
   const [showFilter, setShowFilter] = useState(false)
 
   // Filter
@@ -218,6 +239,16 @@ export default function ApplicationTrackerPage() {
   const [jdPasteText, setJdPasteText] = useState('')
   const [jdParsing, setJdParsing] = useState(false)
   const [jdParsed, setJdParsed] = useState(false)
+  const [industryShowCustom, setIndustryShowCustom] = useState(false)
+  const jdTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // URL extraction
+  const [urlInput, setUrlInput] = useState('')
+  const [urlExtracting, setUrlExtracting] = useState(false)
+  const [urlLoadStep, setUrlLoadStep] = useState(0)
+  const [urlExtracted, setUrlExtracted] = useState<ExtractedJob | null>(null)
+  const [urlError, setUrlError] = useState('')
+  const [urlConfirmDraft, setUrlConfirmDraft] = useState<Partial<Application>>({})
 
   // List sort
   const [sortKey, setSortKey] = useState<SortKey>('createdAt')
@@ -238,7 +269,18 @@ export default function ApplicationTrackerPage() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(APPS_KEY)
-      if (raw) setApps(JSON.parse(raw))
+      if (raw) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const parsed: any[] = JSON.parse(raw)
+        // Migrate removed statuses: written_test → hr_screen, bg_check → offer
+        const migrated = parsed.map((a) => ({
+          ...a,
+          status: a.status === 'written_test' ? 'hr_screen'
+                : a.status === 'bg_check'     ? 'offer'
+                : a.status,
+        })) as Application[]
+        setApps(migrated)
+      }
     } catch { /* ignore */ }
     setProfileSkills(loadProfileSkills())
   }, [])
@@ -261,7 +303,7 @@ export default function ApplicationTrackerPage() {
 
   // ── Stats ─────────────────────────────────────────────────────────────────
   const interviewingCount = apps.filter((a) =>
-    ['hr_screen', 'written_test', 'manager_interview', 'gm_interview'].includes(a.status)
+    ['hr_screen', 'manager_interview', 'gm_interview'].includes(a.status)
   ).length
   const offerCount = apps.filter((a) => a.status === 'offer').length
   const thisMonthCount = useMemo(() => {
@@ -327,7 +369,7 @@ export default function ApplicationTrackerPage() {
         body: JSON.stringify({
           messages: [{
             role: 'user',
-            content: `請從以下 JD 中擷取資訊，以 JSON 格式回傳，僅包含這些欄位：jobTitle, company, location, salaryMin（月薪數字）, salaryMax（月薪數字）。找不到的欄位省略不填。\n\n${text}`,
+            content: `請從以下 JD 中擷取資訊，以 JSON 格式回傳，僅包含這些欄位：jobTitle, company, location, salaryMin（月薪數字）, salaryMax（月薪數字）, industry（產業別，從以下選擇：${INDUSTRIES.join('、')}、其他）。找不到的欄位省略不填。\n\n${text}`,
           }],
           context: 'jd_parse',
         }),
@@ -338,13 +380,19 @@ export default function ApplicationTrackerPage() {
         const parsed = JSON.parse(match[0])
         setDraft((prev) => ({
           ...prev,
-          jobTitle: parsed.jobTitle ?? prev.jobTitle,
-          company: parsed.company ?? prev.company,
-          location: parsed.location ?? prev.location,
+          jobTitle:  parsed.jobTitle  ?? prev.jobTitle,
+          company:   parsed.company   ?? prev.company,
+          location:  parsed.location  ?? prev.location,
           salaryMin: parsed.salaryMin ?? prev.salaryMin,
           salaryMax: parsed.salaryMax ?? prev.salaryMax,
+          industry:  parsed.industry  ?? prev.industry,
           jdFullText: text,
         }))
+        if (parsed.industry && !(INDUSTRIES as readonly string[]).includes(parsed.industry)) {
+          setIndustryShowCustom(true)
+        } else {
+          setIndustryShowCustom(false)
+        }
         setJdParsed(true)
         setAddTab('manual')
       }
@@ -352,20 +400,71 @@ export default function ApplicationTrackerPage() {
     finally { setJdParsing(false) }
   }
 
-  async function analyzeMatch(app: Application) {
-    if (!app.jdFullText || analyzingMatch) return
-    setAnalyzingMatch(true)
+  async function extractFromUrl() {
+    if (!urlInput.trim() || urlExtracting) return
+    setUrlExtracting(true)
+    setUrlError('')
+    setUrlLoadStep(1)
+
+    const step2Timer = setTimeout(() => setUrlLoadStep(2), 4000)
     try {
-      const res = await fetch('/api/jobs/match', {
+      const res = await fetch('/api/jobs/extract-from-url', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jdText: app.jdFullText }),
+        body: JSON.stringify({ url: urlInput.trim() }),
       })
-      const d = await res.json()
-      const updated = { ...app, matchScore: d.matchScore, matchedSkills: d.matchedSkills, missingSkills: d.missingSkills }
-      persist(apps.map((a) => a.id === app.id ? updated : a))
-      setSelectedApp(updated)
-    } catch { /* ignore */ }
-    finally { setAnalyzingMatch(false) }
+      clearTimeout(step2Timer)
+      const data = await res.json()
+
+      if (!data.success) {
+        setUrlError(data.error || 'fetch_failed')
+        setUrlLoadStep(0)
+        return
+      }
+
+      setUrlLoadStep(3)
+      await new Promise(r => setTimeout(r, 500))
+
+      const job: ExtractedJob = data.job || {}
+      setUrlConfirmDraft({
+        company:        job.company_zh || job.company_en || '',
+        jobTitle:       job.title_zh   || job.title_en   || '',
+        industry:       job.industry   || '',
+        location:       job.location   || '',
+        salaryMin:      job.salary_min ? Number(job.salary_min) : undefined,
+        salaryMax:      job.salary_max ? Number(job.salary_max) : undefined,
+        sourcePlatform: job.source_platform || '',
+        sourceUrl:      urlInput.trim(),
+        jdFullText:     job.jd_content || '',
+        deadline:       job.deadline   || '',
+      })
+      setUrlExtracted(job)
+    } catch {
+      clearTimeout(step2Timer)
+      setUrlError('fetch_failed')
+      setUrlLoadStep(0)
+    } finally {
+      setUrlExtracting(false)
+    }
+  }
+
+  function confirmUrlExtracted() {
+    const newApp: Application = {
+      ...urlConfirmDraft,
+      id: genId(),
+      createdAt: new Date().toISOString(),
+      status: 'saved',
+      jobTitle: urlConfirmDraft.jobTitle || '',
+      company:  urlConfirmDraft.company  || '',
+      interviewNotes: [],
+      attachments: [],
+    }
+    persist([newApp, ...apps])
+    setUrlExtracted(null)
+    setUrlInput('')
+    setUrlLoadStep(0)
+    setSelectedApp(newApp)
+    setDetailTab('overview')
+    setMainView('detail')
   }
 
   async function doAnalyzeMatch(app: Application, force: boolean) {
@@ -415,7 +514,11 @@ export default function ApplicationTrackerPage() {
     setSelectedApp(newApp); setDetailTab('overview'); setMainView('detail')
   }
 
-  function resetAdd() { setDraft(emptyDraft()); setJdPasteText(''); setJdParsed(false); setAddTab('paste') }
+  function resetAdd() {
+    setDraft(emptyDraft()); setJdPasteText(''); setJdParsed(false); setAddTab('url')
+    setUrlInput(''); setUrlError(''); setUrlLoadStep(0); setUrlExtracted(null)
+    setIndustryShowCustom(false)
+  }
 
   function addInterviewNote() {
     if (!selectedApp || !newNote.date || !newNote.notes) return
@@ -451,22 +554,87 @@ export default function ApplicationTrackerPage() {
           <h1 className="text-lg font-bold text-ink-900">新增職缺</h1>
         </div>
 
-        <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-fit shadow-[var(--shadow-warm-xs)]">
-          {(['paste', 'manual'] as const).map((t) => (
+        {/* Tab selector */}
+        <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 shadow-[var(--shadow-warm-xs)]">
+          {(['url', 'paste', 'manual'] as const).map((t) => (
             <button key={t} type="button" onClick={() => setAddTab(t)}
-              className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-all duration-150 ${addTab === t ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'}`}>
-              {t === 'paste' ? '📋 貼上 JD（推薦）' : '✏️ 手動填寫'}
+              className={`flex-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-150 ${addTab === t ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'}`}>
+              {t === 'url' ? '🔗 貼上連結（最快）' : t === 'paste' ? '📋 貼上 JD' : '✏️ 手動填寫'}
             </button>
           ))}
         </div>
 
-        {/* Paste JD tab */}
+        {/* ── URL tab ── */}
+        {addTab === 'url' && (
+          <Card>
+            <CardContent className="pt-5 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-ink-500 mb-1">職缺頁面網址</label>
+                <p className="text-xs text-ink-400 mb-3">支援 104、LinkedIn、Cake.me、Yourator、1111 等平台</p>
+                <div className="flex gap-2">
+                  <input
+                    className="flex-1 rounded-xl border border-warm-300 bg-white px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
+                    placeholder="貼上職缺頁面的網址..."
+                    value={urlInput}
+                    onChange={(e) => { setUrlInput(e.target.value); setUrlError('') }}
+                    disabled={urlExtracting}
+                  />
+                  <button type="button" onClick={extractFromUrl}
+                    disabled={!urlInput.trim() || urlExtracting}
+                    className="shrink-0 rounded-xl bg-terra-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-terra-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2">
+                    {urlExtracting ? <Spinner /> : null}
+                    {urlExtracting ? URL_LOAD_STEPS[Math.max(0, urlLoadStep - 1)] : '自動擷取 →'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Loading steps */}
+              {urlExtracting && (
+                <div className="space-y-1.5">
+                  {URL_LOAD_STEPS.map((step, i) => {
+                    const stepNum = i + 1
+                    const done   = urlLoadStep > stepNum
+                    const active = urlLoadStep === stepNum
+                    return (
+                      <div key={i} className={`flex items-center gap-2 text-xs transition-colors ${done ? 'text-sage-600' : active ? 'text-terra-500 animate-pulse' : 'text-ink-300'}`}>
+                        <span>{done ? '✓' : '○'}</span>
+                        <span>{step}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Error state */}
+              {urlError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-2">
+                  <p className="text-sm text-red-600">
+                    {urlError === 'login_required'      && '此職缺頁面需要登入才能查看，請改用「貼上 JD」方式'}
+                    {urlError === 'insufficient_content' && '擷取到的內容不足，請改用「貼上 JD」方式手動貼上職缺說明'}
+                    {urlError === 'invalid_url'          && '請輸入有效的 http/https 網址'}
+                    {urlError === 'rate_limit'           && 'AI 服務目前使用量較高，請稍後再試'}
+                    {!['login_required', 'insufficient_content', 'invalid_url', 'rate_limit'].includes(urlError) && '無法自動擷取此連結，請改用「貼上 JD」方式'}
+                  </p>
+                  {urlError !== 'rate_limit' && urlError !== 'invalid_url' && (
+                    <button type="button"
+                      onClick={() => { setUrlError(''); setAddTab('paste'); setTimeout(() => jdTextareaRef.current?.focus(), 100) }}
+                      className="text-sm font-medium text-terra-500 hover:text-terra-600 transition-colors">
+                      → 切換至「貼上 JD」
+                    </button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ── Paste JD tab ── */}
         {addTab === 'paste' && (
           <Card>
             <CardContent className="pt-5 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-ink-500 mb-1.5">貼上職務說明（JD）</label>
-                <textarea
+                <textarea ref={jdTextareaRef}
                   className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none resize-none"
                   style={{ minHeight: '300px' }}
                   placeholder="將 104、LinkedIn 或公司官網的職務說明全文貼於此處，AI 將自動擷取所有資訊..."
@@ -492,7 +660,7 @@ export default function ApplicationTrackerPage() {
           </Card>
         )}
 
-        {/* Manual tab */}
+        {/* ── Manual tab ── */}
         {addTab === 'manual' && (
           <Card>
             <CardContent className="pt-5 space-y-4">
@@ -512,6 +680,36 @@ export default function ApplicationTrackerPage() {
                   <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
                     placeholder="例：資深前端工程師" value={draft.jobTitle} onChange={(e) => setDraft({ ...draft, jobTitle: e.target.value })} />
                 </div>
+
+                {/* Industry */}
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium text-ink-500 mb-1">產業別</label>
+                  <select
+                    className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                    value={industryShowCustom ? '其他' : (draft.industry ?? '')}
+                    onChange={(e) => {
+                      if (e.target.value === '其他') {
+                        setIndustryShowCustom(true)
+                        setDraft({ ...draft, industry: '' })
+                      } else {
+                        setIndustryShowCustom(false)
+                        setDraft({ ...draft, industry: e.target.value || undefined })
+                      }
+                    }}>
+                    <option value="">請選擇</option>
+                    {INDUSTRIES.map((ind) => <option key={ind} value={ind}>{ind}</option>)}
+                    <option value="其他">其他（自訂）</option>
+                  </select>
+                  {industryShowCustom && (
+                    <input
+                      className="mt-2 w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                      placeholder="請輸入產業別"
+                      value={draft.industry ?? ''}
+                      onChange={(e) => setDraft({ ...draft, industry: e.target.value })}
+                    />
+                  )}
+                </div>
+
                 <div>
                   <label className="block text-xs font-medium text-ink-500 mb-1">工作地點</label>
                   <select className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
@@ -564,16 +762,119 @@ export default function ApplicationTrackerPage() {
           </Card>
         )}
 
-        <div className="flex gap-3">
-          <button type="button" onClick={() => { setMainView('main'); resetAdd() }}
-            className="flex-1 rounded-xl border border-warm-300 py-2.5 text-sm text-ink-500 hover:border-terra-300 hover:text-terra-500 transition-all">
-            ← 取消
-          </button>
-          <button type="button" onClick={saveApp} disabled={!draft.company.trim() || !draft.jobTitle.trim()}
-            className="flex-1 rounded-xl bg-terra-500 py-2.5 text-sm font-semibold text-white hover:bg-terra-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
-            儲存並分析匹配度
-          </button>
-        </div>
+        {/* Bottom actions (paste / manual only) */}
+        {addTab !== 'url' && (
+          <div className="flex gap-3">
+            <button type="button" onClick={() => { setMainView('main'); resetAdd() }}
+              className="flex-1 rounded-xl border border-warm-300 py-2.5 text-sm text-ink-500 hover:border-terra-300 hover:text-terra-500 transition-all">
+              ← 取消
+            </button>
+            <button type="button" onClick={saveApp} disabled={!draft.company.trim() || !draft.jobTitle.trim()}
+              className="flex-1 rounded-xl bg-terra-500 py-2.5 text-sm font-semibold text-white hover:bg-terra-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+              儲存並分析匹配度
+            </button>
+          </div>
+        )}
+
+        {/* ── URL confirm modal ── */}
+        {urlExtracted !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="relative w-full max-w-lg max-h-[90vh] flex flex-col rounded-2xl bg-white shadow-[var(--shadow-warm-xl)]">
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-warm-100">
+                <div>
+                  <h2 className="text-base font-bold text-ink-900">✓ 自動擷取完成，請確認資訊</h2>
+                  <p className="text-xs text-ink-400 mt-0.5">以下欄位可直接修改</p>
+                </div>
+                <button type="button" onClick={() => { setUrlExtracted(null); setUrlLoadStep(0) }}
+                  className="text-ink-400 hover:text-ink-600 text-xl leading-none transition-colors">×</button>
+              </div>
+
+              {/* Scrollable body */}
+              <div className="overflow-y-auto p-5 space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-xs font-medium text-ink-500 mb-1">公司名稱 <span className="text-terra-500">*</span></label>
+                    <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                      value={urlConfirmDraft.company ?? ''}
+                      onChange={(e) => setUrlConfirmDraft(p => ({ ...p, company: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <label className="block text-xs font-medium text-ink-500 mb-1">職位名稱 <span className="text-terra-500">*</span></label>
+                    <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                      value={urlConfirmDraft.jobTitle ?? ''}
+                      onChange={(e) => setUrlConfirmDraft(p => ({ ...p, jobTitle: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-ink-500 mb-1">產業別</label>
+                    <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                      placeholder="例：科技/軟體"
+                      value={urlConfirmDraft.industry ?? ''}
+                      onChange={(e) => setUrlConfirmDraft(p => ({ ...p, industry: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-ink-500 mb-1">工作地點</label>
+                    <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                      value={urlConfirmDraft.location ?? ''}
+                      onChange={(e) => setUrlConfirmDraft(p => ({ ...p, location: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-ink-500 mb-1">來源平台</label>
+                    <input className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                      value={urlConfirmDraft.sourcePlatform ?? ''}
+                      onChange={(e) => setUrlConfirmDraft(p => ({ ...p, sourcePlatform: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-ink-500 mb-1">月薪下限（NTD）</label>
+                    <input type="number" className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                      placeholder="40000"
+                      value={urlConfirmDraft.salaryMin ?? ''}
+                      onChange={(e) => setUrlConfirmDraft(p => ({ ...p, salaryMin: Number(e.target.value) || undefined }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-ink-500 mb-1">月薪上限（NTD）</label>
+                    <input type="number" className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                      placeholder="60000"
+                      value={urlConfirmDraft.salaryMax ?? ''}
+                      onChange={(e) => setUrlConfirmDraft(p => ({ ...p, salaryMax: Number(e.target.value) || undefined }))} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-ink-500 mb-1">截止日期</label>
+                    <input type="date" className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none"
+                      value={urlConfirmDraft.deadline ?? ''}
+                      onChange={(e) => setUrlConfirmDraft(p => ({ ...p, deadline: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-ink-500 mb-1">JD 全文</label>
+                    <textarea className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-900 focus:border-terra-400 focus:outline-none resize-none"
+                      rows={5}
+                      value={urlConfirmDraft.jdFullText ?? ''}
+                      onChange={(e) => setUrlConfirmDraft(p => ({ ...p, jdFullText: e.target.value }))} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-xs font-medium text-ink-500 mb-1">職缺連結</label>
+                    <input readOnly className="w-full rounded-xl border border-warm-100 bg-cream-50 px-3 py-2 text-sm text-ink-500 focus:outline-none"
+                      value={urlInput} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer */}
+              <div className="border-t border-warm-100 px-5 py-4 flex gap-2">
+                <button type="button" onClick={() => { setUrlExtracted(null); setUrlLoadStep(0) }}
+                  className="flex-1 rounded-xl border border-warm-300 py-2.5 text-sm text-ink-500 hover:border-terra-300 hover:text-terra-500 transition-all">
+                  ✕ 取消
+                </button>
+                <button type="button"
+                  disabled={!urlConfirmDraft.company?.trim() || !urlConfirmDraft.jobTitle?.trim()}
+                  onClick={confirmUrlExtracted}
+                  className="flex-1 rounded-xl bg-terra-500 py-2.5 text-sm font-semibold text-white hover:bg-terra-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                  ✓ 確認並儲存職缺
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -630,11 +931,12 @@ export default function ApplicationTrackerPage() {
               <CardContent>
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
                   {([
-                    { label: '公司', value: app.company },
-                    { label: '職位', value: app.jobTitle },
-                    { label: '地點', value: app.location || '—' },
-                    { label: '薪資', value: fmtSalary(app.salaryMin, app.salaryMax) || '—' },
-                    { label: '來源', value: app.sourcePlatform || '—' },
+                    { label: '公司',   value: app.company },
+                    { label: '職位',   value: app.jobTitle },
+                    { label: '產業',   value: app.industry  || '—' },
+                    { label: '地點',   value: app.location  || '—' },
+                    { label: '薪資',   value: fmtSalary(app.salaryMin, app.salaryMax) || '—' },
+                    { label: '來源',   value: app.sourcePlatform || '—' },
                     { label: '截止日', value: fmtDate(app.deadline) },
                   ]).map(({ label, value }) => (
                     <div key={label}>
@@ -1129,10 +1431,10 @@ export default function ApplicationTrackerPage() {
       {/* Stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: '總投遞數',  value: apps.length,       color: 'text-ink-700 bg-white border-warm-200' },
-          { label: '面試中',    value: interviewingCount,  color: 'text-terra-600 bg-terra-50 border-terra-200' },
-          { label: '收到 Offer', value: offerCount,        color: 'text-sage-600 bg-sage-50 border-sage-200' },
-          { label: '本月新增',  value: thisMonthCount,     color: 'text-honey-600 bg-honey-50 border-honey-200' },
+          { label: '總投遞數',   value: apps.length,       color: 'text-ink-700 bg-white border-warm-200' },
+          { label: '面試中',     value: interviewingCount,  color: 'text-terra-600 bg-terra-50 border-terra-200' },
+          { label: '收到 Offer', value: offerCount,         color: 'text-sage-600 bg-sage-50 border-sage-200' },
+          { label: '本月新增',   value: thisMonthCount,     color: 'text-honey-600 bg-honey-50 border-honey-200' },
         ].map((s) => (
           <div key={s.label} className={`rounded-2xl border px-4 py-3 shadow-[var(--shadow-warm-xs)] ${s.color}`}>
             <p className="text-2xl font-bold">{s.value}</p>
@@ -1243,6 +1545,15 @@ export default function ApplicationTrackerPage() {
                 {([
                   { key: 'company',    label: '公司' },
                   { key: 'jobTitle',   label: '職位' },
+                ] as { key: SortKey; label: string }[]).map(({ key, label }) => (
+                  <th key={key}
+                    className="px-4 py-3 text-left text-xs font-semibold text-ink-400 cursor-pointer hover:text-ink-600 whitespace-nowrap"
+                    onClick={() => toggleSort(key)}>
+                    {label}{si(key)}
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-left text-xs font-semibold text-ink-400 whitespace-nowrap">產業</th>
+                {([
                   { key: 'status',     label: '狀態' },
                   { key: 'matchScore', label: '匹配分' },
                   { key: 'appliedAt',  label: '投遞日' },
@@ -1260,7 +1571,7 @@ export default function ApplicationTrackerPage() {
             <tbody>
               {filteredApps.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-16 text-center text-sm text-ink-400">
+                  <td colSpan={8} className="py-16 text-center text-sm text-ink-400">
                     尚無職缺，點擊「＋ 新增職缺」開始追蹤
                   </td>
                 </tr>
@@ -1271,6 +1582,7 @@ export default function ApplicationTrackerPage() {
                   <tr key={app.id} className="border-b border-warm-100 hover:bg-cream-50 transition-colors">
                     <td className="px-4 py-3 font-medium text-ink-800">{app.company}</td>
                     <td className="px-4 py-3 text-ink-600">{app.jobTitle}</td>
+                    <td className="px-4 py-3 text-xs text-ink-500">{app.industry || '—'}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <div className={`h-1.5 w-1.5 rounded-full shrink-0 ${col.dot}`} />
