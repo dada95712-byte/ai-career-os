@@ -19,6 +19,13 @@ interface Question {
   strengths?: string[]; suggestions?: string[]; optimizedAnswer?: string
   followUpQ?: string; followUpAnswer?: string
   weaknessLabels?: string[]; improved?: boolean
+  contentScore?: number; structureScore?: number; persuasionScore?: number; starHints?: string
+}
+interface BilingualResult {
+  translation: string
+  tips: { phrase: string; usage: string; example: string }[]
+  editedTranslation?: string
+  isEditing?: boolean
 }
 type InterviewerStyle = 'friendly' | 'strict' | 'technical' | 'hr'
 type InterviewMode = 'practice' | 'simulation'
@@ -300,8 +307,10 @@ export default function InterviewPrepPage() {
   const [selectedQ, setSelectedQ]     = useState<Question | null>(null)
   const [mockPracticeIdx, setMockPracticeIdx] = useState(0)
   const [answer, setAnswer]           = useState('')
-  const [answerLang, setAnswerLang]   = useState<'zh' | 'en'>('zh')
+  const [answerLang, setAnswerLang]   = useState<'zh' | 'en' | 'bilingual'>('bilingual')
   const [evaluating, setEvaluating]   = useState(false)
+  const [bilingualData, setBilingualData] = useState<Record<string, BilingualResult>>({})
+  const [translating, setTranslating] = useState(false)
   const [showEn, setShowEn]           = useState(false)
   const [showMockOptimized, setShowMockOptimized] = useState(false)
 
@@ -689,10 +698,17 @@ export default function InterviewPrepPage() {
         suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
         optimizedAnswer: data.optimizedAnswer ?? data.feedback ?? '',
         followUpQ, followUpAnswer: fAnswer, weaknessLabels,
+        contentScore: typeof data.contentScore === 'number' ? data.contentScore : undefined,
+        structureScore: typeof data.structureScore === 'number' ? data.structureScore : undefined,
+        persuasionScore: typeof data.persuasionScore === 'number' ? data.persuasionScore : undefined,
+        starHints: data.starHints ?? undefined,
       }
       setQuestions((p) => p.map((qu) => qu.id === selectedQ?.id ? { ...qu, ...updates } : qu))
       setSelectedQ((p) => p && { ...p, ...updates })
       setFollowUpStep('scored')
+      if (answerLang === 'bilingual' && selectedQ) {
+        void translateAnswer(selectedQ.id, answer, selectedQ.question, selectedQ.questionEn ?? '')
+      }
       if (currentSessionId && selectedQ) {
         setSessions((prev) => {
           const next = prev.map((s) => s.id !== currentSessionId ? s : {
@@ -707,6 +723,22 @@ export default function InterviewPrepPage() {
       }
     } catch { /* silent */ }
     finally { setEvaluating(false) }
+  }
+
+  async function translateAnswer(questionId: string, answerZh: string, questionZh: string, questionEn: string) {
+    setTranslating(true)
+    try {
+      const res = await fetch('/api/interviews/translate-answer', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answer_zh: answerZh, question_zh: questionZh, question_en: questionEn, title: role || fromTitle || '' }),
+      })
+      const data = await res.json()
+      setBilingualData((prev) => ({
+        ...prev,
+        [questionId]: { translation: data.translation ?? '', tips: Array.isArray(data.tips) ? data.tips : [] },
+      }))
+    } catch { /* silent */ }
+    finally { setTranslating(false) }
   }
 
   // ── Summary report ─────────────────────────────────────────────────────────
@@ -911,12 +943,20 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <label className="block text-xs font-medium text-ink-500">回答語言</label>
-                      <div className="flex gap-1 rounded-lg border border-warm-200 bg-cream-50 p-0.5 w-fit">
-                        {(['zh', 'en'] as const).map((l) => (
-                          <button key={l} onClick={() => setAnswerLang(l)}
-                            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${answerLang === l ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-400 hover:text-ink-600'}`}>
-                            {l === 'zh' ? '中文' : 'English'}
+                      <label className="block text-xs font-medium text-ink-500">面試語言模式</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {([
+                          ['zh',       '中文',        '全中文作答，AI 評分建議'],
+                          ['en',       'English',     'Answer & feedback in English'],
+                          ['bilingual','🌐 雙語練習',  '中文作答 + AI 英譯'],
+                        ] as const).map(([lang, label, desc]) => (
+                          <button key={lang} onClick={() => setAnswerLang(lang)}
+                            className={`relative flex flex-col items-start gap-0.5 rounded-xl border p-3 text-left transition-all ${answerLang === lang ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                            {lang === 'bilingual' && (
+                              <span className="absolute top-2 right-2 bg-terra-50 text-terra-600 text-[10px] px-1.5 py-0.5 rounded-full border border-terra-200">推薦</span>
+                            )}
+                            <span className={`text-sm font-semibold ${answerLang === lang ? 'text-terra-700' : 'text-ink-700'}`}>{label}</span>
+                            <span className="text-[10px] text-ink-400 leading-tight pr-6">{desc}</span>
                           </button>
                         ))}
                       </div>
@@ -1065,12 +1105,20 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
 
                   {/* Language */}
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-medium text-ink-500">回答語言</label>
-                    <div className="flex gap-1 rounded-lg border border-warm-200 bg-cream-50 p-0.5 w-fit">
-                      {(['zh', 'en'] as const).map((l) => (
-                        <button key={l} onClick={() => setAnswerLang(l)}
-                          className={`rounded-md px-4 py-1.5 text-sm font-medium transition-all ${answerLang === l ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-400 hover:text-ink-600'}`}>
-                          {l === 'zh' ? '中文' : 'English'}
+                    <label className="block text-xs font-medium text-ink-500">面試語言模式</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        ['zh',       '中文',        '全中文作答，AI 評分建議'],
+                        ['en',       'English',     'Answer & feedback in English'],
+                        ['bilingual','🌐 雙語練習',  '中文作答 + AI 英譯'],
+                      ] as const).map(([lang, label, desc]) => (
+                        <button key={lang} onClick={() => setAnswerLang(lang)}
+                          className={`relative flex flex-col items-start gap-0.5 rounded-xl border p-3 text-left transition-all ${answerLang === lang ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                          {lang === 'bilingual' && (
+                            <span className="absolute top-2 right-2 bg-terra-50 text-terra-600 text-[10px] px-1.5 py-0.5 rounded-full border border-terra-200">推薦</span>
+                          )}
+                          <span className={`text-sm font-semibold ${answerLang === lang ? 'text-terra-700' : 'text-ink-700'}`}>{label}</span>
+                          <span className="text-[10px] text-ink-400 leading-tight pr-6">{desc}</span>
                         </button>
                       ))}
                     </div>
@@ -1267,8 +1315,11 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                 <Badge variant={TYPE[selectedQ.type]?.color ?? 'default'} className="mb-3">
                   {TYPE[selectedQ.type]?.label} · {TYPE[selectedQ.type]?.labelEn}
                 </Badge>
-                <p className="text-xl font-semibold text-ink-900 leading-relaxed">{selectedQ.question}</p>
-                {selectedQ.questionEn && (
+                <p className="text-lg font-medium text-ink-900 leading-relaxed">{selectedQ.question}</p>
+                {selectedQ.questionEn && answerLang === 'bilingual' && (
+                  <p className="text-base italic text-ink-400 mt-1 leading-relaxed">{selectedQ.questionEn}</p>
+                )}
+                {selectedQ.questionEn && answerLang !== 'bilingual' && (
                   <div className="mt-2">
                     <button onClick={() => setShowEn((p) => !p)} className="text-xs text-terra-500 hover:text-terra-700">
                       {showEn ? '▲ 收起英文題目' : '▼ 顯示英文題目'}
@@ -1283,11 +1334,18 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                 <label className="block text-sm font-medium text-ink-600">你的回答</label>
                 <textarea
                   rows={8}
-                  placeholder={answerLang === 'en' ? 'Use STAR method: Situation → Task → Action → Result' : '建議用 STAR 方法：情境 → 任務 → 行動 → 結果'}
+                  placeholder={
+                    answerLang === 'en' ? 'Use STAR method: Situation → Task → Action → Result' :
+                    answerLang === 'bilingual' ? '請用中文回答，AI 將自動翻譯成英文供你參考...' :
+                    '建議用 STAR 方法：情境 → 任務 → 行動 → 結果'
+                  }
                   value={answer}
                   onChange={(e) => setAnswer(e.target.value)}
                   disabled={timerPhase === 'thinking' || followUpStep === 'followup' || followUpStep === 'scored'}
                   className="w-full min-h-[200px] rounded-xl border border-warm-300 bg-white px-4 py-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none resize-y leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed" />
+                {answerLang === 'bilingual' && (
+                  <p className="text-xs text-ink-300">💡 用你最自然的中文回答即可，不需要顧慮英文表達</p>
+                )}
                 {followUpStep === 'none' && (
                   <div className="flex items-center gap-3">
                     {voiceBtn('mock')}
@@ -1339,71 +1397,171 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
 
               {/* AI feedback */}
               {selectedQ.aiScore !== undefined && (
-                <div className="rounded-2xl border border-warm-200 bg-white p-5 space-y-4 shadow-[var(--shadow-warm-xs)]">
-                  {/* Score row */}
-                  <div className="flex items-center gap-4">
-                    <span className={`text-5xl font-bold tabular-nums ${scoreCol(selectedQ.aiScore)}`}>
-                      {selectedQ.aiScore}
-                    </span>
-                    <div>
-                      <p className="text-xs text-ink-400 mb-0.5">/ 10 分</p>
-                      <p className="text-honey-500 text-lg tracking-wider">{scoreStars(selectedQ.aiScore)}</p>
-                    </div>
-                    <span className={`ml-auto text-sm font-semibold ${scoreCol(selectedQ.aiScore)}`}>
-                      {scoreLabel(selectedQ.aiScore)}
-                    </span>
+                <div className="space-y-3">
+                  {/* Block A — AI Score */}
+                  <div className="bg-white border border-warm-200 rounded-xl p-4 space-y-4 shadow-[var(--shadow-warm-xs)]">
+                    {answerLang === 'bilingual' && selectedQ.contentScore !== undefined ? (
+                      <>
+                        <div className="flex items-center gap-4">
+                          <span className={`text-5xl font-bold tabular-nums ${scoreCol(selectedQ.aiScore)}`}>{selectedQ.aiScore}</span>
+                          <div>
+                            <p className="text-xs text-ink-400 mb-0.5">/ 10 整體</p>
+                            <p className="text-honey-500 text-lg tracking-wider">{scoreStars(selectedQ.aiScore)}</p>
+                          </div>
+                          <span className={`ml-auto text-sm font-semibold ${scoreCol(selectedQ.aiScore)}`}>{scoreLabel(selectedQ.aiScore)}</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          {([
+                            ['內容豐富度', selectedQ.contentScore],
+                            ['STAR 結構', selectedQ.structureScore ?? selectedQ.aiScore],
+                            ['說服力', selectedQ.persuasionScore ?? selectedQ.aiScore],
+                          ] as [string, number][]).map(([label, sc]) => (
+                            <div key={label} className="rounded-lg border border-warm-200 bg-cream-50 p-2.5 text-center">
+                              <p className="text-[10px] text-ink-400 mb-1">{label}</p>
+                              <p className={`text-xl font-bold tabular-nums ${scoreCol(sc)}`}>{sc}</p>
+                              <p className="text-[10px] text-ink-300">/ 10</p>
+                            </div>
+                          ))}
+                        </div>
+                        {selectedQ.starHints && (
+                          <div className="rounded-lg bg-honey-50 border border-honey-200 px-3 py-2 text-xs text-honey-700">
+                            ⭐ STAR 提示：{selectedQ.starHints}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-4">
+                        <span className={`text-5xl font-bold tabular-nums ${scoreCol(selectedQ.aiScore)}`}>{selectedQ.aiScore}</span>
+                        <div>
+                          <p className="text-xs text-ink-400 mb-0.5">/ 10 分</p>
+                          <p className="text-honey-500 text-lg tracking-wider">{scoreStars(selectedQ.aiScore)}</p>
+                        </div>
+                        <span className={`ml-auto text-sm font-semibold ${scoreCol(selectedQ.aiScore)}`}>{scoreLabel(selectedQ.aiScore)}</span>
+                      </div>
+                    )}
+
+                    {selectedQ.strengths && selectedQ.strengths.length > 0 && (
+                      <div className="rounded-xl bg-sage-50 border border-sage-200 p-3">
+                        <p className="text-xs font-semibold text-sage-600 mb-2">✓ 優點</p>
+                        <ul className="space-y-1.5">
+                          {selectedQ.strengths.map((s, i) => (
+                            <li key={i} className="text-xs text-ink-600 flex gap-1.5 leading-relaxed">
+                              <span className="text-sage-500 shrink-0 mt-0.5">✓</span>{s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {selectedQ.suggestions && selectedQ.suggestions.length > 0 && (
+                      <div className="rounded-xl bg-terra-50 border border-terra-200 p-3">
+                        <p className="text-xs font-semibold text-terra-500 mb-2">→ 改善建議</p>
+                        <ul className="space-y-1.5">
+                          {selectedQ.suggestions.map((s, i) => (
+                            <li key={i} className="text-xs text-ink-600 flex gap-1.5 leading-relaxed">
+                              <span className="text-terra-500 shrink-0 mt-0.5">→</span>{s}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {selectedQ.optimizedAnswer && (
+                      <>
+                        <button
+                          onClick={() => setShowMockOptimized((p) => !p)}
+                          className="flex items-center justify-center gap-2 w-full rounded-xl border border-terra-200 bg-terra-50 px-4 py-2.5 text-sm font-medium text-terra-600 hover:bg-terra-100 transition-colors">
+                          {showMockOptimized ? '▲ 收起 AI 優化版回答' : '查看 AI 優化版回答'}
+                        </button>
+                        {showMockOptimized && (
+                          <div className="rounded-xl border border-terra-200 bg-terra-50 p-4">
+                            <p className="text-xs font-semibold text-terra-500 mb-2">AI 建議回答</p>
+                            <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">{selectedQ.optimizedAnswer}</p>
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <button onClick={saveMockAnswer}
+                      className="flex items-center gap-2 rounded-xl border border-warm-200 bg-cream-50 px-4 py-2 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
+                      💾 儲存此題回答到個人題庫
+                    </button>
                   </div>
 
-                  {/* Strengths */}
-                  {selectedQ.strengths && selectedQ.strengths.length > 0 && (
-                    <div className="rounded-xl bg-sage-50 border border-sage-200 p-3">
-                      <p className="text-xs font-semibold text-sage-600 mb-2">✓ 優點</p>
-                      <ul className="space-y-1.5">
-                        {selectedQ.strengths.map((s, i) => (
-                          <li key={i} className="text-xs text-ink-600 flex gap-1.5 leading-relaxed">
-                            <span className="text-sage-500 shrink-0 mt-0.5">✓</span>{s}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Suggestions */}
-                  {selectedQ.suggestions && selectedQ.suggestions.length > 0 && (
-                    <div className="rounded-xl bg-terra-50 border border-terra-200 p-3">
-                      <p className="text-xs font-semibold text-terra-500 mb-2">→ 改善建議</p>
-                      <ul className="space-y-1.5">
-                        {selectedQ.suggestions.map((s, i) => (
-                          <li key={i} className="text-xs text-ink-600 flex gap-1.5 leading-relaxed">
-                            <span className="text-terra-500 shrink-0 mt-0.5">→</span>{s}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Optimized answer toggle */}
-                  {selectedQ.optimizedAnswer && (
-                    <>
-                      <button
-                        onClick={() => setShowMockOptimized((p) => !p)}
-                        className="flex items-center justify-center gap-2 w-full rounded-xl border border-terra-200 bg-terra-50 px-4 py-2.5 text-sm font-medium text-terra-600 hover:bg-terra-100 transition-colors">
-                        {showMockOptimized ? '▲ 收起 AI 優化版回答' : '查看 AI 優化版回答'}
-                      </button>
-                      {showMockOptimized && (
-                        <div className="rounded-xl border border-terra-200 bg-terra-50 p-4">
-                          <p className="text-xs font-semibold text-terra-500 mb-2">AI 建議回答</p>
-                          <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">{selectedQ.optimizedAnswer}</p>
+                  {/* Block B — 英文翻譯 (bilingual only) */}
+                  {answerLang === 'bilingual' && (
+                    <div className="bg-cream-50 border border-warm-200 rounded-xl p-4 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-ink-800">🌐 英文翻譯</p>
+                        {translating && <span className="text-xs text-ink-400 animate-pulse">翻譯中…</span>}
+                      </div>
+                      {translating && !bilingualData[selectedQ.id] ? (
+                        <div className="space-y-2">
+                          <div className="h-3 bg-warm-200 rounded animate-pulse w-full" />
+                          <div className="h-3 bg-warm-200 rounded animate-pulse w-4/5" />
+                          <div className="h-3 bg-warm-200 rounded animate-pulse w-3/4" />
                         </div>
+                      ) : bilingualData[selectedQ.id] ? (
+                        <>
+                          {bilingualData[selectedQ.id].isEditing ? (
+                            <textarea
+                              rows={6}
+                              value={bilingualData[selectedQ.id].editedTranslation ?? bilingualData[selectedQ.id].translation}
+                              onChange={(e) => setBilingualData((p) => ({ ...p, [selectedQ.id]: { ...p[selectedQ.id], editedTranslation: e.target.value } }))}
+                              className="w-full rounded-xl border border-warm-300 bg-white px-4 py-3 text-sm text-ink-800 focus:border-terra-400 focus:outline-none resize-y leading-relaxed"
+                            />
+                          ) : (
+                            <p className="text-sm text-ink-700 leading-relaxed whitespace-pre-wrap">
+                              {bilingualData[selectedQ.id].editedTranslation ?? bilingualData[selectedQ.id].translation}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <button
+                              onClick={() => {
+                                const text = bilingualData[selectedQ.id].editedTranslation ?? bilingualData[selectedQ.id].translation
+                                void navigator.clipboard.writeText(text)
+                              }}
+                              className="min-h-[44px] flex items-center gap-1.5 rounded-lg border border-warm-200 bg-white px-3 py-2 text-xs text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
+                              📋 複製
+                            </button>
+                            <button
+                              onClick={() => setBilingualData((p) => ({ ...p, [selectedQ.id]: { ...p[selectedQ.id], isEditing: !p[selectedQ.id].isEditing } }))}
+                              className="min-h-[44px] flex items-center gap-1.5 rounded-lg border border-warm-200 bg-white px-3 py-2 text-xs text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
+                              ✏️ {bilingualData[selectedQ.id].isEditing ? '完成編輯' : '編輯'}
+                            </button>
+                            <button
+                              onClick={() => void translateAnswer(selectedQ.id, selectedQ.userAnswer ?? answer, selectedQ.question, selectedQ.questionEn ?? '')}
+                              disabled={translating}
+                              className="min-h-[44px] flex items-center gap-1.5 rounded-lg border border-warm-200 bg-white px-3 py-2 text-xs text-ink-400 hover:border-warm-300 hover:text-ink-600 transition-colors disabled:opacity-50">
+                              🔄 重新翻譯
+                            </button>
+                          </div>
+                          <p className="text-[11px] text-ink-300">翻譯由 AI 生成，建議在正式面試前自行確認表達是否符合你的習慣</p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-ink-300">提交回答後將自動生成英文翻譯</p>
                       )}
-                    </>
+                    </div>
                   )}
 
-                  {/* Save */}
-                  <button onClick={saveMockAnswer}
-                    className="flex items-center gap-2 rounded-xl border border-warm-200 bg-cream-50 px-4 py-2 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
-                    💾 儲存此題回答到個人題庫
-                  </button>
+                  {/* Block C — 學習提示 (bilingual only) */}
+                  {answerLang === 'bilingual' && bilingualData[selectedQ.id]?.tips && bilingualData[selectedQ.id].tips.length > 0 && (
+                    <div className="bg-sage-50 border-l-4 border-l-sage-400 rounded-xl p-4 space-y-3">
+                      <p className="text-sm font-semibold text-sage-700">📚 職場英文學習提示</p>
+                      <ul className="space-y-3">
+                        {bilingualData[selectedQ.id].tips.map((tip, i) => (
+                          <li key={i} className="space-y-0.5">
+                            <p className="text-xs font-medium text-ink-700">
+                              <span className="text-sage-600">{tip.phrase}</span>
+                              {' → '}
+                              <span className="font-semibold text-ink-900">{tip.usage}</span>
+                            </p>
+                            <p className="text-[11px] text-ink-500 italic leading-relaxed">{tip.example}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1592,6 +1750,40 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                       className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
                       📥 下載報告 PDF
                     </button>
+                    {answerLang === 'bilingual' && Object.keys(bilingualData).length > 0 && (
+                      <button
+                        onClick={() => {
+                          const companyName = company || fromCompany || '面試'
+                          const date = new Date().toISOString().slice(0, 10)
+                          const lines = questions
+                            .filter((q) => q.userAnswer)
+                            .map((q, i) => {
+                              const bl = bilingualData[q.id]
+                              const translation = bl?.editedTranslation ?? bl?.translation ?? '（尚未翻譯）'
+                              return [
+                                `Q${i + 1}. ${q.question}`,
+                                q.questionEn ? `    ${q.questionEn}` : '',
+                                '',
+                                '我的回答（中文）：',
+                                q.userAnswer ?? '',
+                                '',
+                                '英文版本：',
+                                translation,
+                                '',
+                                '---',
+                              ].filter((l) => l !== null).join('\n')
+                            })
+                          const content = lines.join('\n\n')
+                          const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
+                          const url = URL.createObjectURL(blob)
+                          const a = document.createElement('a')
+                          a.href = url; a.download = `${companyName}-面試練習-${date}.txt`
+                          a.click(); URL.revokeObjectURL(url)
+                        }}
+                        className="flex items-center gap-2 rounded-xl border border-sage-200 bg-sage-50 px-4 py-2.5 text-sm font-medium text-sage-700 hover:bg-sage-100 transition-colors">
+                        📄 匯出雙語面試稿
+                      </button>
+                    )}
                     <button
                       onClick={() => { setRole(fromJobId ? (fromTitle ?? '') : ''); setCompany(fromJobId ? (fromCompany ?? '') : ''); setCurrentSessionId(null); setQuestions([]); setReport(null); setSaveTrackerStatus('idle'); setMockStep('setup') }}
                       className="flex items-center gap-2 rounded-xl border border-terra-200 bg-terra-50 px-4 py-2.5 text-sm font-medium text-terra-600 hover:bg-terra-100 transition-colors">
