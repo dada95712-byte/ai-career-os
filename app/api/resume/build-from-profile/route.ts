@@ -1,6 +1,8 @@
 import { callAI } from '@/lib/ai-client'
 import { NextResponse } from 'next/server'
 import { extractJSON } from '@/lib/extract-json'
+import { validateResumeContent } from '@/lib/resume-validator'
+import { validateAIJsonResponse } from '@/lib/ai-response-validator'
 
 const RESUME_JSON_SCHEMA = `{"name":"","email":"","phone":"","jobTitle":"","location":"","linkedin":"","website":"","summary":"","skills":[],"experiences":[{"company":"","title":"","description":"","startDate":"","endDate":"","current":false}],"education":[{"school":"","degree":"","major":"","year":"","startDate":"","endDate":""}],"languages":[{"name":"","level":""}],"certifications":[{"name":"","issuer":"","issueDate":"","expiryDate":"","neverExpires":false,"credentialId":"","credentialUrl":""}],"conferences":[{"name":"","organizer":"","date":"","role":"","description":""}],"activities":[{"name":"","organization":"","date":"","role":"","description":""}],"rawText":""}`
 
@@ -38,7 +40,21 @@ ${JSON.stringify(profile, null, 2).slice(0, 8000)}
     const result = extractJSON<{ resume?: Record<string, unknown>; needs_review?: string[] }>(raw)
     const resume = result.resume ?? (result as Record<string, unknown>)
     const needs_review: string[] = result.needs_review ?? []
-    return NextResponse.json({ resume: { ...resume, lang: language }, needs_review })
+
+    // Garble / structure validation
+    const jsonValidation = validateAIJsonResponse(resume, ['name'])
+    // Content validation against source profile
+    const contentValidation = validateResumeContent(
+      resume as Parameters<typeof validateResumeContent>[0],
+      profile as Parameters<typeof validateResumeContent>[1],
+    )
+
+    const _validation = {
+      issues: [...jsonValidation.issues, ...contentValidation.invalidatedFields],
+      invalidatedFields: contentValidation.invalidatedFields,
+    }
+
+    return NextResponse.json({ resume: { ...resume, lang: language }, needs_review, _validation })
   } catch (err) {
     console.error('[resume/build-from-profile]', err)
     return NextResponse.json({ error: '生成失敗，請稍後再試' }, { status: 500 })

@@ -322,9 +322,16 @@ export default function CareerProfilePage() {
         const data = await res.json()
         if (!res.ok) throw new Error(data.error ?? '生成失敗')
         const nrFields = (data.needs_review ?? []) as string[]
-        setReviewFields(nrFields)
+        const invalidated = (data._validation?.invalidatedFields ?? []) as string[]
+        const allReview = [...nrFields, ...invalidated]
+        setReviewFields(allReview)
         setPendingJdHighlights([])
-        setEditBanner('此履歷由個人檔案庫自動生成，請確認資訊正確性後再使用')
+        const warnCount = invalidated.length
+        setEditBanner(
+          warnCount > 0
+            ? `此履歷由個人檔案庫自動生成，偵測到 ${warnCount} 個欄位可能與原始資料不符，請確認後再使用`
+            : '此履歷由個人檔案庫自動生成，請確認資訊正確性後再使用'
+        )
         goToEditor({ ...EMPTY_RESUME, ...data.resume }, `${lang === 'en' ? 'EN Resume' : '履歷'}（檔案庫）`, 'manual', 'profile')
       }
     } catch (err) {
@@ -361,12 +368,18 @@ export default function CareerProfilePage() {
         if (!res.ok) throw new Error(data.error ?? '生成失敗')
         const jobTitle = data.jobTitle || '客製化'
         const highlights = (data.jd_match_highlights ?? []) as string[]
-        setReviewFields([])
+        const invalidatedJd = (data._validation?.invalidatedFields ?? []) as string[]
+        setReviewFields(invalidatedJd)
         setPendingJdHighlights(highlights)
         setPendingResumeType('jd')
         setPendingLinkedJobCompany(selectedApp?.company ?? '')
         setPendingLinkedJobTitle(jobTitle)
-        setEditBanner(`此履歷針對「${jobTitle}」客製化，來源：個人檔案庫`)
+        const warnCountJd = invalidatedJd.length
+        setEditBanner(
+          warnCountJd > 0
+            ? `此履歷針對「${jobTitle}」客製化，偵測到 ${warnCountJd} 個欄位可能與原始資料不符，請確認後再使用`
+            : `此履歷針對「${jobTitle}」客製化，來源：個人檔案庫`
+        )
         goToEditor({ ...EMPTY_RESUME, ...data.resume }, `${jobTitle} 履歷`, 'manual', 'jd', selectedApp?.company, jobTitle, highlights)
       }
     } catch (err) {

@@ -919,7 +919,10 @@ export default function ProfileLibraryPage() {
               )
             })}
           </div>
-          <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-warm-100 shrink-0">
+          <p className="mt-3 rounded-xl border border-honey-200 bg-honey-50 px-3 py-2 text-xs text-honey-700 leading-relaxed shrink-0">
+            ⚠ 請確認以上資訊確實來自你的履歷，AI 解析可能有誤，確認後才會儲存
+          </p>
+          <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-warm-100 shrink-0">
             <button type="button" onClick={() => { setImportParsed(null); setImportAccepted({}) }}
               className="rounded-xl border border-warm-200 bg-cream-100 px-4 py-2 text-sm text-ink-600 hover:bg-cream-200 transition-colors">取消</button>
             <button type="button" onClick={applyImport} disabled={accepted === 0}

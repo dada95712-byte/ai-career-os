@@ -1,6 +1,8 @@
 import { callAI } from '@/lib/ai-client'
 import { NextResponse } from 'next/server'
 import { extractJSON } from '@/lib/extract-json'
+import { validateResumeContent } from '@/lib/resume-validator'
+import { validateAIJsonResponse } from '@/lib/ai-response-validator'
 
 const RESUME_JSON_SCHEMA = `{"jobTitle":"","name":"","email":"","phone":"","location":"","linkedin":"","website":"","summary":"","skills":[],"experiences":[{"company":"","title":"","description":"","startDate":"","endDate":"","current":false}],"education":[{"school":"","degree":"","major":"","year":"","startDate":"","endDate":""}],"languages":[{"name":"","level":""}],"certifications":[{"name":"","issuer":"","issueDate":"","expiryDate":"","neverExpires":false,"credentialId":"","credentialUrl":""}],"conferences":[{"name":"","organizer":"","date":"","role":"","description":""}],"activities":[{"name":"","organization":"","date":"","role":"","description":""}],"rawText":""}`
 
@@ -44,7 +46,21 @@ ${JSON.stringify(profile, null, 2).slice(0, 6000)}
     const resume = result.resume ?? (result as Record<string, unknown>)
     const jd_match_highlights: string[] = result.jd_match_highlights ?? []
     const jobTitle = (resume.jobTitle as string) || ''
-    return NextResponse.json({ resume: { ...resume, lang: language }, jobTitle, jd_match_highlights })
+
+    // Garble / structure validation
+    const jsonValidation = validateAIJsonResponse(resume, ['name'])
+    // Content validation against source profile
+    const contentValidation = validateResumeContent(
+      resume as Parameters<typeof validateResumeContent>[0],
+      profile as Parameters<typeof validateResumeContent>[1],
+    )
+
+    const _validation = {
+      issues: [...jsonValidation.issues, ...contentValidation.invalidatedFields],
+      invalidatedFields: contentValidation.invalidatedFields,
+    }
+
+    return NextResponse.json({ resume: { ...resume, lang: language }, jobTitle, jd_match_highlights, _validation })
   } catch (err) {
     console.error('[resume/customize-for-jd]', err)
     return NextResponse.json({ error: '生成失敗，請稍後再試' }, { status: 500 })

@@ -68,6 +68,31 @@ async function callWithSearch(
   }
 }
 
+// ── Dedicated salary search step (功能6) ──────────────────────────────────────
+
+async function fetchSalaryStructured(title: string): Promise<SourcedText | null> {
+  if (!title?.trim()) return null
+
+  const system = '你是薪資資料查詢工具，只回傳搜尋到的真實薪資數字，嚴禁捏造。請用繁體中文回答。'
+  const prompt = `請搜尋「${title} 薪資 台灣 2026」和「${title} 月薪 台灣」。
+
+只回傳以下 JSON，不要其他文字：
+{
+  "content": "根據搜尋結果的薪資範圍描述（格式：NTD XX~YY 萬/月），或 null（若搜尋無結果）",
+  "source": "search_result（有真實搜尋結果）或 general_inference（無法搜尋到，根據同類職位推估，加上建議自行確認）",
+  "sourceUrl": "薪資來源網址或 null"
+}`
+
+  try {
+    const raw = await callWithSearch(system, prompt)
+    const parsed = extractJSON<{ content: string | null; source: SourceType; sourceUrl?: string | null }>(raw)
+    if (!parsed || parsed.content === undefined) return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
 // ── Route handler ─────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -80,21 +105,15 @@ export async function POST(req: NextRequest) {
       ? `\n以下是職缺 JD（僅用於推斷企業文化）：\n${String(jd_content).slice(0, 1500)}`
       : ''
 
-    // Step 1 & 2 — salary + trend search queries (included in single prompt)
-    const salarySearchNote = title
-      ? `請搜尋「${title} 薪資 台灣 2026」和「${title} 月薪 台灣」，只使用搜尋結果中的數字。`
-      : '無職位名稱，薪資區塊回傳 null。'
     const trendSearchNote = `請搜尋「${title || company} 招募趨勢 2026 台灣」和「${title || company} 職缺 台灣 2026」，根據結果摘要趨勢。`
     const companySearchNote = `請搜尋「${company} 官網 台灣」和「${company} 競爭對手 台灣」取得公司資訊。`
 
     const system = '你是台灣資深職涯顧問兼資料驗證專家，對資料來源極度謹慎，絕不捏造數字或無法驗證的資訊。請用繁體中文回答。'
 
-    // Step 3 — enhanced source-labelling rules in prompt
     const prompt = `請分析公司「${company}」${titlePart}。${jdSection}
 
 **搜尋指示**：
 - ${companySearchNote}
-- ${salarySearchNote}
 - ${trendSearchNote}
 
 **嚴格規則 — 違反即為失敗**：
@@ -104,12 +123,11 @@ export async function POST(req: NextRequest) {
    - "general_inference"：同產業一般推測，需在 content 中加「建議自行確認」
    - null：完全不確定，content 也必須為 null
 2. **絕對禁止**：員工確切人數、確切年營收、無法搜尋到的內部薪資數字
-3. 薪資一律用「NTD XX~YY 萬 / 月」區間，且必須說明資料來源
-4. 企業文化：僅根據 JD 推測（source="jd_inference"），無 JD 則用 general_inference
-5. 面試流程：source 必須為 "general_inference"，content 結尾必須加上「⚠ 以上為常見情況，請以公司官方說明為準」
-6. 競爭對手：搜尋到則填 search_result，否則根據產業知識填 general_inference
+3. 企業文化：僅根據 JD 推測（source="jd_inference"），無 JD 則用 general_inference
+4. 面試流程：source 必須為 "general_inference"，content 結尾必須加上「⚠ 以上為常見情況，請以公司官方說明為準」
+5. 競爭對手：搜尋到則填 search_result，否則根據產業知識填 general_inference
 
-只回傳如下 JSON，不要其他文字：
+只回傳如下 JSON（不含 salaryNegotiation，由獨立查詢提供），不要其他文字：
 {
   "basicInfo": {
     "content": "公司基本資訊（產業別、規模、主要業務），或 null",
@@ -128,11 +146,6 @@ export async function POST(req: NextRequest) {
     "content": "面試流程情報（⚠ 以上為常見情況，請以公司官方說明為準），或 null",
     "source": "general_inference | null"
   },
-  "salaryNegotiation": {
-    "content": "談薪建議與市場行情區間，或 null",
-    "source": "search_result | general_inference | null",
-    "sourceUrl": "薪資來源網址或 null"
-  },
   "competitors": {
     "names": ["競爭對手1", "競爭對手2", "競爭對手3"],
     "source": "search_result | general_inference | null",
@@ -147,8 +160,21 @@ export async function POST(req: NextRequest) {
   }
 }`
 
-    const raw = await callWithSearch(system, prompt)
-    const result = extractJSON(raw)
+    // Run company analysis and dedicated salary search in parallel (功能6)
+    const [raw, salaryResult] = await Promise.all([
+      callWithSearch(system, prompt),
+      title ? fetchSalaryStructured(title) : Promise.resolve(null),
+    ])
+
+    const result = extractJSON(raw) as Record<string, unknown>
+
+    // Merge dedicated salary result into salaryNegotiation field
+    result.salaryNegotiation = salaryResult ?? {
+      content: null,
+      source: null,
+      sourceUrl: null,
+    }
+
     return NextResponse.json(result)
   } catch (err) {
     if (isRateLimitError(err)) {

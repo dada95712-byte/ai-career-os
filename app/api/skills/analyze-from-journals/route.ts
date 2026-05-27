@@ -24,12 +24,22 @@ export async function POST(req: Request) {
 
     const raw = await callAI(journalText.slice(0, 8000), SYSTEM_PROMPT)
     const parsed = extractJSON<{ skills: Array<{ name: string; category: string; journal_ids: string[] }> }>(raw)
-    const skills = (parsed?.skills ?? []).map((s) => ({
-      name: s.name,
-      category: s.category,
-      journal_ids: s.journal_ids ?? [],
-      journalFrequency: (s.journal_ids ?? []).length,
-    }))
+
+    // Build a single searchable corpus from all journal text for validation
+    const allJournalContent = journalText.toLowerCase()
+
+    const skills = (parsed?.skills ?? [])
+      .filter((s) => {
+        // Only keep skills whose name actually appears in the journal text
+        return allJournalContent.includes(s.name.toLowerCase())
+      })
+      .map((s) => ({
+        name: s.name,
+        category: s.category,
+        journal_ids: s.journal_ids ?? [],
+        journalFrequency: (s.journal_ids ?? []).length,
+      }))
+
     return NextResponse.json({ skills })
   } catch (err) {
     if (isRateLimitError(err)) {
