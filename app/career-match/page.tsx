@@ -23,6 +23,27 @@ type AppStatus =
 interface InterviewNote { id: string; date: string; interviewer: string; notes: string }
 interface Attachment { name: string; url: string }
 
+interface MatchImprovement {
+  skill: string
+  priority: 'high' | 'medium' | 'low'
+  suggestion: string
+  resources: string[]
+}
+
+interface MatchAnalysis {
+  matchScore: number
+  jdRequiredSkills: string[]
+  matchedSkills: { skill: string; userSkill: string }[]
+  partialSkills: { skill: string; userSkill: string; gap: string }[]
+  missingSkills: string[]
+  fullReport: {
+    summary: string
+    strengths: string[]
+    improvements: MatchImprovement[]
+  }
+  analyzedAt: string
+}
+
 interface Application {
   id: string
   jobTitle: string
@@ -36,9 +57,15 @@ interface Application {
   matchScore?: number
   matchedSkills?: string[]
   missingSkills?: string[]
+  matchAnalysis?: MatchAnalysis
   jdFullText?: string
   deadline?: string
   appliedAt?: string
+  hrScreenAt?: string
+  writtenTestAt?: string
+  managerInterviewAt?: string
+  gmInterviewAt?: string
+  offerAt?: string
   interviewNotes?: InterviewNote[]
   attachments?: Attachment[]
   contactName?: string
@@ -70,6 +97,17 @@ const LOCATIONS = ['台北市', '新北市', '桃園市', '台中市', '台南�
 const PLATFORMS = ['104', 'LinkedIn', 'Cake.me', 'Yourator', '公司官網', '獵頭介紹', '其他']
 const APPS_KEY = 'job-tracker-apps'
 
+const DATE_STAGES = [
+  { key: 'createdAt',          label: '建立',        readonly: true,  warn: false },
+  { key: 'appliedAt',          label: '投遞日期',    readonly: false, warn: false },
+  { key: 'deadline',           label: '截止日期',    readonly: false, warn: true  },
+  { key: 'hrScreenAt',         label: '人資初篩',    readonly: false, warn: false },
+  { key: 'writtenTestAt',      label: '筆試/測驗',   readonly: false, warn: false },
+  { key: 'managerInterviewAt', label: '主管面試',    readonly: false, warn: false },
+  { key: 'gmInterviewAt',      label: '總經理面試',  readonly: false, warn: false },
+  { key: 'offerAt',            label: 'Offer 收到',  readonly: false, warn: false },
+] as const
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6) }
@@ -89,6 +127,47 @@ function fmtSalary(min?: number, max?: number) {
 function scoreColor(s?: number) {
   if (s === undefined) return ''
   return s >= 70 ? 'text-sage-600' : s >= 50 ? 'text-honey-500' : 'text-red-400'
+}
+
+function relativeTime(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 60) return `${Math.max(0, mins)} 分鐘前`
+  if (mins < 1440) return `${Math.floor(mins / 60)} 小時前`
+  return `${Math.floor(mins / 1440)} 天前`
+}
+
+function getMatchLabel(score: number): { text: string; color: string } {
+  if (score >= 90) return { text: '高度匹配，強烈建議投遞', color: 'text-sage-600' }
+  if (score >= 70) return { text: '良好匹配，值得投遞', color: 'text-sage-500' }
+  if (score >= 50) return { text: '部分匹配，可投遞但需補強', color: 'text-honey-600' }
+  return { text: '匹配度偏低，建議先補強技能', color: 'text-terra-500' }
+}
+
+function deadlineDays(deadline?: string): number | null {
+  if (!deadline) return null
+  return Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000)
+}
+
+function loadProfileSkills(): string[] {
+  try {
+    const skills = new Set<string>()
+    const rr = localStorage.getItem('career-resumes')
+    if (rr) {
+      const resumes = JSON.parse(rr)
+      if (Array.isArray(resumes)) resumes.forEach((r: Record<string, unknown>) => {
+        if (Array.isArray(r.skills)) (r.skills as string[]).forEach(s => skills.add(s))
+      })
+    }
+    const pr = localStorage.getItem('profile-skills')
+    if (pr) {
+      const ps = JSON.parse(pr)
+      if (Array.isArray(ps)) ps.forEach((s: string | { name?: string }) => {
+        if (typeof s === 'string') skills.add(s)
+        else if (s?.name) skills.add(s.name)
+      })
+    }
+    return [...skills].filter(Boolean)
+  } catch { return [] }
 }
 
 function emptyDraft(): Omit<Application, 'id' | 'createdAt'> {
@@ -149,6 +228,9 @@ export default function ApplicationTrackerPage() {
 
   // Match score analysis
   const [analyzingMatch, setAnalyzingMatch] = useState(false)
+  const [bgAnalyzing, setBgAnalyzing] = useState(false)
+  const [profileSkills, setProfileSkills] = useState<string[]>([])
+  const autoAnalyzed = useRef<Set<string>>(new Set())
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -156,7 +238,19 @@ export default function ApplicationTrackerPage() {
       const raw = localStorage.getItem(APPS_KEY)
       if (raw) setApps(JSON.parse(raw))
     } catch { /* ignore */ }
+    setProfileSkills(loadProfileSkills())
   }, [])
+
+  // Background auto-analyze when entering detail view
+  useEffect(() => {
+    if (mainView !== 'detail' || !selectedApp?.jdFullText) return
+    if (selectedApp.matchAnalysis) return
+    if (autoAnalyzed.current.has(selectedApp.id)) return
+    if (profileSkills.length === 0) return
+    autoAnalyzed.current.add(selectedApp.id)
+    setBgAnalyzing(true)
+    doAnalyzeMatch(selectedApp, false).finally(() => setBgAnalyzing(false))
+  }, [mainView, selectedApp?.id, profileSkills.length]) // eslint-disable-line
 
   function persist(next: Application[]) {
     setApps(next)
@@ -270,6 +364,38 @@ export default function ApplicationTrackerPage() {
       setSelectedApp(updated)
     } catch { /* ignore */ }
     finally { setAnalyzingMatch(false) }
+  }
+
+  async function doAnalyzeMatch(app: Application, force: boolean) {
+    if (!app.jdFullText) return
+    if (app.matchAnalysis && !force) return
+    if (profileSkills.length === 0) return
+    try {
+      const res = await fetch(`/api/jobs/${app.id}/analyze-match`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jdContent: app.jdFullText, userSkills: profileSkills }),
+      })
+      const data = await res.json()
+      if (data.error) return
+      const analysis: MatchAnalysis = {
+        matchScore: data.matchScore,
+        jdRequiredSkills: data.jdRequiredSkills ?? [],
+        matchedSkills: data.matchedSkills ?? [],
+        partialSkills: data.partialSkills ?? [],
+        missingSkills: data.missingSkills ?? [],
+        fullReport: data.fullReport ?? { summary: '', strengths: [], improvements: [] },
+        analyzedAt: data.analyzedAt,
+      }
+      const updated: Application = {
+        ...app,
+        matchAnalysis: analysis,
+        matchScore: analysis.matchScore,
+        matchedSkills: analysis.matchedSkills.map(m => m.skill),
+        missingSkills: analysis.missingSkills,
+      }
+      persist(apps.map(a => a.id === updated.id ? updated : a))
+      setSelectedApp(updated)
+    } catch { /* silent */ }
   }
 
   function saveApp() {
@@ -523,76 +649,171 @@ export default function ApplicationTrackerPage() {
               </CardContent>
             </Card>
 
-            {/* Match score */}
-            {app.matchScore !== undefined ? (
-              <Card>
-                <CardHeader><CardTitle>AI 匹配分析</CardTitle></CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex flex-col items-center justify-center rounded-2xl bg-cream-100 p-5">
-                      <ProgressRing score={app.matchScore} size={90} strokeWidth={7} animate />
-                      <p className="text-xs text-ink-500 mt-2">匹配度</p>
+            {/* AI Match Analysis */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>AI 匹配分析</CardTitle>
+                  {app.matchAnalysis && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-ink-300">分析時間：{relativeTime(app.matchAnalysis.analyzedAt)}</span>
+                      <button type="button"
+                        onClick={() => { setBgAnalyzing(true); doAnalyzeMatch(app, true).finally(() => setBgAnalyzing(false)) }}
+                        disabled={bgAnalyzing}
+                        className="text-[10px] text-ink-300 hover:text-terra-500 transition-colors disabled:opacity-40">
+                        🔄 重新分析
+                      </button>
                     </div>
-                    <div className="space-y-3">
-                      {(app.matchedSkills ?? []).length > 0 && (
-                        <div>
-                          <p className="text-xs text-sage-600 mb-1.5">✓ 已具備技能</p>
-                          <div className="flex flex-wrap gap-1">
-                            {app.matchedSkills!.map((s) => <Badge key={s} variant="success">{s}</Badge>)}
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent>
+                {!app.jdFullText ? (
+                  <div className="py-6 text-center">
+                    <p className="text-sm text-ink-400 mb-2">請先在 JD 分析 Tab 填寫職務說明，才能進行匹配分析</p>
+                    <button type="button" onClick={() => setDetailTab('jd')}
+                      className="text-sm text-terra-500 hover:text-terra-700 transition-colors">前往填寫 JD →</button>
+                  </div>
+                ) : app.matchAnalysis ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="flex flex-col items-center justify-center rounded-2xl bg-cream-100 p-5">
+                        <ProgressRing score={app.matchAnalysis.matchScore} size={90} strokeWidth={7} animate />
+                        <p className="text-xs text-ink-500 mt-1">匹配度</p>
+                        <p className={`text-xs mt-1 font-medium text-center leading-tight ${getMatchLabel(app.matchAnalysis.matchScore).color}`}>
+                          {getMatchLabel(app.matchAnalysis.matchScore).text}
+                        </p>
+                      </div>
+                      <div className="space-y-2.5 overflow-y-auto max-h-52">
+                        {app.matchAnalysis.matchedSkills.length > 0 && (
+                          <div>
+                            <p className="text-xs text-sage-600 mb-1">✓ 已具備</p>
+                            <div className="flex flex-wrap gap-1">
+                              {app.matchAnalysis.matchedSkills.map(m => (
+                                <span key={m.skill} className="rounded-full border border-sage-200 bg-sage-50 px-2 py-0.5 text-xs text-sage-700">{m.skill}</span>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                      {(app.missingSkills ?? []).length > 0 && (
-                        <div>
-                          <p className="text-xs text-red-400 mb-1.5">✗ 待補強技能</p>
-                          <div className="flex flex-wrap gap-1">
-                            {app.missingSkills!.map((s) => <Badge key={s} variant="danger">{s}</Badge>)}
+                        )}
+                        {app.matchAnalysis.partialSkills.length > 0 && (
+                          <div>
+                            <p className="text-xs text-honey-600 mb-1">🔶 部分具備</p>
+                            <div className="flex flex-wrap gap-1">
+                              {app.matchAnalysis.partialSkills.map(m => (
+                                <span key={m.skill} title={`差距：${m.gap}`}
+                                  className="cursor-help rounded-full border border-honey-200 bg-honey-50 px-2 py-0.5 text-xs text-honey-700">{m.skill}</span>
+                              ))}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+                        {app.matchAnalysis.missingSkills.length > 0 && (
+                          <div>
+                            <p className="text-xs text-red-400 mb-1">✗ 待補強</p>
+                            <div className="flex flex-wrap gap-1">
+                              {app.matchAnalysis.missingSkills.map(s => {
+                                const imp = app.matchAnalysis!.fullReport.improvements.find(i => i.skill === s)
+                                return (
+                                  <span key={s} title={imp ? `建議：${imp.suggestion}` : undefined}
+                                    className="cursor-help rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs text-red-600">{s}</span>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => setDetailTab('jd')}
+                      className="mt-4 flex items-center gap-1 text-sm text-terra-500 hover:text-terra-700 transition-colors">
+                      📋 查看完整技能落差報告 →
+                    </button>
+                  </>
+                ) : bgAnalyzing ? (
+                  <div className="grid grid-cols-2 gap-4 animate-pulse">
+                    <div className="flex flex-col items-center justify-center rounded-2xl bg-cream-100 p-5 gap-2">
+                      <div className="w-[90px] h-[90px] rounded-full bg-warm-200" />
+                      <div className="h-3 w-16 bg-warm-200 rounded" />
+                    </div>
+                    <div className="space-y-3 pt-3">
+                      {[70, 90, 55].map(w => <div key={w} className="h-3 bg-warm-200 rounded" style={{ width: `${w}%` }} />)}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            ) : app.jdFullText ? (
-              <button type="button" onClick={() => analyzeMatch(app)} disabled={analyzingMatch}
-                className="w-full rounded-xl border-2 border-dashed border-terra-300 py-4 text-sm text-terra-500 hover:bg-terra-50 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                {analyzingMatch ? <><Spinner /> 分析中...</> : '🤖 分析 AI 匹配分數'}
-              </button>
-            ) : null}
+                ) : (
+                  <div className="py-6 text-center">
+                    <p className="text-xs text-ink-400 mb-3">
+                      {profileSkills.length === 0
+                        ? '前往個人資料庫設定技能後，即可自動分析匹配度'
+                        : '點擊開始 AI 匹配分析'}
+                    </p>
+                    {profileSkills.length > 0 && (
+                      <button type="button"
+                        onClick={() => { setBgAnalyzing(true); doAnalyzeMatch(app, false).finally(() => setBgAnalyzing(false)) }}
+                        disabled={bgAnalyzing}
+                        className="rounded-xl border-2 border-dashed border-terra-300 px-6 py-3 text-sm text-terra-500 hover:bg-terra-50 transition-all disabled:opacity-50 flex items-center justify-center gap-2 mx-auto">
+                        <Spinner /> 🤖 分析 AI 匹配分數
+                      </button>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
-            {/* Timeline */}
+            {/* Important Dates */}
             <Card>
               <CardHeader><CardTitle>重要日期</CardTitle></CardHeader>
-              <CardContent className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <div className="h-2 w-2 rounded-full bg-terra-400 shrink-0" />
-                  <span className="text-xs text-ink-400">建立</span>
-                  <span className="text-sm text-ink-700 ml-auto">{fmtDate(app.createdAt)}</span>
+              <CardContent className="space-y-0 px-4 pb-4">
+                {DATE_STAGES.map(({ key, label, readonly: ro, warn }) => {
+                  const val = (app as unknown as Record<string, string | undefined>)[key]
+                  const days = warn ? deadlineDays(val) : null
+                  return (
+                    <div key={key} className="flex items-center gap-2 py-2 border-b border-warm-100 last:border-0">
+                      <span className="text-xs text-ink-400 w-20 shrink-0">{label}</span>
+                      {ro ? (
+                        <span className="flex-1 text-sm text-ink-700">{fmtDate(val)}</span>
+                      ) : (
+                        <input
+                          type="date"
+                          value={val ? val.slice(0, 10) : ''}
+                          onChange={e => updateSelectedApp({ [key]: e.target.value || undefined })}
+                          className="flex-1 rounded-lg border border-warm-200 bg-white px-2 py-1 text-sm text-ink-700 focus:border-terra-400 focus:outline-none"
+                        />
+                      )}
+                      {warn && days !== null && (
+                        <span className={`shrink-0 text-xs rounded-full px-2 py-0.5 ${
+                          days < 0 ? 'text-ink-400 bg-warm-100' :
+                          days <= 7 ? 'text-red-600 bg-red-50 border border-red-200' :
+                          days <= 14 ? 'text-honey-700 bg-honey-50 border border-honey-200' : ''
+                        }`}>
+                          {days < 0 ? '已截止' : days <= 7 ? `⚠️ 還有 ${days} 天` : days <= 14 ? `還有 ${days} 天` : ''}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+                {/* Timeline visualization */}
+                <div className="mt-4 pt-3 border-t border-warm-100">
+                  <p className="text-[10px] text-ink-300 mb-3 uppercase tracking-wide">求職時間軸</p>
+                  <div className="flex items-center gap-0 overflow-x-auto pb-1">
+                    {DATE_STAGES.filter(s => s.key !== 'createdAt').map(({ key, label }, i, arr) => {
+                      const val = (app as unknown as Record<string, string | undefined>)[key]
+                      const filled = !!val
+                      return (
+                        <div key={key} className="flex items-center shrink-0">
+                          <div className="flex flex-col items-center">
+                            <div className={`w-3 h-3 rounded-full border-2 transition-all ${
+                              filled ? 'bg-terra-400 border-terra-400' : 'bg-white border-warm-300'
+                            }`} />
+                            <p className={`text-[9px] mt-1 text-center whitespace-nowrap max-w-[36px] leading-tight ${
+                              filled ? 'text-ink-500' : 'text-ink-300'
+                            }`}>{label.slice(0, 4)}</p>
+                          </div>
+                          {i < arr.length - 1 && (
+                            <div className={`h-0.5 w-5 ${filled ? 'bg-terra-200' : 'bg-warm-200'}`} />
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-                {app.appliedAt && (
-                  <div className="flex items-center gap-3">
-                    <div className="h-2 w-2 rounded-full bg-honey-400 shrink-0" />
-                    <span className="text-xs text-ink-400">投遞</span>
-                    <span className="text-sm text-ink-700 ml-auto">{fmtDate(app.appliedAt)}</span>
-                  </div>
-                )}
-                {(app.interviewNotes ?? []).map((note, i) => (
-                  <div key={note.id} className="flex items-center gap-3">
-                    <div className="h-2 w-2 rounded-full bg-sage-400 shrink-0" />
-                    <span className="text-xs text-ink-400">
-                      面試 {i + 1}{note.interviewer ? ` · ${note.interviewer}` : ''}
-                    </span>
-                    <span className="text-sm text-ink-700 ml-auto">{fmtDate(note.date)}</span>
-                  </div>
-                ))}
-                {app.deadline && (
-                  <div className="flex items-center gap-3">
-                    <div className="h-2 w-2 rounded-full bg-red-300 shrink-0" />
-                    <span className="text-xs text-ink-400">截止</span>
-                    <span className="text-sm text-ink-700 ml-auto">{fmtDate(app.deadline)}</span>
-                  </div>
-                )}
               </CardContent>
             </Card>
           </div>
@@ -602,28 +823,151 @@ export default function ApplicationTrackerPage() {
         {detailTab === 'jd' && (
           <div className="space-y-4">
             {app.jdFullText ? (
-              <>
-                <Card>
-                  <CardHeader><CardTitle>JD 全文</CardTitle></CardHeader>
-                  <CardContent>
-                    <p className="whitespace-pre-line text-sm text-ink-600 leading-relaxed">{app.jdFullText}</p>
-                  </CardContent>
-                </Card>
-                <Link
-                  href={`/career-growth?jd=${encodeURIComponent(app.jdFullText.slice(0, 500))}`}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-terra-300 bg-terra-50 py-3 text-sm font-medium text-terra-600 hover:bg-terra-100 transition-colors">
-                  🔍 深入分析技能落差 →
-                </Link>
-              </>
+              <Card>
+                <CardHeader><CardTitle>JD 全文</CardTitle></CardHeader>
+                <CardContent>
+                  <textarea
+                    className="w-full rounded-xl border border-warm-100 bg-cream-50 px-3 py-2.5 text-sm text-ink-600 leading-relaxed resize-none focus:border-terra-400 focus:outline-none"
+                    rows={8}
+                    value={app.jdFullText}
+                    onChange={e => updateSelectedApp({ jdFullText: e.target.value })}
+                  />
+                </CardContent>
+              </Card>
             ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="flex flex-col items-center justify-center py-16 text-center">
                 <p className="text-3xl mb-3">📄</p>
                 <p className="text-sm text-ink-500">尚未儲存 JD 全文</p>
-                <button type="button"
-                  onClick={() => { setMainView('add'); setAddTab('paste') }}
-                  className="mt-3 text-sm text-terra-500 hover:text-terra-600">
-                  新增 JD →
-                </button>
+                <button type="button" onClick={() => { setMainView('add'); setAddTab('paste') }}
+                  className="mt-3 text-sm text-terra-500 hover:text-terra-600">新增 JD →</button>
+              </div>
+            )}
+
+            {/* Skill gap full report */}
+            {app.jdFullText && (
+              <div id="skill-gap-report" className="space-y-4">
+                {app.matchAnalysis ? (
+                  <>
+                    <p className="text-xs text-ink-300">以下報告與概覽匹配分析共用同一份數據</p>
+
+                    {/* A: Summary stats */}
+                    <Card>
+                      <CardHeader><CardTitle>技能比對總覽</CardTitle></CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-3 gap-3">
+                          <div className="rounded-xl border border-sage-200 bg-sage-50 p-3 text-center">
+                            <p className="text-2xl font-bold text-sage-600">{app.matchAnalysis.matchedSkills.length}</p>
+                            <p className="text-xs text-sage-600 mt-1">✅ 已具備</p>
+                          </div>
+                          <div className="rounded-xl border border-honey-200 bg-honey-50 p-3 text-center">
+                            <p className="text-2xl font-bold text-honey-600">{app.matchAnalysis.partialSkills.length}</p>
+                            <p className="text-xs text-honey-600 mt-1">🔶 部分具備</p>
+                          </div>
+                          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-center">
+                            <p className="text-2xl font-bold text-red-500">{app.matchAnalysis.missingSkills.length}</p>
+                            <p className="text-xs text-red-500 mt-1">❌ 待補強</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* B: JD skill list */}
+                    {app.matchAnalysis.jdRequiredSkills.length > 0 && (
+                      <Card>
+                        <CardHeader><CardTitle>JD 要求技能完整清單</CardTitle></CardHeader>
+                        <CardContent>
+                          <div className="space-y-0">
+                            {app.matchAnalysis.jdRequiredSkills.map(skill => {
+                              const isMatched = app.matchAnalysis!.matchedSkills.some(m => m.skill === skill)
+                              const isPartial = app.matchAnalysis!.partialSkills.some(m => m.skill === skill)
+                              return (
+                                <div key={skill} className="flex items-center gap-2.5 py-2 border-b border-warm-100 last:border-0">
+                                  <span>{isMatched ? '✅' : isPartial ? '🔶' : '❌'}</span>
+                                  <span className="flex-1 text-sm text-ink-700">{skill}</span>
+                                  {isPartial && (
+                                    <span className="text-xs text-honey-600 bg-honey-50 border border-honey-200 rounded-full px-2 py-0.5">部分具備</span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* C: Improvement cards */}
+                    {app.matchAnalysis.fullReport.improvements.length > 0 && (
+                      <Card>
+                        <CardHeader><CardTitle>待補強技能詳細建議</CardTitle></CardHeader>
+                        <CardContent className="space-y-3">
+                          {app.matchAnalysis.fullReport.improvements.map(imp => (
+                            <div key={imp.skill} className="rounded-xl border border-warm-200 bg-white p-4">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="text-sm font-semibold text-ink-800">{imp.skill}</span>
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${
+                                  imp.priority === 'high' ? 'text-red-600 bg-red-50 border-red-200' :
+                                  imp.priority === 'medium' ? 'text-honey-700 bg-honey-50 border-honey-200' :
+                                  'text-sage-600 bg-sage-50 border-sage-200'
+                                }`}>
+                                  {imp.priority === 'high' ? '高優先' : imp.priority === 'medium' ? '中優先' : '低優先'}
+                                </span>
+                              </div>
+                              <p className="text-xs text-ink-600 mb-2.5">{imp.suggestion}</p>
+                              {imp.resources.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                  {imp.resources.map((r, ri) => (
+                                    <span key={ri} className="text-[11px] text-terra-600 border border-terra-200 bg-terra-50 rounded-full px-2 py-0.5">{r}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* D: Overall recommendations */}
+                    {(app.matchAnalysis.fullReport.strengths.length > 0 || app.matchAnalysis.fullReport.summary) && (
+                      <Card>
+                        <CardHeader><CardTitle>整體建議</CardTitle></CardHeader>
+                        <CardContent className="space-y-3">
+                          {app.matchAnalysis.fullReport.summary && (
+                            <p className="text-sm text-ink-600 leading-relaxed">{app.matchAnalysis.fullReport.summary}</p>
+                          )}
+                          {app.matchAnalysis.fullReport.strengths.length > 0 && (
+                            <div>
+                              <p className="text-xs font-semibold text-ink-500 mb-2">✨ 優勢</p>
+                              <ul className="space-y-1">
+                                {app.matchAnalysis.fullReport.strengths.map((s, i) => (
+                                  <li key={i} className="flex items-start gap-2 text-sm text-ink-600">
+                                    <span className="text-sage-500 shrink-0 mt-0.5">•</span>{s}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          <div className="rounded-xl border border-terra-200 bg-terra-50 p-3">
+                            <p className="text-xs font-semibold text-terra-700 mb-1">投遞建議</p>
+                            <p className={`text-sm ${getMatchLabel(app.matchAnalysis.matchScore).color}`}>
+                              {getMatchLabel(app.matchAnalysis.matchScore).text}
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </>
+                ) : bgAnalyzing ? (
+                  <Card>
+                    <CardHeader><CardTitle>技能落差報告</CardTitle></CardHeader>
+                    <CardContent className="space-y-3 animate-pulse">
+                      <div className="grid grid-cols-3 gap-3">
+                        {[1, 2, 3].map(i => <div key={i} className="h-16 rounded-xl bg-warm-200" />)}
+                      </div>
+                      {[75, 50, 65].map(w => <div key={w} className="h-3 bg-warm-200 rounded" style={{ width: `${w}%` }} />)}
+                      <p className="text-xs text-ink-400 text-center pt-2">正在分析中…</p>
+                    </CardContent>
+                  </Card>
+                ) : null}
               </div>
             )}
           </div>
