@@ -1081,7 +1081,7 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-4 md:p-8 space-y-5">
+    <div className="p-4 pt-16 md:pt-8 md:p-8 space-y-5">
       <PageTooltip pageKey="interviews" />
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-ink-900">⬟ Interview Arena</h1>

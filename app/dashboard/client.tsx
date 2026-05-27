@@ -357,7 +357,8 @@ export function DashboardClient({ name }: { name: string }) {
         />
       )}
 
-      <div className="min-h-screen space-y-5 p-5 lg:p-8" style={{ background: '#F7F3EE' }}>
+      {/* Extra top padding on mobile for hamburger button */}
+      <div className="min-h-screen space-y-5 p-4 pt-16 md:pt-5 lg:p-8" style={{ background: '#F7F3EE' }}>
 
         {/* ── CELEBRATION BANNER ─────────────────────────────────────────────── */}
         {celebVisible && (
@@ -381,41 +382,47 @@ export function DashboardClient({ name }: { name: string }) {
         )}
 
         {/* ── HERO ───────────────────────────────────────────────────────────── */}
-        <Pane className="!p-6">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-xs font-medium" style={{ color: '#C4B0A2' }}>{dateLabel}</p>
-              <h1 className="mt-1 text-[1.6rem] font-bold leading-tight tracking-tight" style={{ color: '#4B4038' }}>
-                {greeting}，{localName ?? name}
-              </h1>
-              <p className="mt-1 text-sm" style={{ color: '#9E8E84' }}>
-                {todayMood
-                  ? `今天心情：${MOODS.find(m => m.key === todayMood)?.emoji}  ${MOODS.find(m => m.key === todayMood)?.label}`
-                  : '今天求職準備進行得怎麼樣？'}
-              </p>
-            </div>
+        <Pane className="!p-5 md:!p-6">
+          {/* Greeting */}
+          <p className="text-xs font-medium" style={{ color: '#C4B0A2' }}>{dateLabel}</p>
+          <h1 className="mt-1 text-2xl md:text-[1.6rem] font-bold leading-tight tracking-tight" style={{ color: '#4B4038' }}>
+            {greeting}，{localName ?? name}
+          </h1>
+          <p className="mt-1 text-sm" style={{ color: '#9E8E84' }}>
+            {todayMood
+              ? `今天心情：${MOODS.find(m => m.key === todayMood)?.emoji}  ${MOODS.find(m => m.key === todayMood)?.label}`
+              : '今天求職準備進行得怎麼樣？'}
+          </p>
 
-            <div className="flex flex-col items-end gap-2">
-              {/* Guide button */}
-              <button
-                onClick={openGuide}
-                className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-opacity hover:opacity-75"
-                style={{ background: '#F3ECE4', border: '1px solid #E6DDD2', color: '#9E8E84' }}
-              >
-                📖 查看使用指引
-              </button>
+          {/* Quick actions — 2×2 on mobile, row on desktop */}
+          <div className="mt-4 grid grid-cols-2 gap-2 md:flex md:flex-wrap md:gap-2">
+            {QUICK_LINKS.map((q) => (
+              <Link key={q.href} href={q.href}
+                className="flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-xs font-medium transition-opacity hover:opacity-75 md:justify-start"
+                style={{ background: q.bg, border: `1px solid ${q.border}`, color: q.color }}>
+                <span>{q.symbol}</span>
+                <span className="md:inline">{q.label === '技能落差' ? <><span className="md:hidden">技能分析</span><span className="hidden md:inline">技能落差</span></> : q.label}</span>
+              </Link>
+            ))}
+          </div>
 
-              {/* Quick actions */}
-              <div className="flex gap-2 flex-wrap justify-end">
-                {QUICK_LINKS.map((q) => (
-                  <Link key={q.href} href={q.href}
-                    className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-opacity hover:opacity-75"
-                    style={{ background: q.bg, border: `1px solid ${q.border}`, color: q.color }}>
-                    <span>{q.symbol}</span>{q.label}
-                  </Link>
-                ))}
-              </div>
-            </div>
+          {/* Guide button — below on mobile */}
+          <button
+            onClick={openGuide}
+            className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-opacity hover:opacity-75 md:hidden"
+            style={{ background: '#F3ECE4', border: '1px solid #E6DDD2', color: '#9E8E84' }}
+          >
+            📖 查看使用指引
+          </button>
+          {/* Guide button — inline on desktop */}
+          <div className="hidden md:flex justify-end mt-2">
+            <button
+              onClick={openGuide}
+              className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-opacity hover:opacity-75"
+              style={{ background: '#F3ECE4', border: '1px solid #E6DDD2', color: '#9E8E84' }}
+            >
+              📖 查看使用指引
+            </button>
           </div>
 
           {/* Progress hint */}
@@ -436,7 +443,7 @@ export function DashboardClient({ name }: { name: string }) {
         </Pane>
 
         {/* ── CAREER SNAPSHOT  +  TODAY PROGRESS ────────────────────────────── */}
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5 xl:grid-cols-5">
 
           {/* Career Snapshot — 3/5 */}
           <Pane className="lg:col-span-3">
@@ -544,7 +551,7 @@ export function DashboardClient({ name }: { name: string }) {
           ].map((s) => (
             <div key={s.label} className="rounded-2xl px-4 py-3.5"
               style={{ background: '#FFFDFC', border: '1px solid #E6DDD2', boxShadow: '0 1px 3px rgba(100,70,40,0.05)' }}>
-              <p className="text-[1.6rem] font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
+              <p className="text-2xl md:text-[1.6rem] font-bold leading-none" style={{ color: s.color }}>{s.value}</p>
               <p className="text-xs font-medium mt-1.5" style={{ color: '#6B5E56' }}>{s.label}</p>
               <p className="text-[10px] mt-0.5" style={{ color: '#C4B8B2' }}>{s.sub}</p>
             </div>
@@ -552,7 +559,7 @@ export function DashboardClient({ name }: { name: string }) {
         </div>
 
         {/* ── PIPELINE  +  MOOD ──────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-1 lg:grid-cols-3">
 
           {/* Job Pipeline — 2/3 */}
           <Pane className="lg:col-span-2">
@@ -606,12 +613,13 @@ export function DashboardClient({ name }: { name: string }) {
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap gap-1.5 mb-5">
+            {/* Mood options — horizontal scroll on mobile */}
+            <div className="flex gap-1.5 mb-5 overflow-x-auto pb-1 -mx-1 px-1 md:flex-wrap">
               {MOODS.map((m) => {
                 const active = todayMood === m.key
                 return (
                   <button key={m.key} type="button" onClick={() => recordMood(m.key)}
-                    className="flex items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-all"
+                    className="flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs transition-all"
                     style={{
                       border: `1px solid ${active ? '#C97941' : '#E6DDD2'}`,
                       background: active ? '#FBF2EA' : '#FAF7F4',

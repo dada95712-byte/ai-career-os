@@ -525,7 +525,7 @@ export default function CareerIntelligencePage() {
   // ── JSX ──────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-4 md:p-8 space-y-5">
+    <div className="p-4 pt-16 md:pt-8 md:p-8 space-y-5">
       <PageTooltip pageKey="analytics" />
       <div>
         <h1 className="text-xl md:text-2xl font-bold text-ink-900">◉ Analytics</h1>
@@ -562,7 +562,7 @@ export default function CareerIntelligencePage() {
             <Card className="border-terra-100">
               <CardHeader><CardTitle>{cachedRecord.salaryData.role} · {cachedRecord.salaryData.experience}</CardTitle></CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {[
                     { label: 'P25 低標', val: cachedRecord.salaryData.p25,    dim: true  },
                     { label: '中位數',   val: cachedRecord.salaryData.median, dim: false },
@@ -570,7 +570,7 @@ export default function CareerIntelligencePage() {
                   ].map((tier) => (
                     <div key={tier.label} className={`rounded-2xl p-4 text-center ${tier.dim ? 'bg-cream-100' : 'bg-terra-50 border border-terra-400/30'}`}>
                       <p className={`text-xs mb-1 ${tier.dim ? 'text-ink-500' : 'text-terra-500 font-medium'}`}>{tier.label}</p>
-                      <p className={`text-lg font-bold ${tier.dim ? 'text-ink-600' : 'text-terra-600'}`}>{fmt(tier.val)}</p>
+                      <p className={`font-bold ${tier.dim ? 'text-lg text-ink-600' : 'text-2xl text-terra-600'}`}>{fmt(tier.val)}</p>
                       <p className="text-xs text-ink-400 mt-0.5">NTD / 月</p>
                     </div>
                   ))}

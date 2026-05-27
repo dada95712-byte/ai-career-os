@@ -16,6 +16,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const session = await getServerSession(authOptions)
   return (
     <html lang="zh-TW" className={`${geist.variable} h-full antialiased`}>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+      </head>
       <body className="min-h-full bg-cream-100 font-sans text-ink-900">
         <Providers session={session}>{children}</Providers>
       </body>

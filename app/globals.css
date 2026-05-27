@@ -165,3 +165,119 @@ html, body {
   outline: none;
   box-shadow: 0 0 0 3px rgba(193, 92, 59, 0.18);
 }
+
+/* ════════════════════════════════════════════════════════════
+   RWD — MOBILE BASE (≤ 768px)
+   ════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* Prevent horizontal scroll */
+  body { overflow-x: hidden; }
+
+  /* Minimum tap target 44px (Apple HIG) */
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Prevent iOS auto-zoom on input focus */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
+  /* Compact card padding */
+  .card-spacing { padding: 16px !important; }
+
+  /* Full-width button utility */
+  .btn-mobile-full { width: 100% !important; }
+}
+
+/* ── Safe-area utilities (iPhone notch / rounded corners) ── */
+.pb-safe  { padding-bottom: env(safe-area-inset-bottom); }
+.pt-safe  { padding-top: env(safe-area-inset-top); }
+.pl-safe  { padding-left: env(safe-area-inset-left); }
+.pr-safe  { padding-right: env(safe-area-inset-right); }
+
+/* ── Toast positioning ─────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  z-index: 9999;
+  /* desktop: top-right */
+  top: 24px;
+  right: 24px;
+  max-width: 400px;
+}
+@media (max-width: 768px) {
+  .toast-container {
+    top: auto;
+    right: 16px;
+    left: 16px;
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    max-width: calc(100vw - 32px);
+  }
+}
+
+/* ── Bottom Sheet (mobile modal variant) ───────────────────── */
+.bottom-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 16px 16px 0 0;
+  background: white;
+  z-index: 100;
+  transform: translateY(100%);
+  transition: transform 0.3s ease;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.bottom-sheet.open { transform: translateY(0); }
+.bottom-sheet-handle {
+  width: 32px; height: 4px;
+  background: #D4CCC0;
+  border-radius: 9999px;
+  margin: 12px auto 0;
+}
+
+/* ── Mobile full-screen modal ──────────────────────────────── */
+@media (max-width: 768px) {
+  .modal-mobile-fullscreen {
+    position: fixed !important;
+    inset: 0 !important;
+    max-width: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+    overflow-y: auto;
+  }
+}
+
+/* ── Sidebar drawer (mobile) ───────────────────────────────── */
+.sidebar-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 200;
+  width: 280px;
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 300ms ease;
+}
+.sidebar-drawer.open { transform: translateX(0); }
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 199;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease;
+}
+.sidebar-overlay.open { opacity: 1; pointer-events: auto; }
+
+/* ── Reduced motion ────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

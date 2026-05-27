@@ -62,7 +62,8 @@ export default function CareerCoachPage() {
   }
 
   return (
-    <div className="p-4 md:p-8 h-[calc(100vh-0px)] flex flex-col gap-4 max-w-3xl mx-auto">
+    <div className="p-4 pt-16 md:pt-8 md:p-8 h-[calc(100vh-64px)] md:h-screen flex flex-col gap-4 max-w-3xl mx-auto"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
@@ -77,14 +78,14 @@ export default function CareerCoachPage() {
         </button>
       </div>
 
-      {/* Quick questions */}
-      <div className="flex flex-wrap gap-2 shrink-0">
+      {/* Quick questions — horizontal scroll on mobile */}
+      <div className="flex gap-2 shrink-0 overflow-x-auto pb-1 -mx-1 px-1 md:flex-wrap">
         {QUICK_Q.map((q) => (
           <button
             key={q}
             onClick={() => sendMessage(q)}
             disabled={loading}
-            className="rounded-full border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-400 transition-all hover:border-terra-400/50 hover:bg-terra-50 hover:text-terra-500 disabled:opacity-40"
+            className="shrink-0 rounded-full border border-warm-300 bg-white px-3 py-1.5 text-xs text-ink-400 transition-all hover:border-terra-400/50 hover:bg-terra-50 hover:text-terra-500 disabled:opacity-40"
           >
             {q}
           </button>
@@ -102,11 +103,12 @@ export default function CareerCoachPage() {
                 </div>
               )}
               <div
-                className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-line ${
+                className={`rounded-2xl px-4 py-3 leading-relaxed whitespace-pre-line ${
                   m.role === 'user'
-                    ? 'bg-terra-500 text-white rounded-tr-sm'
-                    : 'bg-cream-200 text-ink-700 rounded-tl-sm'
+                    ? 'bg-terra-500 text-white rounded-tr-sm max-w-[80%]'
+                    : 'bg-cream-200 text-ink-700 rounded-tl-sm max-w-[85%]'
                 }`}
+                style={{ fontSize: '15px' }}
               >
                 {m.content}
               </div>
@@ -134,12 +136,14 @@ export default function CareerCoachPage() {
           <div ref={endRef} />
         </div>
 
-        {/* Input bar */}
-        <div className="border-t border-warm-200 p-3 shrink-0">
+        {/* Input bar — sticky with safe-area */}
+        <div className="border-t border-warm-200 p-3 shrink-0"
+          style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))' }}>
           <div className="flex gap-2">
             <input
               ref={inputRef}
-              className="flex-1 rounded-xl border border-warm-300 bg-cream-100 px-4 py-2.5 text-sm text-ink-900 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
+              className="flex-1 rounded-xl border border-warm-300 bg-cream-100 px-4 py-2.5 text-ink-900 placeholder:text-ink-400 focus:border-terra-400 focus:outline-none"
+              style={{ fontSize: '16px' }}
               placeholder="輸入你的職涯問題... (Enter 送出)"
               value={input}
               onChange={(e) => setInput(e.target.value)}

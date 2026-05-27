@@ -636,7 +636,7 @@ export default function ProfileLibraryPage() {
       const majorSelectVal = knownMajor ? (md.major as string) : ((md.major as string) ? '其他' : '')
 
       return (
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-3 pr-1">
           <div>
             <label className={labelCls}>學校名稱 *</label>
             <select className={inputCls} value={schoolSelectVal}
@@ -657,7 +657,7 @@ export default function ProfileLibraryPage() {
             <input className={inputCls} placeholder="University Name (English)"
               value={(md.schoolNameEn as string) ?? ''} onChange={e => set('schoolNameEn', e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>學位</label>
               <select className={inputCls} value={(md.degree as string) ?? ''} onChange={e => set('degree', e.target.value)}>
@@ -683,7 +683,7 @@ export default function ProfileLibraryPage() {
                 value={(md.major as string) ?? ''} onChange={e => set('major', e.target.value)} />
             )}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <DateSelect label="開始" value={(md.startDate as string) ?? ''} onChange={v => set('startDate', v)} />
             <DateSelect label="結束" value={(md.endDate as string) ?? ''} onChange={v => set('endDate', v)} disabled={!!(md.isCurrent)} />
           </div>
@@ -701,7 +701,7 @@ export default function ProfileLibraryPage() {
 
     if (modalSection === 'experience' || modalSection === 'internship') {
       return (
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-3 pr-1">
           <div>
             <label className={labelCls}>公司名稱（中文） *</label>
             <input className={inputCls} placeholder="公司名稱" value={(md.company as string) ?? ''} onChange={e => set('company', e.target.value)} />
@@ -710,7 +710,7 @@ export default function ProfileLibraryPage() {
             <label className={labelCls}>公司英文名稱</label>
             <input className={inputCls} placeholder="Company Name (English)" value={(md.companyEn as string) ?? ''} onChange={e => set('companyEn', e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>職稱</label>
               <input className={inputCls} placeholder="職稱（中文）" value={(md.title as string) ?? ''} onChange={e => set('title', e.target.value)} />
@@ -724,7 +724,7 @@ export default function ProfileLibraryPage() {
             <label className={labelCls}>地點</label>
             <input className={inputCls} placeholder="工作地點" value={(md.location as string) ?? ''} onChange={e => set('location', e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <DateSelect label="開始" value={(md.startDate as string) ?? ''} onChange={v => set('startDate', v)} />
             <DateSelect label="結束" value={(md.endDate as string) ?? ''} onChange={v => set('endDate', v)} disabled={!!(md.isCurrent)} />
           </div>
@@ -742,7 +742,7 @@ export default function ProfileLibraryPage() {
 
     if (modalSection === 'project') {
       return (
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-3 pr-1">
           <div>
             <label className={labelCls}>專案名稱（中文） *</label>
             <input className={inputCls} placeholder="專案名稱" value={(md.projectName as string) ?? ''} onChange={e => set('projectName', e.target.value)} />
@@ -751,7 +751,7 @@ export default function ProfileLibraryPage() {
             <label className={labelCls}>英文專案名稱</label>
             <input className={inputCls} placeholder="Project Name (English)" value={(md.projectNameEn as string) ?? ''} onChange={e => set('projectNameEn', e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>角色/職責</label>
               <input className={inputCls} placeholder="角色（中文）" value={(md.role as string) ?? ''} onChange={e => set('role', e.target.value)} />
@@ -765,7 +765,7 @@ export default function ProfileLibraryPage() {
             <label className={labelCls}>專案連結</label>
             <input className={inputCls} placeholder="https://..." value={(md.url as string) ?? ''} onChange={e => set('url', e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <DateSelect label="開始" value={(md.startDate as string) ?? ''} onChange={v => set('startDate', v)} />
             <DateSelect label="結束" value={(md.endDate as string) ?? ''} onChange={v => set('endDate', v)} />
           </div>
@@ -779,7 +779,7 @@ export default function ProfileLibraryPage() {
 
     if (modalSection === 'certificate') {
       return (
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-3 pr-1">
           <div>
             <label className={labelCls}>證照名稱 *</label>
             <input className={inputCls} value={(md.name as string) ?? ''} onChange={e => set('name', e.target.value)} />
@@ -802,7 +802,7 @@ export default function ProfileLibraryPage() {
 
     if (modalSection === 'activity') {
       return (
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-3 pr-1">
           <div>
             <label className={labelCls}>社團/組織 *</label>
             <input className={inputCls} value={(md.organization as string) ?? ''} onChange={e => set('organization', e.target.value)} />
@@ -811,7 +811,7 @@ export default function ProfileLibraryPage() {
             <label className={labelCls}>職位/角色</label>
             <input className={inputCls} value={(md.role as string) ?? ''} onChange={e => set('role', e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <DateSelect label="開始" value={(md.startDate as string) ?? ''} onChange={v => set('startDate', v)} />
             <DateSelect label="結束" value={(md.endDate as string) ?? ''} onChange={v => set('endDate', v)} />
           </div>
@@ -825,12 +825,12 @@ export default function ProfileLibraryPage() {
 
     if (modalSection === 'conference') {
       return (
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+        <div className="space-y-3 pr-1">
           <div>
             <label className={labelCls}>會議名稱 *</label>
             <input className={inputCls} value={(md.name as string) ?? ''} onChange={e => set('name', e.target.value)} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>參與角色</label>
               <select className={inputCls} value={(md.role as string) ?? 'attendee'} onChange={e => set('role', e.target.value)}>
@@ -958,7 +958,7 @@ export default function ProfileLibraryPage() {
       </aside>
 
       {/* Main */}
-      <div className="flex-1 min-w-0 px-4 md:px-8 py-6 space-y-5">
+      <div className="flex-1 min-w-0 px-4 md:px-8 pt-16 pb-28 md:py-6 space-y-5">
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
@@ -1321,22 +1321,32 @@ export default function ProfileLibraryPage() {
         <div className="h-8" />
       </div>
 
+      {/* Mobile sticky save */}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-warm-200 bg-white px-4 pt-3 pb-safe">
+        <button onClick={saveAll}
+          className="w-full rounded-xl bg-terra-500 py-3 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+          {saveStatus === 'saving' ? '儲存中...' : saveStatus === 'saved' ? '✓ 已儲存' : '儲存所有變更'}
+        </button>
+      </div>
+
       {/* ════ MODAL ════ */}
       {modalSection && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
           style={{ background: 'rgba(75,64,56,0.4)' }}
           onClick={() => setModalSection(null)}>
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl"
+          <div className="w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl bg-white p-5 shadow-xl flex flex-col max-h-[90dvh]"
             onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between mb-5 shrink-0">
               <h3 className="text-base font-semibold text-ink-800">
                 {editingId ? '編輯' : '新增'}{MODAL_TITLES[modalSection]}
               </h3>
               <button type="button" onClick={() => setModalSection(null)}
                 className="rounded-lg border border-warm-200 bg-cream-50 px-2.5 py-1 text-sm text-ink-400 hover:text-ink-600 transition-colors">✕</button>
             </div>
-            {renderModalContent()}
-            <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-warm-100">
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {renderModalContent()}
+            </div>
+            <div className="flex justify-end gap-2 mt-5 pt-4 border-t border-warm-100 shrink-0 pb-safe">
               <button type="button" onClick={() => setModalSection(null)}
                 className="rounded-xl border border-warm-200 bg-cream-100 px-4 py-2 text-sm text-ink-600 hover:bg-cream-200 transition-colors">取消</button>
               <button type="button" onClick={saveModal}

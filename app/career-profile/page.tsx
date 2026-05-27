@@ -473,7 +473,7 @@ export default function CareerProfilePage() {
   // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="p-4 md:p-8 space-y-5">
+    <div className="p-4 pt-16 md:pt-8 md:p-8 space-y-5">
       <PageTooltip pageKey="resume_lab" />
       {/* Header */}
       <div className="flex items-start justify-between">

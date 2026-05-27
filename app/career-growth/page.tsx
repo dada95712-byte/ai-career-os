@@ -50,6 +50,9 @@ export default function SkillMapPage() {
   const [totalJournals, setTotalJournals] = useState(0)
   const [missingTop10, setMissingTop10] = useState<{ skill: string; count: number }[]>([])
   const [jobsWithAnalysis, setJobsWithAnalysis] = useState(0)
+  const [catCollapsed, setCatCollapsed] = useState<Partial<Record<SkillCategory, boolean>>>(
+    Object.fromEntries(SKILL_CATEGORIES.slice(3).map((c) => [c, true]))
+  )
 
   useEffect(() => {
     // Load personal skills
@@ -107,7 +110,7 @@ export default function SkillMapPage() {
   const maxMissing = missingTop10[0]?.count ?? 1
 
   return (
-    <div className="p-4 md:p-8 space-y-6">
+    <div className="p-4 pt-16 md:pt-8 md:p-8 space-y-6">
       <PageTooltip pageKey="skill_map" />
 
       {/* ── Header ── */}
@@ -146,23 +149,31 @@ export default function SkillMapPage() {
             {SKILL_CATEGORIES.map((cat) => {
               const catSkills = grouped[cat]
               if (!catSkills.length) return null
+              const isCollapsed = catCollapsed[cat] ?? false
               return (
                 <div key={cat}>
-                  <div className="flex items-center gap-2 mb-2">
+                  <button
+                    type="button"
+                    onClick={() => setCatCollapsed((prev) => ({ ...prev, [cat]: !prev[cat] }))}
+                    className="flex items-center gap-2 mb-2 w-full text-left"
+                  >
                     <span className={`h-2 w-2 rounded-full shrink-0 ${CAT_DOT[cat]}`} />
                     <span className="text-xs font-semibold text-ink-600">{cat}</span>
                     <span className="text-xs text-ink-400">({catSkills.length})</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {catSkills.map((s) => (
-                      <span
-                        key={s.name}
-                        className={`rounded-full border px-3 py-1 text-xs ${CAT_BG[cat]}`}
-                      >
-                        {s.name}
-                      </span>
-                    ))}
-                  </div>
+                    <span className="ml-auto text-xs text-ink-300">{isCollapsed ? '▸' : '▾'}</span>
+                  </button>
+                  {!isCollapsed && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {catSkills.map((s) => (
+                        <span
+                          key={s.name}
+                          className={`rounded-full border px-3 py-1 text-xs ${CAT_BG[cat]}`}
+                        >
+                          {s.name}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             })}
@@ -205,12 +216,12 @@ export default function SkillMapPage() {
                 return (
                   <div key={jSkill.name} className="px-5 py-3 flex items-center gap-3">
                     <span className={`h-2 w-2 rounded-full shrink-0 ${CAT_DOT[jSkill.category] ?? 'bg-warm-400'}`} />
-                    <span className="text-sm font-medium text-ink-800 w-32 shrink-0 truncate">{jSkill.name}</span>
-                    <div className="flex-1 h-1.5 rounded-full bg-warm-100">
+                    <span className="text-sm font-medium text-ink-800 w-28 shrink-0 truncate">{jSkill.name}</span>
+                    <div className="hidden sm:block flex-1 h-1.5 rounded-full bg-warm-100">
                       <div className="h-full rounded-full bg-terra-400 transition-all" style={{ width: `${pct}%` }} />
                     </div>
-                    <span className="text-xs text-ink-400 shrink-0 w-12 text-right">{jSkill.journalFrequency}/{totalJournals} 篇</span>
-                    <span className="text-[10px] text-ink-300 shrink-0 w-16 text-right">{jSkill.category}</span>
+                    <span className="text-xs text-ink-400 shrink-0 ml-auto sm:ml-0 sm:w-14 text-right">{jSkill.journalFrequency}/{totalJournals}</span>
+                    <span className="hidden sm:inline text-[10px] text-ink-300 shrink-0 w-16 text-right">{jSkill.category}</span>
                   </div>
                 )
               })}
@@ -242,17 +253,18 @@ export default function SkillMapPage() {
             {missingTop10.map(({ skill, count }, i) => {
               const pct = Math.round((count / maxMissing) * 100)
               return (
-                <div key={skill} className="flex items-center gap-3">
+                <div key={skill} className="flex items-center gap-3 rounded-xl sm:rounded-none border sm:border-none border-warm-200 px-3 sm:px-0 py-2.5 sm:py-0 bg-white sm:bg-transparent">
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-terra-50 text-[10px] font-bold text-terra-500">
                     {i + 1}
                   </div>
-                  <span className="text-sm font-medium text-ink-800 w-32 shrink-0 truncate">{skill}</span>
-                  <div className="flex-1 h-2 rounded-full bg-warm-100">
+                  <span className="text-sm font-medium text-ink-800 flex-1 sm:w-32 sm:flex-none truncate">{skill}</span>
+                  <div className="hidden sm:block flex-1 h-2 rounded-full bg-warm-100">
                     <div className="h-full rounded-full bg-red-400 transition-all" style={{ width: `${pct}%` }} />
                   </div>
                   <span className="text-xs text-red-500 shrink-0 whitespace-nowrap">
-                    {count} 份職缺
+                    {count} 份
                   </span>
+                  <Link href="/work-journal" className="sm:hidden flex h-7 w-7 items-center justify-center rounded-lg bg-terra-50 text-terra-500 text-sm font-bold shrink-0">+</Link>
                 </div>
               )
             })}

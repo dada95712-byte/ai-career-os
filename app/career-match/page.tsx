@@ -999,7 +999,7 @@ export default function ApplicationTrackerPage() {
   if (mainView === 'detail' && selectedApp) {
     const app = selectedApp
     return (
-      <div className="p-4 md:p-8 space-y-5">
+      <div className="p-4 pt-16 md:pt-8 md:p-8 space-y-5">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -1023,16 +1023,17 @@ export default function ApplicationTrackerPage() {
         </div>
 
         {/* Detail tabs */}
-        <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-fit shadow-[var(--shadow-warm-xs)]">
+        <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-full sm:w-fit shadow-[var(--shadow-warm-xs)] overflow-x-auto">
           {([
-            { key: 'overview',   label: '① 概覽' },
-            { key: 'jd',        label: '② JD 分析' },
-            { key: 'interview', label: '③ 面試準備' },
-            { key: 'notes',     label: '④ 備注' },
-          ] as const).map(({ key, label }) => (
+            { key: 'overview',   label: '① 概覽', mobileLabel: '① 概覽' },
+            { key: 'jd',        label: '② JD 分析', mobileLabel: '② JD' },
+            { key: 'interview', label: '③ 面試準備', mobileLabel: '③ 面試' },
+            { key: 'notes',     label: '④ 備注', mobileLabel: '④ 備注' },
+          ] as const).map(({ key, label, mobileLabel }) => (
             <button key={key} type="button" onClick={() => setDetailTab(key)}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-150 ${detailTab === key ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'}`}>
-              {label}
+              className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-150 ${detailTab === key ? 'bg-cream-200 text-ink-900 shadow-sm' : 'text-ink-500 hover:text-ink-600'}`}>
+              <span className="sm:hidden">{mobileLabel}</span>
+              <span className="hidden sm:inline">{label}</span>
             </button>
           ))}
         </div>
@@ -1610,7 +1611,7 @@ export default function ApplicationTrackerPage() {
   // MAIN VIEW
   // ─────────────────────────────────────────────────────────────────────────
   return (
-    <div className="p-4 md:p-8 space-y-5">
+    <div className="p-4 pt-16 md:pt-8 md:p-8 space-y-5">
       <PageTooltip pageKey="application_tracker" />
       {/* Header */}
       <div>
@@ -1700,13 +1701,16 @@ export default function ApplicationTrackerPage() {
 
       {/* ── KANBAN VIEW ── */}
       {viewMode === 'kanban' && (
+        <>
+          {/* Scroll hint (mobile only) */}
+          <p className="text-xs text-ink-400 text-center md:hidden -mb-2">← 左右滑動查看所有欄位 →</p>
         <div className="overflow-x-auto pb-4 -mx-4 px-4">
-          <div className="flex gap-3" style={{ minWidth: `${KANBAN_COLS.length * 216}px` }}>
+          <div className="flex gap-3" style={{ minWidth: `${KANBAN_COLS.length * 288}px` }}>
             {KANBAN_COLS.map((col) => {
               const colApps = filteredApps.filter((a) => a.status === col.status)
               return (
                 <div key={col.status}
-                  className={`w-52 shrink-0 rounded-2xl p-3 ${col.colBg}`}
+                  className={`w-[280px] shrink-0 rounded-2xl p-3 ${col.colBg}`}
                   onDragOver={onDragOver}
                   onDrop={(e) => onDrop(e, col.status)}>
                   <div className="flex items-center gap-2 mb-3">
@@ -1758,6 +1762,7 @@ export default function ApplicationTrackerPage() {
             })}
           </div>
         </div>
+        </>
       )}
 
       {/* ── LIST VIEW ── */}

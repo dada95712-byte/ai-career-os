@@ -199,7 +199,7 @@ function OnboardingLink({ collapsed }: { collapsed: boolean }) {
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 
-export function Sidebar() {
+export function Sidebar({ mobileDrawer = false }: { mobileDrawer?: boolean }) {
   const pathname = usePathname()
   const { data: session } = useSession()
   const { openPalette } = useCommandPalette()
@@ -208,13 +208,14 @@ export function Sidebar() {
   const [userTipY, setUserTipY] = useState<number | null>(null)
 
   useEffect(() => {
-    if (localStorage.getItem('sidebar-collapsed') === 'true') setCollapsed(true)
-  }, [])
+    // Don't restore collapsed state in mobile drawer mode
+    if (!mobileDrawer && localStorage.getItem('sidebar-collapsed') === 'true') setCollapsed(true)
+  }, [mobileDrawer])
 
   function toggle() {
     setCollapsed((v) => {
       const next = !v
-      localStorage.setItem('sidebar-collapsed', String(next))
+      if (!mobileDrawer) localStorage.setItem('sidebar-collapsed', String(next))
       return next
     })
   }
@@ -226,33 +227,40 @@ export function Sidebar() {
 
   return (
     <aside
-      style={{ width: collapsed ? 64 : 224, transition: 'width 200ms ease', background: '#F3ECE4', borderRight: '1px solid #E6DDD2' }}
-      className="relative flex h-screen shrink-0 flex-col overflow-hidden"
+      style={{
+        width: mobileDrawer ? '100%' : (collapsed ? 64 : 224),
+        transition: mobileDrawer ? 'none' : 'width 200ms ease',
+        background: '#F3ECE4',
+        borderRight: mobileDrawer ? 'none' : '1px solid #E6DDD2'
+      }}
+      className="relative flex h-full shrink-0 flex-col overflow-hidden"
     >
-      {/* ── Logo + toggle ── */}
-      <div className={cn(
-        'flex items-center shrink-0',
-        collapsed ? 'justify-between px-2 py-4' : 'justify-between px-5 py-5'
-      )} style={{ borderBottom: '1px solid #E6DDD2' }}>
-        <div className={cn('flex items-center min-w-0', !collapsed && 'gap-2.5')}>
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-terra-500 text-white text-[11px] font-bold shrink-0 shadow-[var(--shadow-warm-sm)]">
-            W
-          </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-ink-900 tracking-tight leading-none">WorkLog</p>
-              <p className="text-[10px] text-ink-300 mt-0.5">求職工具・工作記錄・面試準備</p>
+      {/* ── Logo + toggle (desktop only) ── */}
+      {!mobileDrawer && (
+        <div className={cn(
+          'flex items-center shrink-0',
+          collapsed ? 'justify-between px-2 py-4' : 'justify-between px-5 py-5'
+        )} style={{ borderBottom: '1px solid #E6DDD2' }}>
+          <div className={cn('flex items-center min-w-0', !collapsed && 'gap-2.5')}>
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-terra-500 text-white text-[11px] font-bold shrink-0 shadow-[var(--shadow-warm-sm)]">
+              W
             </div>
-          )}
+            {!collapsed && (
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-ink-900 tracking-tight leading-none">WorkLog</p>
+                <p className="text-[10px] text-ink-300 mt-0.5">求職工具・工作記錄・面試準備</p>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={toggle}
+            title={collapsed ? '展開側邊欄' : '收合側邊欄'}
+            className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warm-200 hover:bg-warm-300 text-ink-500 text-[13px] leading-none transition-colors"
+          >
+            {collapsed ? '›' : '‹'}
+          </button>
         </div>
-        <button
-          onClick={toggle}
-          title={collapsed ? '展開側邊欄' : '收合側邊欄'}
-          className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warm-200 hover:bg-warm-300 text-ink-500 text-[13px] leading-none transition-colors"
-        >
-          {collapsed ? '›' : '‹'}
-        </button>
-      </div>
+      )}
 
       {/* ── Search ── */}
       <div className={cn('pt-3 pb-1', collapsed ? 'px-2' : 'px-3')}>
@@ -307,7 +315,8 @@ export function Sidebar() {
       </nav>
 
       {/* ── User section ── */}
-      <div className="border-t border-warm-200 p-3 shrink-0">
+      <div className="border-t border-warm-200 p-3 shrink-0"
+        style={{ paddingBottom: mobileDrawer ? 'calc(0.75rem + env(safe-area-inset-bottom))' : undefined }}>
         {collapsed ? (
           <div
             onMouseEnter={(e) => setUserTipY(e.currentTarget.getBoundingClientRect().top + e.currentTarget.getBoundingClientRect().height / 2)}
