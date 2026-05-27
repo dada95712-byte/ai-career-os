@@ -36,10 +36,10 @@ function SignInForm() {
           {/* Logo */}
           <div className="mb-8 text-center">
             <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-terra-500 text-white font-bold text-sm shadow-[var(--shadow-warm-sm)]">
-              AI
+              W
             </div>
-            <h1 className="text-lg font-bold text-ink-900">AI Career OS</h1>
-            <p className="mt-1 text-sm text-ink-400">你的職涯成長夥伴</p>
+            <h1 className="text-lg font-bold text-ink-900">WorkLog</h1>
+            <p className="mt-1 text-sm text-ink-400">求職工具・工作記錄・面試準備</p>
           </div>
 
           {/* Google OAuth */}

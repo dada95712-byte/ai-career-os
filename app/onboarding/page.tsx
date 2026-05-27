@@ -96,7 +96,7 @@ export default function OnboardingPage() {
         {step === 3 && (
           <StepFrame
             title="你的目標職位是？"
-            sub="AI 將根據職位分析技能需求與面試題目"
+            sub="根據職位分析技能需求與面試題目"
           >
             <Input
               placeholder="例如：前端工程師、產品經理、數據分析師"
@@ -134,7 +134,7 @@ export default function OnboardingPage() {
         {step === 4 && (
           <StepFrame
             title="一切就緒！"
-            sub="你的 AI 職涯指揮中心已準備好"
+            sub="WorkLog 已準備好，開始你的求職旅程"
           >
             <div className="rounded-2xl border border-warm-200 bg-cream-50 p-5 space-y-4 border-l-4 border-l-terra-400">
               {[
@@ -154,7 +154,7 @@ export default function OnboardingPage() {
 
             <div className="mt-5 rounded-xl border border-sage-100 bg-sage-50 p-4">
               <p className="text-xs text-sage-700 leading-relaxed">
-                🌿 AI 已根據你的資料準備了個人化任務清單。第一步建議上傳履歷，讓系統給出完整分析。
+                🌿 已根據你的資料準備了個人化任務清單。第一步建議上傳履歷，讓系統給出完整分析。
               </p>
             </div>
 

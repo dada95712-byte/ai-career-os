@@ -32,7 +32,7 @@ const navItems = [
   },
   {
     href: '/career-profile',
-    label: 'Resume Lab',
+    label: '履歷',
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
@@ -42,7 +42,7 @@ const navItems = [
   },
   {
     href: '/work-journal',
-    label: 'Work Journal',
+    label: '工作日誌',
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
@@ -52,7 +52,7 @@ const navItems = [
   },
   {
     href: '/career-match',
-    label: 'Application Tracker',
+    label: '求職追蹤',
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" />
@@ -61,7 +61,7 @@ const navItems = [
   },
   {
     href: '/career-growth',
-    label: 'Skill Map',
+    label: '技能地圖',
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
@@ -70,7 +70,7 @@ const navItems = [
   },
   {
     href: '/interview-prep',
-    label: 'Interviews',
+    label: '面試練習',
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
@@ -79,7 +79,7 @@ const navItems = [
   },
   {
     href: '/career-coach',
-    label: 'AI 職涯教練',
+    label: 'AI 教練',
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path d="m3 21 1.9-5.7a8.5 8.5 0 1 1 3.8 3.8z" />
@@ -88,7 +88,7 @@ const navItems = [
   },
   {
     href: '/career-intelligence',
-    label: 'Analytics',
+    label: '職缺分析',
     icon: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
@@ -236,12 +236,12 @@ export function Sidebar() {
       )} style={{ borderBottom: '1px solid #E6DDD2' }}>
         <div className={cn('flex items-center min-w-0', !collapsed && 'gap-2.5')}>
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-terra-500 text-white text-[11px] font-bold shrink-0 shadow-[var(--shadow-warm-sm)]">
-            AI
+            W
           </div>
           {!collapsed && (
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-ink-900 tracking-tight leading-none">Career OS</p>
-              <p className="text-[10px] text-ink-300 mt-0.5">台灣職涯系統</p>
+              <p className="text-sm font-semibold text-ink-900 tracking-tight leading-none">WorkLog</p>
+              <p className="text-[10px] text-ink-300 mt-0.5">求職工具・工作記錄・面試準備</p>
             </div>
           )}
         </div>

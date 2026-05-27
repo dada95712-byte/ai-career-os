@@ -8,8 +8,8 @@ import { authOptions } from '@/lib/auth'
 const geist = Geist({ subsets: ['latin'], variable: '--font-geist' })
 
 export const metadata: Metadata = {
-  title: 'AI Career OS — 台灣職涯作業系統',
-  description: '以 AI 驅動的職涯規劃平台，協助台灣求職者履歷優化、職缺配對、面試準備與薪資查詢。',
+  title: 'WorkLog — 求職工具・工作記錄・面試準備',
+  description: '一站式求職工具：履歷優化、求職追蹤、面試練習、技能地圖，讓你的求職準備更有系統。',
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

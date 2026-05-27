@@ -232,10 +232,18 @@ export function DashboardClient({ name }: { name: string }) {
   const [onbStatus,    setOnbStatus]    = useState<string | null>(null)
   const [onbGoal,      setOnbGoal]      = useState<string | null>(null)
   const [celebVisible, setCelebVisible] = useState(false)
+  const [localName,    setLocalName]    = useState<string | null>(null)
 
   const todayKey = new Date().toISOString().split('T')[0]
 
   useEffect(() => {
+    try {
+      const profileRaw = localStorage.getItem('profile-basic')
+      if (profileRaw) {
+        const profile = JSON.parse(profileRaw)
+        if (profile?.nameZh) setLocalName(profile.nameZh)
+      }
+    } catch { /* ignore */ }
     try {
       const raw = localStorage.getItem('career-mood-logs')
       if (raw) {
@@ -259,10 +267,12 @@ export function DashboardClient({ name }: { name: string }) {
     }
   }, [todayKey])
 
-  function handleOnboardingComplete(status: string, goal: string) {
+  function handleOnboardingComplete(status: string, goal: string, nameZh?: string, targetRole?: string) {
     localStorage.setItem('onboarding_completed', 'true')
     localStorage.setItem('onboarding_status', status)
     localStorage.setItem('onboarding_goal', goal)
+    if (targetRole) localStorage.setItem('onboarding_target_role', targetRole)
+    if (nameZh) setLocalName(nameZh)
     setOnbStatus(status)
     setOnbGoal(goal)
     setShowModal(false)
@@ -365,7 +375,7 @@ export function DashboardClient({ name }: { name: string }) {
           >
             <span style={{ fontSize: 22 }}>🎉</span>
             <p style={{ fontSize: 13, color: '#4B4038', fontWeight: 500 }}>
-              今日任務全部完成！Career Score 已更新，明天繼續保持！
+              今日任務全部完成！Career Score 已更新，明天繼續加油！
             </p>
           </div>
         )}
@@ -376,12 +386,12 @@ export function DashboardClient({ name }: { name: string }) {
             <div>
               <p className="text-xs font-medium" style={{ color: '#C4B0A2' }}>{dateLabel}</p>
               <h1 className="mt-1 text-[1.6rem] font-bold leading-tight tracking-tight" style={{ color: '#4B4038' }}>
-                {greeting}，{name}
+                {greeting}，{localName ?? name}
               </h1>
               <p className="mt-1 text-sm" style={{ color: '#9E8E84' }}>
                 {todayMood
                   ? `今天心情：${MOODS.find(m => m.key === todayMood)?.emoji}  ${MOODS.find(m => m.key === todayMood)?.label}`
-                  : '今天想在職涯上做什麼？'}
+                  : '今天求職準備進行得怎麼樣？'}
               </p>
             </div>
 
