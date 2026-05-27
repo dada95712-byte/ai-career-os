@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
+import { RateLimitToast } from '@/components/ui/rate-limit-toast'
 import jsPDF from 'jspdf'
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors,
@@ -524,6 +525,7 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
   } | null>(null)
   // Feature 4: score panel
   const [showScorePanel, setShowScorePanel] = useState(false)
+  const [rateLimitToast, setRateLimitToast] = useState(false)
 
   const previewRef          = useRef<HTMLDivElement>(null)
   const previewContainerRef = useRef<HTMLDivElement>(null)
@@ -727,6 +729,7 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
         body: JSON.stringify({ resumeText: toSaved(resume).rawText, lang: resume.lang }),
       })
       const data = await res.json()
+      if (data.error === 'rate_limit') { setRateLimitToast(true); return }
       if (!data.error) {
         setScoreResult(data as ScoreReport)
         setShowScorePanel(true)
@@ -759,6 +762,7 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
         body: JSON.stringify({ original_content: exp.description, title: exp.title, company: exp.company }),
       })
       const data = await res.json()
+      if (data.error === 'rate_limit') { setRateLimitToast(true); setOptimizeModal(null); return }
       if (data.versions) {
         setOptimizeModal(prev => prev ? {
           ...prev, loading: false, versions: data.versions,
@@ -1225,6 +1229,7 @@ export function ResumeEditor({ initialData, initialName, onSave, onBack, onScore
           }}
         />
       )}
+      <RateLimitToast visible={rateLimitToast} onDismiss={() => setRateLimitToast(false)} />
     </div>
   )
 }

@@ -6,6 +6,7 @@ import { PageTooltip } from '@/components/onboarding/page-tooltip'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ProgressRing } from '@/components/ui/progress-ring'
+import { RateLimitToast } from '@/components/ui/rate-limit-toast'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -230,6 +231,7 @@ export default function ApplicationTrackerPage() {
   const [analyzingMatch, setAnalyzingMatch] = useState(false)
   const [bgAnalyzing, setBgAnalyzing] = useState(false)
   const [profileSkills, setProfileSkills] = useState<string[]>([])
+  const [rateLimitToast, setRateLimitToast] = useState(false)
   const autoAnalyzed = useRef<Set<string>>(new Set())
 
   // ── Load ──────────────────────────────────────────────────────────────────
@@ -376,6 +378,7 @@ export default function ApplicationTrackerPage() {
         body: JSON.stringify({ jdContent: app.jdFullText, userSkills: profileSkills }),
       })
       const data = await res.json()
+      if (data.error === 'rate_limit') { setRateLimitToast(true); return }
       if (data.error) return
       const analysis: MatchAnalysis = {
         matchScore: data.matchScore,
@@ -1308,6 +1311,7 @@ export default function ApplicationTrackerPage() {
           <p className="mt-1 text-xs text-ink-400">點擊「＋ 新增職缺」開始管理你的求職進度</p>
         </div>
       )}
+      <RateLimitToast visible={rateLimitToast} onDismiss={() => setRateLimitToast(false)} />
     </div>
   )
 }

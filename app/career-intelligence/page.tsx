@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { ProgressBar } from '@/components/ui/progress-ring'
+import { RateLimitToast } from '@/components/ui/rate-limit-toast'
 import Link from 'next/link'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -191,6 +192,7 @@ export default function CareerIntelligencePage() {
   const [deepReport, setDeepReport] = useState<DeepReport | null>(null)
   const [deepReportLoading, setDeepReportLoading] = useState(false)
   const [deepReportError, setDeepReportError] = useState('')
+  const [rateLimitToast, setRateLimitToast] = useState(false)
 
   // Company tab — manual entry form
   const [formCompany, setFormCompany] = useState('')
@@ -238,6 +240,7 @@ export default function CareerIntelligencePage() {
         body: JSON.stringify({ company, title, jd_content: jdContent }),
       })
       const data = await res.json()
+      if (data.error === 'rate_limit') { setRateLimitToast(true); return }
       if (!res.ok) throw new Error(data.error ?? '分析失敗')
       setDeepReport(data)
     } catch (e) { setDeepReportError((e as Error).message) }
@@ -674,6 +677,7 @@ export default function CareerIntelligencePage() {
           </div>
         </div>
       )}
+      <RateLimitToast visible={rateLimitToast} onDismiss={() => setRateLimitToast(false)} />
     </div>
   )
 }

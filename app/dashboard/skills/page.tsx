@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { RateLimitToast } from '@/components/ui/rate-limit-toast'
 import { PageTooltip } from '@/components/onboarding/page-tooltip'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -162,6 +163,7 @@ export default function SkillsPage() {
   const [journalSkills, setJournalSkills] = useState<JournalSkill[]>([])
   const [analyzingJournals, setAnalyzingJournals] = useState(false)
   const [journalSkillsLoaded, setJournalSkillsLoaded] = useState(false)
+  const [rateLimitToast, setRateLimitToast] = useState(false)
   const [expandedJournalSkill, setExpandedJournalSkill] = useState<string | null>(null)
   const [totalJournals, setTotalJournals] = useState(0)
   const [journalEntriesMap, setJournalEntriesMap] = useState<Record<string, string>>({})
@@ -356,6 +358,7 @@ ${skills.map((s) => `${s.name}（${s.category}）`).join('、')}
         body: JSON.stringify({ journals }),
       })
       const data = await res.json()
+      if (data.error === 'rate_limit') { setRateLimitToast(true); return }
       const parsed: JournalSkill[] = (data.skills ?? []).map((s: { name: string; category: string; journal_ids: string[]; journalFrequency: number }) => ({
         name: s.name,
         category: (SKILL_CATEGORIES as readonly string[]).includes(s.category) ? s.category as SkillCategory : '專業技能' as SkillCategory,
@@ -810,7 +813,7 @@ ${skills.map((s) => `${s.name}（${s.category}）`).join('、')}
           </div>
         </div>
       )}
-
+      <RateLimitToast visible={rateLimitToast} onDismiss={() => setRateLimitToast(false)} />
     </div>
   )
 }
