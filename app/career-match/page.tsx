@@ -251,13 +251,59 @@ function hasInterviewRecordsForJob(company: string, jobTitle: string): boolean {
   } catch { return false }
 }
 
+interface CachedAnalysis { id: string; jobId: string | null; company: string; analyzedAt: string }
+
+function loadCachedAnalyses(): CachedAnalysis[] {
+  try {
+    const raw = localStorage.getItem('company-analyses')
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed as CachedAnalysis[] : []
+  } catch { return [] }
+}
+
 function hasCompanyAnalysisForJob(company: string): boolean {
   try {
-    const rr = localStorage.getItem('company-analyses')
-    if (!rr) return false
-    const obj = JSON.parse(rr) as Record<string, unknown>
-    return Object.keys(obj).some((k) => k.toLowerCase().includes(company.toLowerCase()))
+    return loadCachedAnalyses().some((r) => r.company.toLowerCase().includes(company.toLowerCase()))
   } catch { return false }
+}
+
+function getAnalysisStatusForApp(app: { id: string; company: string; jdFullText?: string; createdAt: string }): 'done' | 'pending' | 'none' {
+  if (!app.jdFullText) return 'none'
+  const cached = loadCachedAnalyses()
+  if (cached.some((r) => r.jobId === app.id)) return 'done'
+  const ageMin = (Date.now() - new Date(app.createdAt).getTime()) / 60000
+  if (ageMin > 5) return 'pending'
+  return 'none'
+}
+
+async function triggerBackgroundAnalysis(app: { id: string; company: string; jobTitle?: string; industry?: string; jdFullText?: string }) {
+  if (!app.jdFullText || !app.company) return
+  try {
+    await Promise.all([
+      fetch(`/api/salary?${new URLSearchParams({ role: app.jobTitle || '', experience: '不限' })}`).then(r => r.json()).catch(() => null),
+      fetch('/api/analytics/company-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company: app.company, title: app.jobTitle || '', jd_content: app.jdFullText }),
+      }).then(r => r.json()).catch(() => null),
+    ]).then(([salaryData, deepReport]) => {
+      try {
+        const existing = loadCachedAnalyses() as unknown as Record<string, unknown>[]
+        const idx = existing.findIndex((r) => r.jobId === app.id)
+        const record = {
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
+          jobId: app.id, company: app.company,
+          title: app.jobTitle || '', industry: app.industry || '',
+          salaryData, deepReport,
+          analyzedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+        }
+        const next = idx >= 0 ? [...existing.slice(0, idx), record, ...existing.slice(idx + 1)] : [record, ...existing]
+        localStorage.setItem('company-analyses', JSON.stringify(next))
+      } catch { /* quota */ }
+    })
+  } catch { /* silent */ }
 }
 
 type SortKey = 'company' | 'jobTitle' | 'status' | 'matchScore' | 'appliedAt' | 'salaryMin' | 'createdAt'
@@ -321,6 +367,7 @@ export default function ApplicationTrackerPage() {
   const [profileSkills, setProfileSkills] = useState<string[]>([])
   const [rateLimitToast, setRateLimitToast] = useState(false)
   const autoAnalyzed = useRef<Set<string>>(new Set())
+  const autoCompanyAnalyzed = useRef<Set<string>>(new Set())
 
   // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -342,7 +389,7 @@ export default function ApplicationTrackerPage() {
     setProfileSkills(loadProfileSkills())
   }, [])
 
-  // Background auto-analyze when entering detail view
+  // Background auto-analyze skill match when entering detail view
   useEffect(() => {
     if (mainView !== 'detail' || !selectedApp?.jdFullText) return
     if (selectedApp.matchAnalysis) return
@@ -352,6 +399,16 @@ export default function ApplicationTrackerPage() {
     setBgAnalyzing(true)
     doAnalyzeMatch(selectedApp, false).finally(() => setBgAnalyzing(false))
   }, [mainView, selectedApp?.id, profileSkills.length]) // eslint-disable-line
+
+  // Background auto company analysis when entering detail view (fire-and-forget)
+  useEffect(() => {
+    if (mainView !== 'detail' || !selectedApp?.jdFullText || !selectedApp?.company) return
+    if (autoCompanyAnalyzed.current.has(selectedApp.id)) return
+    const already = loadCachedAnalyses().some((r) => r.jobId === selectedApp.id)
+    if (already) return
+    autoCompanyAnalyzed.current.add(selectedApp.id)
+    triggerBackgroundAnalysis(selectedApp).catch(() => {})
+  }, [mainView, selectedApp?.id]) // eslint-disable-line
 
   function persist(next: Application[]) {
     setApps(next)
@@ -1669,6 +1726,12 @@ export default function ApplicationTrackerPage() {
                           {app.linked_resume_id && (
                             <span title="已有客製化履歷" className="shrink-0 text-[11px]">📄</span>
                           )}
+                          {(() => {
+                            const st = getAnalysisStatusForApp(app)
+                            if (st === 'done') return <span title="公司分析已完成" className="shrink-0 text-[11px]">📊</span>
+                            if (st === 'pending') return <span title="公司分析進行中" className="shrink-0 text-[11px]">⏳</span>
+                            return null
+                          })()}
                         </div>
                         <p className="text-xs text-ink-500 truncate mt-0.5">{app.jobTitle}</p>
                         {app.matchScore !== undefined && (
@@ -1745,6 +1808,12 @@ export default function ApplicationTrackerPage() {
                       <span className="flex items-center gap-1.5">
                         {app.company}
                         {app.linked_resume_id && <span title="已有客製化履歷" className="text-sm">📄</span>}
+                        {(() => {
+                          const st = getAnalysisStatusForApp(app)
+                          if (st === 'done') return <span title="公司分析已完成" className="text-sm">📊</span>
+                          if (st === 'pending') return <span title="公司分析進行中" className="text-sm">⏳</span>
+                          return null
+                        })()}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-ink-600">{app.jobTitle}</td>
