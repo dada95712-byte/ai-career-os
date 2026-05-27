@@ -9,17 +9,36 @@ import { Input } from '@/components/ui/input'
 import { ProgressBar } from '@/components/ui/progress-ring'
 import Link from 'next/link'
 
+// ── Types ──────────────────────────────────────────────────────────────────────
+
 interface SalaryData { role: string; industry: string; experience: string; median: number; p25: number; p75: number; source: string; notes: string }
 interface Trend { industry: string; trend: 'up' | 'stable' | 'down'; hotJobs: string[]; notes: string }
-interface DeepReport {
-  basicInfo: string
-  culture: string
-  rolePosition: string
-  interviewProcess: string
-  salaryNegotiation: string
-  competitors: string[]
-  roleTrend?: { recruitmentHeat: string; topSkills: string[]; threeMonthTrend: string }
+
+type SourceType = 'search_result' | 'jd_inference' | 'general_inference' | null
+
+interface SourcedText {
+  content: string | null
+  source: SourceType
+  sourceUrl?: string | null
 }
+
+interface DeepReport {
+  basicInfo: SourcedText
+  culture: SourcedText
+  rolePosition: SourcedText
+  interviewProcess: SourcedText
+  salaryNegotiation: SourcedText
+  competitors: { names: string[]; source: SourceType; sourceUrl?: string | null }
+  roleTrend?: {
+    recruitmentHeat: string | null
+    topSkills: string[]
+    threeMonthTrend: string | null
+    source: SourceType
+    sourceUrl?: string | null
+  }
+}
+
+// ── Constants ──────────────────────────────────────────────────────────────────
 
 const TREND_CFG = {
   up:     { icon: '↑', label: '需求上升', color: 'text-sage-600', badge: 'success' as const },
@@ -43,6 +62,31 @@ const PIPELINE_ROWS = [
 
 const INDUSTRIES = ['科技業', '金融業', '電商/零售業', '製造業', '醫療/生技', '媒體/廣告', '顧問/服務業', '教育', '政府/非營利', '其他']
 
+const SALARY_VERIFY = [
+  { label: '104 薪資情報',          url: 'https://www.104.com.tw/salary/' },
+  { label: '主計處薪資查詢',         url: 'https://earnings.dgbas.gov.tw/' },
+  { label: 'CakeResume 薪資透明化', url: 'https://www.cakeresume.com/resources/salary' },
+]
+const TREND_VERIFY = [
+  { label: '104 人力銀行產業報告', url: 'https://www.104.com.tw/jobs/main/' },
+  { label: '商周產業報告',         url: 'https://www.businessweekly.com.tw/' },
+]
+const COMPANY_VERIFY = [
+  { label: '面試趣',      url: 'https://interviewing.tw/' },
+  { label: 'Glassdoor',  url: 'https://www.glassdoor.com/' },
+  { label: '公開資訊觀測站', url: 'https://mops.twse.com.tw/' },
+]
+
+const DEEP_CARDS: { icon: string; title: string; key: keyof Pick<DeepReport, 'basicInfo' | 'culture' | 'rolePosition' | 'interviewProcess' | 'salaryNegotiation'> }[] = [
+  { icon: '🏢', title: '基本資訊', key: 'basicInfo'         },
+  { icon: '🎭', title: '企業文化', key: 'culture'           },
+  { icon: '🎯', title: '職位定位', key: 'rolePosition'      },
+  { icon: '📝', title: '面試情報', key: 'interviewProcess'  },
+  { icon: '💰', title: '談薪建議', key: 'salaryNegotiation' },
+]
+
+// ── Small UI helpers ───────────────────────────────────────────────────────────
+
 function Skel({ lines = 3 }: { lines?: number }) {
   return (
     <div className="animate-pulse space-y-2">
@@ -52,6 +96,73 @@ function Skel({ lines = 3 }: { lines?: number }) {
     </div>
   )
 }
+
+function SourceBadge({ source, sourceUrl }: { source: SourceType; sourceUrl?: string | null }) {
+  const url = sourceUrl && sourceUrl !== 'null' ? sourceUrl : null
+  let host = ''
+  if (url) {
+    try { host = new URL(url).hostname.replace(/^www\./, '') } catch { /* ignore */ }
+  }
+
+  if (source === 'search_result') {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-sage-200 bg-sage-50 px-2 py-0.5 text-xs text-sage-700 shrink-0">
+        <span>✓ 已查證</span>
+        {url && host && (
+          <a href={url} target="_blank" rel="noopener noreferrer"
+            className="underline hover:text-sage-800 max-w-[100px] truncate">{host}</a>
+        )}
+      </span>
+    )
+  }
+  if (source === 'jd_inference') {
+    return (
+      <span className="inline-flex items-center rounded-full border border-honey-200 bg-honey-50 px-2 py-0.5 text-xs text-honey-600 shrink-0">
+        ⚠ 根據 JD 推測
+      </span>
+    )
+  }
+  if (source === 'general_inference') {
+    return (
+      <span className="inline-flex items-center rounded-full border border-warm-200 bg-cream-100 px-2 py-0.5 text-xs text-ink-400 shrink-0">
+        ℹ 一般推測，建議自行確認
+      </span>
+    )
+  }
+  return null
+}
+
+function VerifyLinks({ links }: { links: { label: string; url: string }[] }) {
+  return (
+    <div className="pt-3 mt-3 border-t border-warm-100">
+      <p className="text-xs text-ink-300 mb-1">建議自行驗證來源：</p>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {links.map(({ label, url }) => (
+          <a key={url} href={url} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-ink-300 hover:text-ink-400 underline">
+            {label}
+          </a>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function NullContent({ links }: { links: { label: string; url: string }[] }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-ink-400">— 資料不足，建議查詢：</p>
+      <div className="flex flex-wrap gap-2">
+        {links.map(({ label, url }) => (
+          <a key={url} href={url} target="_blank" rel="noopener noreferrer"
+            className="text-xs text-terra-400 hover:text-terra-500 underline">{label}</a>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 
 export default function CareerIntelligencePage() {
   const [tab, setTab] = useState<'salary' | 'trends' | 'analytics' | 'company'>('salary')
@@ -88,7 +199,7 @@ export default function CareerIntelligencePage() {
 
   const fmt = (n: number) => new Intl.NumberFormat('zh-TW').format(n)
 
-  // ── Functions ──────────────────────────────────────────────────────────────
+  // ── Functions ────────────────────────────────────────────────────────────────
 
   async function querySalary() {
     if (!salaryRole.trim()) return
@@ -147,7 +258,6 @@ export default function CareerIntelligencePage() {
     loadDeepReport(formCompany, formTitle, '')
   }
 
-  // URL params — auto-switch tab and trigger analysis
   useEffect(() => {
     if (typeof window === 'undefined') return
     const p = new URLSearchParams(window.location.search)
@@ -156,14 +266,13 @@ export default function CareerIntelligencePage() {
     const jobId   = p.get('jobId')   ?? ''
     const title   = p.get('title')   ?? ''
     const industry = p.get('industry') ?? ''
-    setTrackerCompany(company); setTrackerJobId(jobId)
-    setTrackerTitle(title); setTrackerIndustry(industry)
+    setTrackerCompany(company); setTrackerJobId(jobId); setTrackerTitle(title); setTrackerIndustry(industry)
     setTab('company')
     if (title) loadTrackerSalary(title)
     loadDeepReport(company, title, '')
   }, [])
 
-  // ── JSX ────────────────────────────────────────────────────────────────────
+  // ── JSX ──────────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-4 md:p-8 space-y-5">
@@ -224,6 +333,7 @@ export default function CareerIntelligencePage() {
                   <p className="text-sm text-ink-600">{salaryData.notes}</p>
                 </div>
                 <p className="text-xs text-ink-400">資料來源：{salaryData.source}</p>
+                <VerifyLinks links={SALARY_VERIFY} />
               </CardContent>
             </Card>
           )}
@@ -312,7 +422,7 @@ export default function CareerIntelligencePage() {
                 </button>
               </div>
 
-              {/* Block A: 薪資行情 */}
+              {/* ── Block A: 薪資行情 ── */}
               <Card>
                 <CardHeader><CardTitle>💰 薪資行情</CardTitle></CardHeader>
                 <CardContent>
@@ -348,14 +458,15 @@ export default function CareerIntelligencePage() {
                     </div>
                   )}
                   {!trackerSalaryLoading && !trackerSalary && (
-                    <p className="text-sm text-ink-400">
+                    <p className="text-sm text-ink-400 mb-2">
                       {trackerTitle ? '薪資查詢失敗，請稍後再試' : '未提供職位名稱，無法查詢薪資行情'}
                     </p>
                   )}
+                  <VerifyLinks links={SALARY_VERIFY} />
                 </CardContent>
               </Card>
 
-              {/* Block B: 產業趨勢 */}
+              {/* ── Block B: 產業趨勢 ── */}
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
@@ -367,14 +478,19 @@ export default function CareerIntelligencePage() {
                   {deepReportLoading && <Skel lines={5} />}
                   {!deepReportLoading && deepReport?.roleTrend && (
                     <div className="space-y-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-ink-500">招募熱度：</span>
-                        <Badge variant={
-                          deepReport.roleTrend.recruitmentHeat === '高' ? 'success' :
-                          deepReport.roleTrend.recruitmentHeat === '低' ? 'danger' : 'default'
-                        }>
-                          {deepReport.roleTrend.recruitmentHeat}
-                        </Badge>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {deepReport.roleTrend.recruitmentHeat && (
+                          <>
+                            <span className="text-sm text-ink-500">招募熱度：</span>
+                            <Badge variant={
+                              deepReport.roleTrend.recruitmentHeat === '高' ? 'success' :
+                              deepReport.roleTrend.recruitmentHeat === '低' ? 'danger' : 'default'
+                            }>
+                              {deepReport.roleTrend.recruitmentHeat}
+                            </Badge>
+                          </>
+                        )}
+                        <SourceBadge source={deepReport.roleTrend.source} sourceUrl={deepReport.roleTrend.sourceUrl} />
                       </div>
                       {(deepReport.roleTrend.topSkills?.length ?? 0) > 0 && (
                         <div>
@@ -384,24 +500,29 @@ export default function CareerIntelligencePage() {
                           </div>
                         </div>
                       )}
-                      <div>
-                        <p className="text-xs text-ink-400 mb-1">近 3 個月趨勢</p>
-                        <p className="text-sm text-ink-600 leading-relaxed">{deepReport.roleTrend.threeMonthTrend}</p>
-                      </div>
+                      {deepReport.roleTrend.threeMonthTrend ? (
+                        <div>
+                          <p className="text-xs text-ink-400 mb-1">近 3 個月趨勢</p>
+                          <p className="text-sm text-ink-600 leading-relaxed">{deepReport.roleTrend.threeMonthTrend}</p>
+                        </div>
+                      ) : (
+                        <NullContent links={TREND_VERIFY} />
+                      )}
                     </div>
                   )}
                   {!deepReportLoading && deepReport && !deepReport.roleTrend && (
-                    <p className="text-sm text-ink-400">無趨勢資料</p>
+                    <NullContent links={TREND_VERIFY} />
                   )}
+                  <VerifyLinks links={TREND_VERIFY} />
                 </CardContent>
               </Card>
 
-              {/* Block C: 公司深度分析 */}
+              {/* ── Block C: 公司深度分析 ── */}
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-ink-800">🏢 公司深度分析</h3>
                   {!deepReportLoading && deepReport && (
-                    <span className="text-xs text-ink-400">標注「需自行確認」之資訊請自行查證</span>
+                    <span className="text-xs text-ink-400">各欄位標示資料來源類型</span>
                   )}
                 </div>
 
@@ -423,28 +544,43 @@ export default function CareerIntelligencePage() {
 
                 {deepReport && !deepReportLoading && (
                   <div className="grid gap-3 sm:grid-cols-2">
-                    {([
-                      { icon: '🏢', title: '基本資訊',  key: 'basicInfo'         },
-                      { icon: '🎭', title: '企業文化',  key: 'culture'           },
-                      { icon: '🎯', title: '職位定位',  key: 'rolePosition'      },
-                      { icon: '📝', title: '面試情報',  key: 'interviewProcess'  },
-                      { icon: '💰', title: '談薪建議',  key: 'salaryNegotiation' },
-                    ] as { icon: string; title: string; key: keyof DeepReport }[]).map(({ icon, title, key }) => (
-                      <Card key={key}>
-                        <CardHeader><CardTitle>{icon} {title}</CardTitle></CardHeader>
-                        <CardContent>
-                          <p className="text-sm text-ink-600 leading-relaxed whitespace-pre-line">
-                            {String(deepReport[key] ?? '—')}
-                          </p>
-                        </CardContent>
-                      </Card>
-                    ))}
-                    {(deepReport.competitors?.length ?? 0) > 0 && (
+                    {DEEP_CARDS.map(({ icon, title, key }) => {
+                      const field = deepReport[key] as SourcedText
+                      return (
+                        <Card key={key}>
+                          <CardHeader>
+                            <div className="flex items-start justify-between gap-2">
+                              <CardTitle>{icon} {title}</CardTitle>
+                              <SourceBadge source={field?.source ?? null} sourceUrl={field?.sourceUrl} />
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            {field?.content ? (
+                              <p className="text-sm text-ink-600 leading-relaxed whitespace-pre-line">{field.content}</p>
+                            ) : (
+                              <NullContent links={COMPANY_VERIFY} />
+                            )}
+                            <VerifyLinks links={COMPANY_VERIFY} />
+                          </CardContent>
+                        </Card>
+                      )
+                    })}
+
+                    {/* Competitors card */}
+                    {(deepReport.competitors?.names?.length ?? 0) > 0 && (
                       <Card>
-                        <CardHeader><CardTitle>🏆 主要競爭對手</CardTitle></CardHeader>
+                        <CardHeader>
+                          <div className="flex items-start justify-between gap-2">
+                            <CardTitle>🏆 主要競爭對手</CardTitle>
+                            <SourceBadge
+                              source={deepReport.competitors?.source ?? null}
+                              sourceUrl={deepReport.competitors?.sourceUrl}
+                            />
+                          </div>
+                        </CardHeader>
                         <CardContent>
                           <div className="flex flex-wrap gap-2">
-                            {deepReport.competitors.map((c) => (
+                            {deepReport.competitors.names.map((c) => (
                               <button key={c}
                                 onClick={() => {
                                   setTrackerSalary(null); setDeepReport(null); setDeepReportError('')
@@ -456,6 +592,7 @@ export default function CareerIntelligencePage() {
                               </button>
                             ))}
                           </div>
+                          <VerifyLinks links={COMPANY_VERIFY} />
                         </CardContent>
                       </Card>
                     )}
