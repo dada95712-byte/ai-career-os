@@ -12,9 +12,16 @@ import { useReactToPrint } from 'react-to-print'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+type QuestionType = 'behavioral' | 'motivational' | 'weakness' | 'hypothetical' | 'introduction' | 'ai_related' | 'general'
+type Framework = 'STAR' | 'WHY_WHAT_HOW' | 'DIRECT' | 'SPAR' | 'PST' | 'OPINION'
+type SuitableFor = 'fresh_graduate' | 'career_change_same_industry' | 'career_change_cross_industry' | 'promotion_manager' | 'returning' | 'general'
+
 interface Question {
   id: string; question: string; questionEn?: string
   type: 'behavioral' | 'technical' | 'situational' | 'general'
+  question_type?: QuestionType
+  suitable_for?: string[]
+  framework?: Framework
   userAnswer?: string; aiFeedback?: string; aiScore?: number
   strengths?: string[]; suggestions?: string[]; optimizedAnswer?: string
   followUpQ?: string; followUpAnswer?: string
@@ -271,6 +278,109 @@ const INTERVIEWER_STYLES: { id: InterviewerStyle; emoji: string; label: string; 
   { id: 'hr',        emoji: '👔', label: 'HR 型',  desc: '著重軟實力、價值觀、文化契合度',       prompt: '著重團隊合作、職涯動機、公司文化契合，追問個人特質和價值觀' },
 ]
 
+const FRAMEWORK_MAP: Record<QuestionType, Framework> = {
+  behavioral:   'STAR',
+  motivational: 'WHY_WHAT_HOW',
+  weakness:     'DIRECT',
+  hypothetical: 'SPAR',
+  introduction: 'PST',
+  ai_related:   'OPINION',
+  general:      'STAR',
+}
+
+const FRAMEWORK_HINTS: Record<Framework, { label: string; steps: string[]; tip: string }> = {
+  STAR: {
+    label: 'STAR 架構',
+    steps: ['S — Situation 情境', 'T — Task 任務', 'A — Action 行動', 'R — Result 結果'],
+    tip: '以具體數字強化 Result，例如「提升 30% 效率」',
+  },
+  WHY_WHAT_HOW: {
+    label: 'Why → What → How',
+    steps: ['Why 為什麼選這個職位／公司', 'What 你能帶來什麼價值', 'How 你的計畫與期待'],
+    tip: '誠實回答動機，展現你對這份工作的具體了解',
+  },
+  DIRECT: {
+    label: 'DIRECT 直接法',
+    steps: ['D — Declare 直接說出缺點', 'I — Impact 說明影響', 'R — Remediation 改善行動', 'E — Evidence 已改善的證據', 'C — Conclusion 總結成長'],
+    tip: '挑選真實但非致命的缺點，重點放在改善行動',
+  },
+  SPAR: {
+    label: 'SPAR 情境分析',
+    steps: ['S — Situation 假設情境分析', 'P — Problem 識別核心問題', 'A — Action 行動方案', 'R — Result 預期結果與評估'],
+    tip: '先釐清前提與資訊，再提出有邏輯的解決方案',
+  },
+  PST: {
+    label: 'PST 自我介紹',
+    steps: ['P — Past 過去背景與經驗', 'S — Skills 核心能力與強項', 'T — Today 為什麼是現在這個職位'],
+    tip: '控制在 90-120 秒，結尾呼應此次應徵職位',
+  },
+  OPINION: {
+    label: 'OPINION 觀點法',
+    steps: ['O — Opinion 說出你的立場', 'P — Point 主要論點', 'I — Implication 對工作的影響', 'N — Note 補充說明'],
+    tip: '展現對 AI 趨勢的思考深度，避免流於表面',
+  },
+}
+
+const SCENARIOS: { id: SuitableFor; label: string; desc: string }[] = [
+  { id: 'fresh_graduate',               label: '應屆畢業生',   desc: '無工作經驗，求第一份正職' },
+  { id: 'career_change_same_industry',  label: '同產業換職能', desc: '同業內轉換跑道（如 PM → BD）' },
+  { id: 'career_change_cross_industry', label: '跨產業轉職',   desc: '切換到完全不同的產業' },
+  { id: 'promotion_manager',            label: '升遷管理職',   desc: '首次或再次擔任管理角色' },
+  { id: 'returning',                    label: '職涯重啟',     desc: '空窗一段時間後重返職場' },
+  { id: 'general',                      label: '一般求職',     desc: '常規換工作，無特殊情境' },
+]
+
+const UNIVERSAL_QUESTIONS: Question[] = [
+  { id: 'u01', question: '請簡單介紹你自己，並說明你為什麼適合這個職位。', questionEn: 'Please briefly introduce yourself and explain why you are a good fit for this role.', type: 'general', question_type: 'introduction', suitable_for: ['all'], framework: 'PST' },
+  { id: 'u02', question: '你最大的優點是什麼？請舉例說明。', questionEn: 'What is your greatest strength? Please provide an example.', type: 'behavioral', question_type: 'behavioral', suitable_for: ['all'], framework: 'STAR' },
+  { id: 'u03', question: '你最大的缺點是什麼？你如何改善它？', questionEn: 'What is your greatest weakness and how do you work to improve it?', type: 'general', question_type: 'weakness', suitable_for: ['all'], framework: 'DIRECT' },
+  { id: 'u04', question: '五年後你希望達到什麼職涯目標？', questionEn: 'Where do you see yourself professionally in 5 years?', type: 'situational', question_type: 'motivational', suitable_for: ['all'], framework: 'WHY_WHAT_HOW' },
+  { id: 'u05', question: '你為什麼對這個職位感興趣？你對這間公司有什麼了解？', questionEn: 'Why are you interested in this position? What do you know about our company?', type: 'general', question_type: 'motivational', suitable_for: ['all'], framework: 'WHY_WHAT_HOW' },
+  { id: 'u06', question: '描述一次你在有壓力的情況下成功完成任務的經驗。', questionEn: 'Describe a time you successfully completed a task under pressure.', type: 'behavioral', question_type: 'behavioral', suitable_for: ['all'], framework: 'STAR' },
+  { id: 'u07', question: '你如何看待 AI 工具（如 ChatGPT）對你的工作帶來的影響？', questionEn: 'How do you view the impact of AI tools like ChatGPT on your work?', type: 'general', question_type: 'ai_related', suitable_for: ['all'], framework: 'OPINION' },
+  { id: 'u08', question: '你在工作中如何與不同意見的人溝通協作？', questionEn: 'How do you communicate and collaborate with people who have different opinions?', type: 'behavioral', question_type: 'behavioral', suitable_for: ['all'], framework: 'STAR' },
+  { id: 'u09', question: '描述一次你主動學習新技能的經驗，為什麼你選擇學習它？', questionEn: 'Describe a time you proactively learned a new skill. Why did you choose to learn it?', type: 'behavioral', question_type: 'behavioral', suitable_for: ['all'], framework: 'STAR' },
+  { id: 'u10', question: '如果你同時接到多個任務，你如何安排優先順序？', questionEn: 'If you receive multiple tasks at the same time, how do you prioritize?', type: 'situational', question_type: 'hypothetical', suitable_for: ['all'], framework: 'SPAR' },
+  { id: 'u11', question: '你最近使用過哪些 AI 工具？對你的工作效率有什麼影響？', questionEn: 'What AI tools have you used recently? How have they impacted your work efficiency?', type: 'general', question_type: 'ai_related', suitable_for: ['all'], framework: 'OPINION' },
+  { id: 'u12', question: '描述一次你失敗的經驗，你從中學到了什麼？', questionEn: 'Describe a failure experience. What did you learn from it?', type: 'behavioral', question_type: 'behavioral', suitable_for: ['all'], framework: 'STAR' },
+  { id: 'u13', question: '你如何在工作與生活之間取得平衡？', questionEn: 'How do you maintain work-life balance?', type: 'general', question_type: 'general', suitable_for: ['all'], framework: 'STAR' },
+  { id: 'u14', question: '你對於在工作中使用 AI 輔助決策有什麼看法？', questionEn: 'What is your view on using AI to assist decision-making at work?', type: 'general', question_type: 'ai_related', suitable_for: ['all'], framework: 'OPINION' },
+  { id: 'u15', question: '描述一次你在沒有完整資訊的情況下做出決策的經驗。', questionEn: 'Describe a time you made a decision without complete information.', type: 'situational', question_type: 'behavioral', suitable_for: ['all'], framework: 'STAR' },
+  { id: 'u16', question: '如果你發現工作流程可以改善，你會如何推動變化？', questionEn: 'If you identify a workflow that could be improved, how would you drive the change?', type: 'situational', question_type: 'hypothetical', suitable_for: ['all'], framework: 'SPAR' },
+  { id: 'u17', question: '你如何保持在你的專業領域的持續學習？', questionEn: 'How do you maintain continuous learning in your professional field?', type: 'behavioral', question_type: 'behavioral', suitable_for: ['all'], framework: 'STAR' },
+  { id: 'u18', question: '描述一次你說服他人接受你想法的經驗。', questionEn: 'Describe a time you convinced others to accept your idea.', type: 'behavioral', question_type: 'behavioral', suitable_for: ['all'], framework: 'STAR' },
+  { id: 'u19', question: '如果可以用 AI 自動化你工作中的一個環節，你會選擇哪個？為什麼？', questionEn: 'If you could automate one part of your work with AI, which would you choose? Why?', type: 'general', question_type: 'ai_related', suitable_for: ['all'], framework: 'OPINION' },
+  { id: 'u20', question: '你理想的工作環境和文化是什麼？', questionEn: 'What is your ideal work environment and culture?', type: 'general', question_type: 'general', suitable_for: ['all'], framework: 'STAR' },
+]
+
+const FALLBACK_QUESTIONS: Partial<Record<SuitableFor, Question[]>> = {
+  fresh_graduate: [
+    { id: 'fb_fg1', question: '請談談你的畢業專題或實習經驗，以及你從中學到了什麼。', questionEn: 'Tell us about your graduation project or internship and what you learned.', type: 'behavioral', question_type: 'behavioral', suitable_for: ['fresh_graduate'], framework: 'STAR' },
+    { id: 'fb_fg2', question: '作為應屆生，你認為自己最能為這個職位貢獻什麼？', questionEn: 'As a fresh graduate, what do you believe you can contribute most to this role?', type: 'general', question_type: 'motivational', suitable_for: ['fresh_graduate'], framework: 'WHY_WHAT_HOW' },
+    { id: 'fb_fg3', question: '你在校期間參與過什麼社團活動或課外計畫？這些經驗如何培養你的職場能力？', questionEn: 'What extracurricular activities did you join? How did they build your workplace skills?', type: 'behavioral', question_type: 'behavioral', suitable_for: ['fresh_graduate'], framework: 'STAR' },
+  ],
+  career_change_same_industry: [
+    { id: 'fb_ccs1', question: '你為什麼想在同產業內轉換職能？你對新職能有哪些了解？', questionEn: 'Why do you want to change roles within the same industry? What do you know about the new role?', type: 'general', question_type: 'motivational', suitable_for: ['career_change_same_industry'], framework: 'WHY_WHAT_HOW' },
+    { id: 'fb_ccs2', question: '你過去的職能經驗如何支撐你在新職能的發展？', questionEn: 'How does your past role experience support your development in the new role?', type: 'behavioral', question_type: 'behavioral', suitable_for: ['career_change_same_industry'], framework: 'STAR' },
+    { id: 'fb_ccs3', question: '轉換職能的過程中你面臨的最大挑戰是什麼？你如何準備應對？', questionEn: 'What is the biggest challenge in transitioning roles? How are you preparing?', type: 'situational', question_type: 'hypothetical', suitable_for: ['career_change_same_industry'], framework: 'SPAR' },
+  ],
+  career_change_cross_industry: [
+    { id: 'fb_cci1', question: '你為什麼決定跨產業轉職？是什麼促使你做出這個決定？', questionEn: 'Why did you decide to change industries? What motivated this decision?', type: 'general', question_type: 'motivational', suitable_for: ['career_change_cross_industry'], framework: 'WHY_WHAT_HOW' },
+    { id: 'fb_cci2', question: '你的跨產業背景如何幫助你為新公司帶來不同的視角？', questionEn: 'How does your cross-industry background help you bring a different perspective to the new company?', type: 'behavioral', question_type: 'behavioral', suitable_for: ['career_change_cross_industry'], framework: 'STAR' },
+    { id: 'fb_cci3', question: '你對這個新產業的了解深度如何？你是透過什麼方式自學的？', questionEn: 'How deeply do you understand this new industry? How have you self-educated?', type: 'general', question_type: 'motivational', suitable_for: ['career_change_cross_industry'], framework: 'WHY_WHAT_HOW' },
+  ],
+  promotion_manager: [
+    { id: 'fb_pm1', question: '請描述你的管理風格，並舉例說明它如何在你的團隊中發揮效果。', questionEn: 'Describe your management style and give an example of how it works with your team.', type: 'behavioral', question_type: 'behavioral', suitable_for: ['promotion_manager'], framework: 'STAR' },
+    { id: 'fb_pm2', question: '你如何激勵績效不佳的員工？請舉具體案例。', questionEn: 'How do you motivate underperforming employees? Please give a specific example.', type: 'behavioral', question_type: 'behavioral', suitable_for: ['promotion_manager'], framework: 'STAR' },
+    { id: 'fb_pm3', question: '描述一次你需要做出困難人事決定的經驗，你如何應對？', questionEn: 'Describe a time you had to make a difficult personnel decision and how you handled it.', type: 'behavioral', question_type: 'behavioral', suitable_for: ['promotion_manager'], framework: 'STAR' },
+  ],
+  returning: [
+    { id: 'fb_r1', question: '在職涯空窗期間，你做了哪些事情讓自己保持競爭力或提升技能？', questionEn: 'During your career gap, what did you do to stay competitive or upskill?', type: 'behavioral', question_type: 'behavioral', suitable_for: ['returning'], framework: 'STAR' },
+    { id: 'fb_r2', question: '你準備如何重新融入快速變化的職場環境？', questionEn: 'How do you plan to re-integrate into the fast-changing work environment?', type: 'situational', question_type: 'hypothetical', suitable_for: ['returning'], framework: 'SPAR' },
+    { id: 'fb_r3', question: '你對重回職場最擔心的是什麼？你如何克服這個顧慮？', questionEn: 'What concerns you most about returning to the workplace? How do you plan to overcome it?', type: 'general', question_type: 'weakness', suitable_for: ['returning'], framework: 'DIRECT' },
+  ],
+}
+
 function genId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 5) }
 const scoreCol   = (s: number) => s >= 8 ? 'text-sage-600' : s >= 5 ? 'text-honey-500' : 'text-terra-500'
 const scoreLabel = (s: number) => s >= 8 ? '表現優異' : s >= 6 ? '表現良好' : s >= 4 ? '尚可改善' : '需要加強'
@@ -340,6 +450,10 @@ export default function InterviewPrepPage() {
   const [improvedMap, setImprovedMap] = useState<Record<string, boolean>>({})
   const [expandedReview, setExpandedReview] = useState<Record<string, boolean>>({})
 
+  // Scenario + universal questions
+  const [scenario, setScenario] = useState<SuitableFor>('general')
+  const [includeUniversal, setIncludeUniversal] = useState(true)
+
   // QA bank
   const [selectedCat, setSelectedCat]   = useState('通用')
   const [practiceIdx, setPracticeIdx]   = useState(0)
@@ -366,6 +480,7 @@ export default function InterviewPrepPage() {
 
   const printRef     = useRef<HTMLDivElement>(null)
   const mockListRef  = useRef<HTMLDivElement>(null)
+  const answerRef    = useRef<HTMLTextAreaElement>(null)
   const handlePrint      = useReactToPrint({ contentRef: printRef })
   const handleMockPrint  = useReactToPrint({ contentRef: mockListRef })
 
@@ -554,16 +669,45 @@ export default function InterviewPrepPage() {
       }
       const res  = await fetch('/api/interview/questions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, company, questionCount, jdContent }),
+        body: JSON.stringify({ role, company, questionCount, jdContent, scenario }),
       })
       const data = await res.json()
-      const qs: Question[] = data.questions ?? []
-      setQuestions(qs)
-      // Save new session
+
+      // Assign framework on program side — never trust AI for this
+      const aiQs: Question[] = (data.questions ?? []).map((q: Question) => ({
+        ...q,
+        framework: q.question_type ? FRAMEWORK_MAP[q.question_type] : 'STAR',
+      }))
+
+      // Client-side filtering: keep only questions suitable for current scenario
+      const filtered = aiQs.filter(
+        (q) => !q.suitable_for || q.suitable_for.includes(scenario) || q.suitable_for.includes('all')
+      )
+
+      // Supplement with scenario-specific fallbacks if AI returned too few
+      const fallbacks = (FALLBACK_QUESTIONS[scenario] ?? []).map((q) => ({
+        ...q,
+        framework: q.question_type ? FRAMEWORK_MAP[q.question_type] : 'STAR',
+      }))
+      let combined = filtered
+      if (combined.length < questionCount) {
+        const existing = new Set(combined.map((q) => q.id))
+        const extra = fallbacks.filter((q) => !existing.has(q.id)).slice(0, questionCount - combined.length)
+        combined = [...combined, ...extra]
+      }
+
+      // Mix in universal questions (max 5) if toggle is on
+      if (includeUniversal) {
+        const shuffled = [...UNIVERSAL_QUESTIONS].sort(() => Math.random() - 0.5).slice(0, 5)
+        const existing = new Set(combined.map((q) => q.id))
+        combined = [...combined, ...shuffled.filter((q) => !existing.has(q.id))]
+      }
+
+      setQuestions(combined)
       const newSession: InterviewSession = {
         id: genId(), jobTitle: role, company: company || undefined,
         language: answerLang === 'en' ? 'en-US' : 'zh-TW',
-        questions: qs.map((q) => ({ id: q.id, question: q.question, questionEn: q.questionEn, type: q.type })),
+        questions: combined.map((q) => ({ id: q.id, question: q.question, questionEn: q.questionEn, type: q.type })),
         createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
       }
       setCurrentSessionId(newSession.id)
@@ -829,7 +973,6 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
       <div className="flex gap-1 rounded-xl border border-warm-200 bg-white p-1 w-full sm:w-fit shadow-[var(--shadow-warm-xs)] overflow-x-auto">
         {([
           ['mock',   '⬟ 模擬面試'],
-          ['qa',     '📋 常見題庫'],
           ['record', '🎙 實際記錄'],
         ] as const).map(([t, label]) => (
           <button key={t} onClick={() => { setTab(t); setSelectedQ(null); setAnswer('') }}
@@ -950,6 +1093,18 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                 </div>
                 <Card>
                   <CardContent className="pt-6 space-y-4">
+                      <div className="space-y-1.5">
+                      <label className="block text-xs font-medium text-ink-500">求職情境（必選）</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {SCENARIOS.map((s) => (
+                          <button key={s.id} onClick={() => setScenario(s.id)}
+                            className={`flex flex-col items-start gap-0.5 rounded-xl border p-3 text-left transition-all ${scenario === s.id ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                            <span className={`text-xs font-semibold ${scenario === s.id ? 'text-terra-700' : 'text-ink-700'}`}>{s.label}</span>
+                            <span className="text-[10px] text-ink-400 leading-tight">{s.desc}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <Input label="目標職位（必填）" placeholder="例如：資深前端工程師、產品經理" value={role}
                       onChange={(e) => setRole(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && generateQuestions()} />
@@ -1018,6 +1173,16 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                         ))}
                       </div>
                     </div>
+                    <label className="flex items-center gap-3 cursor-pointer rounded-xl border border-warm-200 bg-cream-50 px-4 py-3 hover:border-warm-300 transition-colors">
+                      <div className={`h-5 w-9 shrink-0 rounded-full transition-colors relative ${includeUniversal ? 'bg-terra-400' : 'bg-warm-200'}`}>
+                        <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${includeUniversal ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs font-medium text-ink-700">包含通用面試題</p>
+                        <p className="text-[10px] text-ink-400">AI 題目外，額外混入最多 5 道通用題（自介、缺點、AI 相關…）</p>
+                      </div>
+                      <input type="checkbox" checked={includeUniversal} onChange={(e) => setIncludeUniversal(e.target.checked)} className="sr-only" />
+                    </label>
                     <Button variant="primary" onClick={generateQuestions} loading={generating} disabled={!role.trim()} className="w-full">
                       🤖 AI 生成面試題目
                     </Button>
@@ -1112,6 +1277,20 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                   <div>
                     <p className="text-sm font-medium text-ink-900">設定面試情境</p>
                     <p className="text-xs text-ink-400 mt-0.5">AI 將根據職位與題數生成客製化題目</p>
+                  </div>
+
+                  {/* Scenario */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium text-ink-500">求職情境（必選）</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {SCENARIOS.map((s) => (
+                        <button key={s.id} onClick={() => setScenario(s.id)}
+                          className={`flex flex-col items-start gap-0.5 rounded-xl border p-2.5 text-left transition-all ${scenario === s.id ? 'border-terra-400 bg-terra-50' : 'border-warm-200 bg-white hover:border-warm-300'}`}>
+                          <span className={`text-xs font-semibold ${scenario === s.id ? 'text-terra-700' : 'text-ink-700'}`}>{s.label}</span>
+                          <span className="text-[10px] text-ink-400 leading-tight">{s.desc}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   {/* Question count */}
@@ -1254,7 +1433,28 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                           </div>
                           {/* Action button */}
                           <button
-                            onClick={() => { setMockStep('practice'); goToMockQuestion(i) }}
+                            onClick={() => {
+                              if (q.userAnswer) {
+                                // 重新練習: wipe previous answer + AI feedback before opening
+                                setQuestions((prev) => prev.map((qu) =>
+                                  qu.id === q.id ? {
+                                    ...qu, userAnswer: undefined, aiScore: undefined,
+                                    aiFeedback: undefined, strengths: undefined, suggestions: undefined,
+                                    optimizedAnswer: undefined, weaknessLabels: undefined,
+                                    contentScore: undefined, structureScore: undefined,
+                                    persuasionScore: undefined, starHints: undefined,
+                                    followUpQ: undefined, followUpAnswer: undefined,
+                                  } : qu
+                                ))
+                                setBilingualData((prev) => { const n = { ...prev }; delete n[q.id]; return n })
+                                setShowMockOptimized(false)
+                                setAnswer('')
+                                setFollowUpQ(''); setFollowUpAnswer(''); setFollowUpStep('none')
+                              }
+                              setMockStep('practice')
+                              goToMockQuestion(i)
+                              setTimeout(() => answerRef.current?.focus(), 80)
+                            }}
                             className="print:hidden shrink-0 rounded-xl border border-terra-300 bg-terra-50 px-4 py-2 text-sm font-medium text-terra-600 hover:bg-terra-100 transition-colors whitespace-nowrap">
                             {q.userAnswer ? '重新練習' : '開始練習'}
                           </button>
@@ -1361,7 +1561,22 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
               {/* Answer area */}
               <div className="space-y-3">
                 <label className="block text-sm font-medium text-ink-600">你的回答</label>
+                {selectedQ.framework && FRAMEWORK_HINTS[selectedQ.framework] && (() => {
+                  const hint = FRAMEWORK_HINTS[selectedQ.framework!]
+                  return (
+                    <div className="rounded-xl border border-honey-200 bg-honey-50 px-4 py-3 space-y-1.5">
+                      <p className="text-xs font-semibold text-honey-700">💡 建議框架：{hint.label}</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-0.5">
+                        {hint.steps.map((step) => (
+                          <span key={step} className="text-[11px] text-honey-600">{step}</span>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-honey-500 border-t border-honey-200 pt-1.5 mt-1">⭐ {hint.tip}</p>
+                    </div>
+                  )
+                })()}
                 <textarea
+                  ref={answerRef}
                   rows={8}
                   placeholder={
                     answerLang === 'en' ? 'Use STAR method: Situation → Task → Action → Result' :
@@ -1871,204 +2086,6 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
             </div>
           )}
         </>
-      )}
-
-      {/* ══════════════════════════════════════════════════════════════════════
-          QA BANK
-      ══════════════════════════════════════════════════════════════════════ */}
-      {tab === 'qa' && (
-        <div className="flex rounded-2xl border border-warm-200 overflow-hidden" style={{ minHeight: 'calc(100vh - 280px)' }}>
-          {/* Left: 380px category + question list */}
-          <div className="w-[380px] shrink-0 bg-cream-100 border-r border-warm-200 flex flex-col">
-            {/* Dropdown */}
-            <div className="p-3 border-b border-warm-200">
-              <select
-                value={selectedCat}
-                onChange={(e) => { setSelectedCat(e.target.value); setPracticeIdx(0); setPracticeAnswer(''); setShowOptimized(false) }}
-                className="w-full rounded-xl border border-warm-300 bg-white px-3 py-2 text-sm text-ink-800 focus:border-terra-400 focus:outline-none appearance-none cursor-pointer"
-              >
-                {QA_BANK.map((cat) => (
-                  <option key={cat.category} value={cat.category}>{cat.category}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Question list */}
-            <div className="flex-1 overflow-y-auto p-2 space-y-1">
-              {catQuestions.map((q, i) => {
-                const result   = practiceResults[q.zh]
-                const isActive = i === practiceIdx
-                const isDone   = !!result
-                return (
-                  <button key={i} onClick={() => goToQuestion(i)}
-                    className={`w-full text-left p-3 transition-all ${
-                      isActive
-                        ? 'rounded-r-xl border-l-4 border-terra-500 bg-terra-50'
-                        : isDone
-                          ? 'rounded-xl border border-sage-200 bg-sage-50 hover:border-sage-300'
-                          : 'rounded-xl border border-warm-200 bg-white hover:border-warm-400'
-                    }`}>
-                    <div className="flex items-start gap-2.5">
-                      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                        isActive ? 'bg-terra-500 text-white' : isDone ? 'bg-sage-100 text-sage-600' : 'bg-cream-200 text-ink-400'
-                      }`}>
-                        {i + 1}
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-ink-800 leading-snug line-clamp-2">
-                          {qaBankLang === 'en' ? q.en : q.zh}
-                        </p>
-                        {isDone && (
-                          <p className="text-xs text-sage-600 mt-0.5 font-medium">✓ {result.score}/10</p>
-                        )}
-                      </div>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Right: practice panel */}
-          <div className="flex-1 min-w-0 bg-white flex flex-col overflow-hidden">
-            {practiceQ ? (
-              <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                {/* Language toggle + progress count */}
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="flex gap-0.5 rounded-lg border border-warm-200 bg-cream-50 p-0.5">
-                    {(['zh', 'en'] as const).map((l) => (
-                      <button key={l} onClick={() => setQaBankLang(l)}
-                        className={`rounded-md px-3 py-1 text-xs font-medium transition-all ${
-                          qaBankLang === l ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-400 hover:text-ink-600'
-                        }`}>
-                        {l === 'zh' ? '中文題目' : 'English Question'}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="text-xs text-ink-400">
-                    進度 {catQuestions.filter((q) => practiceResults[q.zh]).length} / {catQuestions.length} 題已完成
-                  </span>
-                </div>
-
-                {/* Progress bar */}
-                <div className="relative h-1.5 rounded-full bg-cream-200 overflow-hidden">
-                  <div
-                    className="absolute left-0 top-0 h-full rounded-full bg-terra-400 transition-all duration-500"
-                    style={{ width: `${(catQuestions.filter((q) => practiceResults[q.zh]).length / catQuestions.length) * 100}%` }}
-                  />
-                </div>
-
-                {/* Number + type badge */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-bold text-ink-300">#{String(practiceIdx + 1).padStart(2, '0')}</span>
-                  <Badge variant={TYPE[practiceQ.type]?.color ?? 'default'}>{TYPE[practiceQ.type]?.label}</Badge>
-                  <span className="text-xs text-ink-400">{TYPE[practiceQ.type]?.labelEn}</span>
-                </div>
-
-                {/* Question block */}
-                <div className="bg-terra-50 border-l-4 border-terra-500 p-5 rounded-r-xl">
-                  <p className="text-2xl font-bold text-ink-900 leading-relaxed">
-                    {qaBankLang === 'en' ? practiceQ.en : practiceQ.zh}
-                  </p>
-                  {qaBankLang === 'zh' && (
-                    <p className="text-sm text-ink-400 mt-2 italic leading-snug">{practiceQ.en}</p>
-                  )}
-                </div>
-
-                {/* Answer area */}
-                <div className="space-y-3">
-                  <label className="block text-sm font-medium text-ink-600">你的回答</label>
-                  <textarea rows={7} value={practiceAnswer} onChange={(e) => setPracticeAnswer(e.target.value)}
-                    placeholder={qaBankLang === 'en' ? 'Use STAR method: Situation → Task → Action → Result' : '建議用 STAR 方法：情境 → 任務 → 行動 → 結果'}
-                    className="w-full min-h-[180px] rounded-xl border border-warm-300 bg-white px-4 py-3 text-sm text-ink-800 placeholder:text-ink-400 focus:border-terra-400 focus:ring-2 focus:ring-terra-100 focus:outline-none resize-y leading-relaxed" />
-                  <div className="flex items-center gap-3">
-                    {voiceBtn('practice')}
-                    <button onClick={() => evaluate(true)} disabled={!practiceAnswer.trim() || practiceEval}
-                      className="flex items-center gap-2 rounded-xl bg-terra-500 px-5 py-2 text-sm font-semibold text-white hover:bg-terra-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-[var(--shadow-warm-sm)]">
-                      {practiceEval ? (
-                        <><svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>評分中...</>
-                      ) : '✨ AI 評分'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* AI feedback */}
-                {practiceResult && (
-                  <div className="rounded-2xl border border-warm-200 bg-white p-5 space-y-4 shadow-[var(--shadow-warm-xs)]">
-                    <div className="flex items-center gap-4">
-                      <span className={`text-5xl font-bold tabular-nums ${scoreCol(practiceResult.score)}`}>{practiceResult.score}</span>
-                      <div>
-                        <p className="text-xs text-ink-400 mb-0.5">/ 10 分</p>
-                        <p className="text-honey-500 text-lg tracking-wider">{scoreStars(practiceResult.score)}</p>
-                      </div>
-                      <span className={`ml-auto text-sm font-semibold ${scoreCol(practiceResult.score)}`}>{scoreLabel(practiceResult.score)}</span>
-                    </div>
-                    {(practiceResult.strengths.length > 0 || practiceResult.suggestions.length > 0) && (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {practiceResult.strengths.length > 0 && (
-                          <div className="rounded-xl bg-sage-50 border border-sage-200 p-3">
-                            <p className="text-xs font-semibold text-sage-600 mb-2">✓ 優點</p>
-                            <ul className="space-y-1.5">
-                              {practiceResult.strengths.map((s, i) => (
-                                <li key={i} className="text-xs text-ink-600 flex gap-1.5 leading-relaxed">
-                                  <span className="text-sage-500 shrink-0 mt-0.5">✓</span>{s}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {practiceResult.suggestions.length > 0 && (
-                          <div className="rounded-xl bg-honey-50 border border-amber-200 p-3">
-                            <p className="text-xs font-semibold text-honey-600 mb-2">→ 改善建議</p>
-                            <ul className="space-y-1.5">
-                              {practiceResult.suggestions.map((s, i) => (
-                                <li key={i} className="text-xs text-ink-600 flex gap-1.5 leading-relaxed">
-                                  <span className="text-honey-500 shrink-0 mt-0.5">→</span>{s}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {practiceResult.optimizedAnswer && (
-                      <>
-                        <button onClick={() => setShowOptimized((p) => !p)}
-                          className="flex items-center justify-center gap-2 w-full rounded-xl border border-terra-200 bg-terra-50 px-4 py-2.5 text-sm font-medium text-terra-600 hover:bg-terra-100 transition-colors">
-                          {showOptimized ? '▲ 收起優化版回答' : '✨ 查看優化版回答'}
-                        </button>
-                        {showOptimized && (
-                          <div className="rounded-xl border border-terra-200 bg-terra-50 p-4">
-                            <p className="text-xs font-semibold text-terra-500 mb-2">AI 建議回答</p>
-                            <p className="text-sm text-ink-600 whitespace-pre-line leading-relaxed">{practiceResult.optimizedAnswer}</p>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* Navigation */}
-                <div className="border-t border-warm-200 pt-4 flex items-center justify-between">
-                  <button onClick={() => goToQuestion(Math.max(0, practiceIdx - 1))} disabled={practiceIdx === 0}
-                    className="flex items-center gap-1.5 rounded-xl border border-warm-200 bg-white px-4 py-2 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                    ← 上一題
-                  </button>
-                  <span className="text-xs text-ink-300">{practiceIdx + 1} / {catQuestions.length}</span>
-                  <button onClick={() => goToQuestion(Math.min(catQuestions.length - 1, practiceIdx + 1))} disabled={practiceIdx === catQuestions.length - 1}
-                    className="flex items-center gap-1.5 rounded-xl border border-warm-200 bg-white px-4 py-2 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
-                    下一題 →
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full py-20 text-center">
-                <p className="text-4xl mb-3">📋</p>
-                <p className="text-sm text-ink-500">從左側選擇一道題目開始練習</p>
-              </div>
-            )}
-          </div>
-        </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════════
