@@ -10,14 +10,18 @@ const BREAKDOWN: Record<number, { behavioral: number; situational: number; techn
 
 export async function POST(req: NextRequest) {
   try {
-    const { role, company, questionCount = 15 } = await req.json()
+    const { role, company, questionCount = 15, jdContent } = await req.json()
     if (!role) return NextResponse.json({ error: '請輸入目標職位' }, { status: 400 })
 
     const count = [10, 15, 20].includes(questionCount) ? questionCount : 15
     const b = BREAKDOWN[count]
 
-    const prompt = `你是台灣資深人資顧問，請根據職位「${role}」${company ? `和公司「${company}」` : ''}，生成 ${count} 道面試題目。
+    const jdSection = jdContent
+      ? `\n以下是該職缺的完整職務說明，請根據此 JD 生成針對性面試題目：\n<jd_content>${String(jdContent).slice(0, 3000)}</jd_content>\n`
+      : ''
 
+    const prompt = `你是台灣資深人資顧問，請根據職位「${role}」${company ? `和公司「${company}」` : ''}，生成 ${count} 道面試題目。
+${jdSection}
 題目分配：
 - ${b.behavioral} 道行為面試題（Behavioral）：請描述過去經驗，以 STAR 方法回答最佳
 - ${b.situational} 道情境題（Situational）：假設性情境，考察判斷與應變能力

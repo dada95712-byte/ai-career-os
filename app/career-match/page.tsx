@@ -634,7 +634,7 @@ export default function ApplicationTrackerPage() {
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Link
-                href={`/interview-prep?company=${encodeURIComponent(app.company)}&title=${encodeURIComponent(app.jobTitle)}`}
+                href={`/interview-prep?jobId=${encodeURIComponent(app.id)}&title=${encodeURIComponent(app.jobTitle)}&company=${encodeURIComponent(app.company)}`}
                 className="flex items-center gap-2 rounded-xl border border-warm-200 bg-white px-4 py-3 text-sm font-medium text-ink-700 hover:border-terra-300 hover:bg-terra-50 transition-all">
                 🎤 針對此職缺生成面試題目 →
               </Link>

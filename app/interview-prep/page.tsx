@@ -340,6 +340,12 @@ export default function InterviewPrepPage() {
   const [recAnswer, setRecAnswer]     = useState('')
   const [recEvaluating, setRecEvaluating] = useState(false)
 
+  // Application Tracker integration
+  const [fromJobId, setFromJobId]       = useState<string | null>(null)
+  const [fromTitle, setFromTitle]       = useState<string | null>(null)
+  const [fromCompany, setFromCompany]   = useState<string | null>(null)
+  const [saveTrackerStatus, setSaveTrackerStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+
   const printRef     = useRef<HTMLDivElement>(null)
   const mockListRef  = useRef<HTMLDivElement>(null)
   const handlePrint      = useReactToPrint({ contentRef: printRef })
@@ -360,6 +366,21 @@ export default function InterviewPrepPage() {
     const parsed: InterviewSession[] = saved ? JSON.parse(saved) : []
     setSessions(parsed)
     setMockStep(parsed.length > 0 ? 'sessions' : 'setup')
+  }, [])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const jobId   = params.get('jobId')
+    const title   = params.get('title')
+    const company = params.get('company')
+    if (jobId && title && company) {
+      setFromJobId(jobId)
+      setFromTitle(title)
+      setFromCompany(company)
+      setRole(title)
+      setCompany(company)
+      setMockStep('setup')
+    }
   }, [])
 
   // Timer countdown
@@ -479,11 +500,20 @@ export default function InterviewPrepPage() {
   async function generateQuestions() {
     if (!role.trim()) return
     setGenerating(true); setQuestions([]); setSelectedQ(null); setAnswer('')
+    setSaveTrackerStatus('idle')
     setMockStep('list')
     try {
+      let jdContent: string | undefined
+      if (fromJobId) {
+        try {
+          const apps = JSON.parse(localStorage.getItem('job-tracker-apps') ?? '[]')
+          const app = apps.find((a: { id: string; jdFullText?: string }) => a.id === fromJobId)
+          if (app?.jdFullText) jdContent = app.jdFullText
+        } catch { /* ignore */ }
+      }
       const res  = await fetch('/api/interview/questions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role, company, questionCount }),
+        body: JSON.stringify({ role, company, questionCount, jdContent }),
       })
       const data = await res.json()
       const qs: Question[] = data.questions ?? []
@@ -499,6 +529,33 @@ export default function InterviewPrepPage() {
       saveSessions([newSession, ...sessions])
     } catch { /* silent */ }
     finally { setGenerating(false) }
+  }
+
+  function clearTrackerLink() {
+    setFromJobId(null); setFromTitle(null); setFromCompany(null)
+    setRole(''); setCompany('')
+  }
+
+  function saveToTracker() {
+    if (!fromJobId || !report) return
+    setSaveTrackerStatus('saving')
+    try {
+      const apps: { id: string; interviewNotes?: { id: string; date: string; interviewer: string; notes: string }[] }[] =
+        JSON.parse(localStorage.getItem('job-tracker-apps') ?? '[]')
+      const note = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        date: new Date().toISOString().slice(0, 10),
+        interviewer: '模擬面試',
+        notes: `來自 Interview Arena 模擬練習｜題數：${questions.length}｜平均分：${report.avgScore.toFixed(1)}/10`,
+      }
+      const updated = apps.map((a) =>
+        a.id === fromJobId ? { ...a, interviewNotes: [...(a.interviewNotes ?? []), note] } : a
+      )
+      localStorage.setItem('job-tracker-apps', JSON.stringify(updated))
+      setSaveTrackerStatus('saved')
+    } catch {
+      setSaveTrackerStatus('idle')
+    }
   }
 
   async function evaluate(forPractice = false) {
@@ -816,13 +873,42 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                   <h2 className="text-xl font-bold text-ink-900">設定你的面試情境</h2>
                   <p className="text-sm text-ink-400">AI 將根據職位與題數生成客製化題目</p>
                 </div>
+
+                {/* Tracker banner */}
+                {fromJobId && fromTitle && fromCompany && (
+                  <div className="flex items-center gap-2 rounded-xl border border-sage-200 bg-sage-50 px-4 py-3 text-sm text-sage-700">
+                    <span>📋</span>
+                    <span className="flex-1">來自 Application Tracker：<strong>{fromCompany}</strong> — <strong>{fromTitle}</strong></span>
+                    <button
+                      onClick={clearTrackerLink}
+                      className="ml-2 text-xs text-sage-500 hover:text-sage-700 whitespace-nowrap transition-colors">
+                      ✕ 清除，重新設定
+                    </button>
+                  </div>
+                )}
+
                 <Card>
                   <CardContent className="pt-6 space-y-4">
-                    <Input label="目標職位（必填）" placeholder="例如：資深前端工程師、產品經理" value={role}
-                      onChange={(e) => setRole(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && generateQuestions()} />
-                    <Input label="公司名稱（選填）" placeholder="例如：LINE、台積電、Shopee" value={company}
-                      onChange={(e) => setCompany(e.target.value)} />
+                    {fromJobId ? (
+                      <>
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-medium text-ink-500">目標職位</label>
+                          <div className="rounded-xl border border-warm-200 bg-cream-100 px-3 py-2 text-sm text-ink-700">{role}</div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="block text-xs font-medium text-ink-500">公司名稱</label>
+                          <div className="rounded-xl border border-warm-200 bg-cream-100 px-3 py-2 text-sm text-ink-700">{company}</div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Input label="目標職位（必填）" placeholder="例如：資深前端工程師、產品經理" value={role}
+                          onChange={(e) => setRole(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && generateQuestions()} />
+                        <Input label="公司名稱（選填）" placeholder="例如：LINE、台積電、Shopee" value={company}
+                          onChange={(e) => setCompany(e.target.value)} />
+                      </>
+                    )}
                     <div className="space-y-1.5">
                       <label className="block text-xs font-medium text-ink-500">題目數量</label>
                       <div className="flex gap-2">
@@ -1372,7 +1458,7 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                       📥 下載報告 PDF
                     </button>
                     <button
-                      onClick={() => { setRole(''); setCompany(''); setCurrentSessionId(null); setQuestions([]); setReport(null); setMockStep('setup') }}
+                      onClick={() => { setRole(fromJobId ? (fromTitle ?? '') : ''); setCompany(fromJobId ? (fromCompany ?? '') : ''); setCurrentSessionId(null); setQuestions([]); setReport(null); setSaveTrackerStatus('idle'); setMockStep('setup') }}
                       className="flex items-center gap-2 rounded-xl border border-terra-200 bg-terra-50 px-4 py-2.5 text-sm font-medium text-terra-600 hover:bg-terra-100 transition-colors">
                       🔄 重新練習
                     </button>
@@ -1381,6 +1467,22 @@ ${answered.map((q, i) => `題${i + 1}（${TYPE[q.type]?.label}）：${q.question
                       className="flex items-center gap-2 rounded-xl border border-warm-200 bg-cream-50 px-4 py-2.5 text-sm text-ink-500 hover:border-warm-300 hover:text-ink-700 transition-colors">
                       📚 查看常見題庫
                     </button>
+                    {fromJobId && (
+                      saveTrackerStatus === 'saved' ? (
+                        <Link
+                          href="/career-match"
+                          className="flex items-center gap-2 rounded-xl border border-sage-200 bg-sage-50 px-4 py-2.5 text-sm font-medium text-sage-700 hover:bg-sage-100 transition-colors">
+                          ✓ 已記錄至 {fromCompany} 的面試準備紀錄 →
+                        </Link>
+                      ) : (
+                        <button
+                          onClick={saveToTracker}
+                          disabled={saveTrackerStatus === 'saving'}
+                          className="flex items-center gap-2 rounded-xl border border-sage-200 bg-white px-4 py-2.5 text-sm text-sage-700 hover:bg-sage-50 hover:border-sage-300 transition-colors disabled:opacity-50">
+                          📌 儲存此次面試記錄到 Application Tracker
+                        </button>
+                      )
+                    )}
                   </div>
                 </>
               ) : null}
