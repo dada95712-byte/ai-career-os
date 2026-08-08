@@ -6,6 +6,16 @@ import { useState, useEffect, Suspense } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
+const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
+  Configuration: '伺服器設定有誤，請聯絡管理員',
+  AccessDenied: '你取消了 Google 授權，或此帳號不在允許登入的名單中',
+  OAuthSignin: 'Google 登入發生錯誤，請再試一次',
+  OAuthCallback: 'Google 登入發生錯誤，請再試一次',
+  OAuthCreateAccount: '建立帳號時發生錯誤，請再試一次',
+  OAuthAccountNotLinked: '這個 Email 已用其他方式註冊過，請改用原本的登入方式',
+  Default: '登入失敗，請再試一次',
+}
+
 function SignInForm() {
   const { data: session } = useSession()
   const router = useRouter()
@@ -14,9 +24,21 @@ function SignInForm() {
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [error, setError] = useState('')
+  const [oauthError, setOauthError] = useState('')
 
   useEffect(() => { if (session) router.push(callbackUrl) }, [session, router, callbackUrl])
+
+  useEffect(() => {
+    const code = searchParams.get('error')
+    if (code) setOauthError(GOOGLE_ERROR_MESSAGES[code] ?? GOOGLE_ERROR_MESSAGES.Default)
+  }, [searchParams])
+
+  async function handleGoogle() {
+    setGoogleLoading(true); setOauthError('')
+    await signIn('google', { callbackUrl })
+  }
 
   async function handleEmail(e: React.FormEvent) {
     e.preventDefault()
@@ -44,12 +66,19 @@ function SignInForm() {
         <div className="rounded-2xl border border-warm-200 bg-white p-6 md:p-8"
           style={{ boxShadow: 'var(--shadow-warm-lg)' }}>
 
+          {oauthError && (
+            <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+              {oauthError}
+            </div>
+          )}
+
           {/* Google OAuth */}
           <Button
             variant="secondary"
             className="w-full mb-4"
             style={{ height: '52px', fontSize: '15px' }}
-            onClick={() => signIn('google', { callbackUrl })}
+            onClick={handleGoogle}
+            loading={googleLoading}
           >
             <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>

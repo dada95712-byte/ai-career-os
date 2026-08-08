@@ -17,7 +17,7 @@
 - **Frontend**: Next.js 16 (App Router) + TypeScript
 - **UI**: Tailwind CSS v4
 - **Auth**: NextAuth.js v4 (Google OAuth + Email)
-- **AI**: Google Gemini 2.0 Flash（主）/ OpenAI GPT-4o-mini（備援）
+- **AI**: OpenRouter（統一入口）— `openrouter/free`（主）/ `meta-llama/llama-3.3-70b-instruct:free`（備援）
 - **DB**: PostgreSQL via Prisma 7（schema ready，MVP 可不設定）
 - **Deployment**: Vercel
 
@@ -41,8 +41,7 @@ cp .env.example .env.local
 
 | 變數 | 說明 | 取得方式 |
 |------|------|---------|
-| `GEMINI_API_KEY` | Google Gemini API | [Google AI Studio](https://aistudio.google.com) |
-| `OPENAI_API_KEY` | OpenAI API（備援） | [OpenAI Platform](https://platform.openai.com) |
+| `OPENROUTER_API_KEY` | OpenRouter API（AI 統一入口） | [OpenRouter Keys](https://openrouter.ai/keys) |
 | `NEXTAUTH_SECRET` | Session 加密金鑰 | `openssl rand -base64 32` |
 | `NEXTAUTH_URL` | 部署網址 | `http://localhost:3000`（開發） |
 | `GOOGLE_CLIENT_ID` | Google OAuth | [Google Cloud Console](https://console.cloud.google.com) |
@@ -51,7 +50,7 @@ cp .env.example .env.local
 | `JSEARCH_API_KEY` | 職缺搜尋 API | [RapidAPI JSearch](https://rapidapi.com/letscrape-6bfed1765d1a6/api/jsearch) |
 | `SERPER_API_KEY` | 職缺搜尋備援 | [Serper.dev](https://serper.dev) |
 
-> `GEMINI_API_KEY` 和 `NEXTAUTH_SECRET` 是最低限度必填。
+> `OPENROUTER_API_KEY` 和 `NEXTAUTH_SECRET` 是最低限度必填。
 > 不設定 `DATABASE_URL` 可使用（JWT session，不持久化）。
 
 ### 3. 啟動開發伺服器
@@ -80,8 +79,10 @@ npx prisma generate
 ## AI Failover 機制
 
 ```
-Request → Gemini 2.0 Flash → [失敗] → OpenAI GPT-4o-mini
+Request → OpenRouter: openrouter/free → [失敗] → OpenRouter: meta-llama/llama-3.3-70b-instruct:free
 ```
+
+> 圖片辨識另用 `meta-llama/llama-3.2-11b-vision-instruct:free`。所有模型皆透過同一個 `OPENROUTER_API_KEY` 呼叫（見 `lib/ai-client.ts`）。
 
 ## 安全性
 
