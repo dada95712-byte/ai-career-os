@@ -83,19 +83,25 @@ model VerificationToken {
 }
 
 model Resume {
-  id          String    @id @default(cuid())
-  userId      String
-  title       String
-  contentJson Json?
-  rawText     String?   @db.Text
-  fileUrl     String?
-  aiScore     Int?
-  atsScore    Int?
-  scoredAt    DateTime?
-  language    String    @default("zh-TW")
-  isPrimary   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String    @id @default(cuid())
+  userId            String
+  title             String
+  contentJson       Json?
+  rawText           String?   @db.Text
+  fileUrl           String?
+  aiScore           Int?
+  atsScore          Int?
+  scoredAt          DateTime?
+  language          String    @default("zh-TW")
+  isPrimary         Boolean   @default(false)
+  source            String?
+  resumeType        String?
+  linkedJobCompany  String?
+  linkedJobTitle    String?
+  jdMatchHighlights Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Skill {
@@ -128,31 +134,41 @@ model Experience {
 }
 
 model JobApplication {
-  id              String    @id @default(cuid())
-  userId          String
-  jobTitle        String
-  company         String
-  jdText          String?   @db.Text
-  jdFullText      String?   @db.Text
-  sourceUrl       String?
-  platform        String?
-  sourcePlatform  String?
-  status          String    @default("saved")
-  matchScore      Int?
-  salaryMin       Int?
-  salaryMax       Int?
-  location        String?
-  appliedAt       DateTime?
-  deadline        DateTime?
-  notes           String?   @db.Text
-  interviewNotes  Json?
-  attachments     Json?
-  contactName     String?
-  contactEmail    String?
-  contactPhone    String?
-  createdAt       DateTime  @default(now())
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  interviewQAs    InterviewQA[]
+  id                 String    @id @default(cuid())
+  userId             String
+  jobTitle           String
+  company            String
+  industry           String?
+  jdText             String?   @db.Text
+  jdFullText         String?   @db.Text
+  sourceUrl          String?
+  platform           String?
+  sourcePlatform     String?
+  status             String    @default("saved")
+  matchScore         Int?
+  matchedSkills      Json?
+  missingSkills      Json?
+  matchAnalysis      Json?
+  salaryMin          Int?
+  salaryMax          Int?
+  location           String?
+  appliedAt          DateTime?
+  hrScreenAt         DateTime?
+  managerInterviewAt DateTime?
+  gmInterviewAt      DateTime?
+  offerAt            DateTime?
+  deadline           DateTime?
+  notes              String?   @db.Text
+  interviewNotes     Json?
+  attachments        Json?
+  contactName        String?
+  contactEmail       String?
+  contactPhone       String?
+  linkedResumeId     String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  interviewQAs       InterviewQA[]
 }
 
 model InterviewQA {
@@ -230,6 +246,7 @@ model WorkJournal {
   result    String?  @db.Text
   content   String?  @db.Text
   tags      Json     @default("[]")
+  images    Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -259,9 +276,10 @@ model ProfileBasic {
 }
 
 model ProfileEducation {
-  id          String   @id @default(cuid())
-  userId      String
-  schoolName  String
+  id           String   @id @default(cuid())
+  userId       String
+  schoolName   String
+  schoolNameEn String?
   degree      String?
   major       String?
   gpa         String?
@@ -282,7 +300,9 @@ model ProfileExperience {
   id          String   @id @default(cuid())
   userId      String
   company     String
+  companyEn   String?
   title       String?
+  titleEn     String?
   location    String?
   startDate   String?
   endDate     String?
@@ -301,7 +321,9 @@ model ProfileInternship {
   id          String   @id @default(cuid())
   userId      String
   company     String
+  companyEn   String?
   title       String?
+  titleEn     String?
   location    String?
   startDate   String?
   endDate     String?
@@ -317,11 +339,13 @@ model ProfileInternship {
 }
 
 model ProfileProject {
-  id          String   @id @default(cuid())
-  userId      String
-  projectName String
-  role        String?
-  url         String?
+  id            String   @id @default(cuid())
+  userId        String
+  projectName   String
+  projectNameEn String?
+  role          String?
+  roleEn        String?
+  url           String?
   startDate   String?
   endDate     String?
   description String?  @db.Text

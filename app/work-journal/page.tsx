@@ -217,17 +217,44 @@ export default function WorkJournalPage() {
 
   useEffect(() => {
     setIsMobile(window.innerWidth < 768)
-    try {
-      const raw = localStorage.getItem(JOURNAL_KEY)
-      if (raw) setEntries(JSON.parse(raw))
-    } catch { /* ignore */ }
+    // Entries now persist server-side. On first load with no DB rows yet, migrate
+    // whatever was sitting in localStorage from the old client-only version once.
+    ;(async () => {
+      try {
+        const res = await fetch('/api/work-journal')
+        if (!res.ok) return
+        const { entries: dbEntries } = await res.json() as { entries: JournalEntry[] }
+        if (dbEntries.length > 0) { setEntries(dbEntries); return }
+
+        const raw = localStorage.getItem(JOURNAL_KEY)
+        if (!raw) return
+        const legacy: JournalEntry[] = JSON.parse(raw)
+        if (legacy.length === 0) return
+        const putRes = await fetch('/api/work-journal', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entries: legacy }),
+        })
+        if (putRes.ok) {
+          const { entries: migrated } = await putRes.json()
+          setEntries(migrated)
+        }
+      } catch { /* ignore */ }
+    })()
   }, [])
 
   // ── Core handlers ─────────────────────────────────────────────────────────
 
   function persist(next: JournalEntry[]) {
     setEntries(next)
-    try { localStorage.setItem(JOURNAL_KEY, JSON.stringify(next)) } catch { /* quota */ }
+    fetch('/api/work-journal', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entries: next }),
+    }).then(async (res) => {
+      if (res.ok) {
+        const { entries: fresh } = await res.json() as { entries: JournalEntry[] }
+        setEntries(fresh)
+      }
+    }).catch(() => { /* keep optimistic local state on network failure */ })
   }
 
   function startNew() {

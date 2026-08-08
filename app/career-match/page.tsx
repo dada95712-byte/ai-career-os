@@ -171,30 +171,31 @@ function deadlineDays(deadline?: string): number | null {
   return Math.ceil((new Date(deadline).getTime() - Date.now()) / 86400000)
 }
 
-function loadProfileSkills(): string[] {
+async function loadProfileSkills(): Promise<string[]> {
+  const skills = new Set<string>()
+
+  // Source 1: career-skills (Dashboard Skills page) → [{name, category}]
   try {
-    const skills = new Set<string>()
+    const res = await fetch('/api/skills')
+    if (res.ok) {
+      const { skills: arr } = await res.json() as { skills: { name: string }[] }
+      arr.forEach((s) => { if (s?.name) skills.add(s.name) })
+    }
+  } catch { /* ignore */ }
 
-    // Source 1: career-skills (Dashboard Skills page) → [{name, category}]
-    const cs = localStorage.getItem('career-skills')
-    if (cs) {
-      const arr = JSON.parse(cs)
-      if (Array.isArray(arr)) arr.forEach((s: string | { name?: string }) => {
-        if (typeof s === 'string') skills.add(s)
-        else if (s?.name) skills.add(s.name)
+  // Source 2: profile skillmap (Profile Library, now DB-backed)
+  try {
+    const res = await fetch('/api/profile')
+    if (res.ok) {
+      const { skillMap } = await res.json() as { skillMap: Record<string, string[]> }
+      Object.values(skillMap ?? {}).forEach((arr) => {
+        if (Array.isArray(arr)) arr.forEach((s) => { if (s) skills.add(s) })
       })
     }
+  } catch { /* ignore */ }
 
-    // Source 2: profile-skillmap (Profile Library) → Record<category, string[]>
-    const sm = localStorage.getItem('profile-skillmap')
-    if (sm) {
-      const map = JSON.parse(sm) as Record<string, string[]>
-      Object.values(map).forEach(arr => {
-        if (Array.isArray(arr)) arr.forEach(s => { if (s) skills.add(s) })
-      })
-    }
-
-    // Source 3: career-journal-skills (AI-analyzed from journals)
+  // Source 3: career-journal-skills (AI-analyzed from journals — still a local cache)
+  try {
     const js = localStorage.getItem('career-journal-skills')
     if (js) {
       const arr = JSON.parse(js)
@@ -203,19 +204,20 @@ function loadProfileSkills(): string[] {
         else if (s?.name) skills.add(s.name)
       })
     }
+  } catch { /* ignore */ }
 
-    // Source 4: career-resumes (parsed resume skill lists)
-    const rr = localStorage.getItem('career-resumes')
-    if (rr) {
-      const resumes = JSON.parse(rr)
-      if (Array.isArray(resumes)) resumes.forEach((r: Record<string, unknown>) => {
-        const data = (r.data ?? r) as Record<string, unknown>
-        if (Array.isArray(data.skills)) (data.skills as string[]).forEach(s => { if (s) skills.add(s) })
+  // Source 4: resumes (parsed resume skill lists, now DB-backed)
+  try {
+    const res = await fetch('/api/resumes')
+    if (res.ok) {
+      const { resumes } = await res.json() as { resumes: { data?: { skills?: string[] } }[] }
+      resumes.forEach((r) => {
+        if (Array.isArray(r.data?.skills)) r.data!.skills!.forEach((s) => { if (s) skills.add(s) })
       })
     }
+  } catch { /* ignore */ }
 
-    return [...skills].filter(Boolean)
-  } catch { return [] }
+  return [...skills].filter(Boolean)
 }
 
 function emptyDraft(): Omit<Application, 'id' | 'createdAt'> {
@@ -229,14 +231,6 @@ function emptyDraft(): Omit<Application, 'id' | 'createdAt'> {
   }
 }
 
-function getLinkedResume(resumeId: string): { id: string; name: string; score: number | null; createdAt: string } | null {
-  try {
-    const rr = localStorage.getItem('career-resumes')
-    if (!rr) return null
-    const arr = JSON.parse(rr) as { id: string; name: string; score: number | null; createdAt: string }[]
-    return arr.find((r) => r.id === resumeId) ?? null
-  } catch { return null }
-}
 
 function hasInterviewRecordsForJob(company: string, jobTitle: string): boolean {
   try {
@@ -365,17 +359,27 @@ export default function ApplicationTrackerPage() {
   const [analyzingMatch, setAnalyzingMatch] = useState(false)
   const [bgAnalyzing, setBgAnalyzing] = useState(false)
   const [profileSkills, setProfileSkills] = useState<string[]>([])
+  const [linkedResume, setLinkedResume] = useState<{ id: string; name: string; score: number | null; createdAt: string } | null>(null)
   const [rateLimitToast, setRateLimitToast] = useState(false)
   const autoAnalyzed = useRef<Set<string>>(new Set())
   const autoCompanyAnalyzed = useRef<Set<string>>(new Set())
 
   // ── Load ──────────────────────────────────────────────────────────────────
+  // Applications now persist server-side. On first load with no DB rows yet,
+  // migrate whatever was sitting in localStorage from the old client-only version once.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(APPS_KEY)
-      if (raw) {
+    (async () => {
+      try {
+        const res = await fetch('/api/tracker')
+        if (!res.ok) return
+        const { applications: dbApps } = await res.json() as { applications: Application[] }
+        if (dbApps.length > 0) { setApps(dbApps); return }
+
+        const raw = localStorage.getItem(APPS_KEY)
+        if (!raw) return
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const parsed: any[] = JSON.parse(raw)
+        if (parsed.length === 0) return
         // Migrate removed statuses: written_test → hr_screen, bg_check → offer
         const migrated = parsed.map((a) => ({
           ...a,
@@ -383,11 +387,29 @@ export default function ApplicationTrackerPage() {
                 : a.status === 'bg_check'     ? 'offer'
                 : a.status,
         })) as Application[]
-        setApps(migrated)
-      }
-    } catch { /* ignore */ }
-    setProfileSkills(loadProfileSkills())
+        const putRes = await fetch('/api/tracker', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ applications: migrated }),
+        })
+        if (putRes.ok) {
+          const { applications: fresh } = await putRes.json()
+          setApps(fresh)
+        }
+      } catch { /* ignore */ }
+    })()
+    loadProfileSkills().then(setProfileSkills)
   }, [])
+
+  useEffect(() => {
+    const id = selectedApp?.linked_resume_id
+    if (!id) { setLinkedResume(null); return }
+    fetch('/api/resumes').then((r) => (r.ok ? r.json() : null)).then((res) => {
+      if (!res) return
+      const found = (res.resumes as { id: string; name: string; score: number | null; createdAt: string }[])
+        .find((r) => r.id === id)
+      setLinkedResume(found ?? null)
+    }).catch(() => { /* ignore */ })
+  }, [selectedApp?.linked_resume_id])
 
   // Background auto-analyze skill match when entering detail view
   useEffect(() => {
@@ -412,7 +434,15 @@ export default function ApplicationTrackerPage() {
 
   function persist(next: Application[]) {
     setApps(next)
-    try { localStorage.setItem(APPS_KEY, JSON.stringify(next)) } catch { /* quota */ }
+    fetch('/api/tracker', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ applications: next }),
+    }).then(async (res) => {
+      if (res.ok) {
+        const { applications: fresh } = await res.json() as { applications: Application[] }
+        setApps(fresh)
+      }
+    }).catch(() => { /* keep optimistic local state on network failure */ })
   }
 
   // ── Stats ─────────────────────────────────────────────────────────────────
@@ -1186,7 +1216,7 @@ export default function ApplicationTrackerPage() {
               </CardHeader>
               <CardContent>
                 {app.linked_resume_id ? (() => {
-                  const res = getLinkedResume(app.linked_resume_id)
+                  const res = linkedResume
                   return (
                     <div className="space-y-3">
                       <div className="flex items-center gap-2">

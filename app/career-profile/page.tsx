@@ -147,7 +147,7 @@ export default function CareerProfilePage() {
   // Skills are managed in /dashboard/skills — only needed here for localStorage merge on resume import
 
 
-  // Init from localStorage
+  // Init from URL params + tracker apps (now persisted server-side)
   useEffect(() => {
     // Read URL params for Tracker → Resume Lab deep-link (Step 2)
     const params = new URLSearchParams(window.location.search)
@@ -158,125 +158,161 @@ export default function CareerProfilePage() {
       setTrackerJobId(jobId)
       setTrackerJobCompany(company)
       setTrackerJobTitle(title)
-      // Auto-load JD from tracker
-      try {
-        const trackerRaw = localStorage.getItem('job-tracker-apps')
-        if (trackerRaw) {
-          const trackerApps = JSON.parse(trackerRaw) as { id: string; jdFullText?: string; company?: string; title?: string }[]
-          const trackerApp = trackerApps.find((a) => a.id === jobId)
-          if (trackerApp?.jdFullText) {
-            setJdText(trackerApp.jdFullText)
-          }
-        }
-      } catch { /* ignore */ }
       // Auto-open JD paste mode
       setTab('resume')
       setResumeView('create')
       setChooserOpt('jd')
       setJdSubMode('paste')
-      // Load profile summary for the right panel
+    }
+    fetch('/api/tracker').then((r) => (r.ok ? r.json() : null)).then((res) => {
+      if (!res) return
+      const apps = res.applications as { id: string; jdFullText?: string; company?: string; title?: string }[]
+      setTrackerApps(apps)
+      if (jobId) {
+        const trackerApp = apps.find((a) => a.id === jobId)
+        if (trackerApp?.jdFullText) setJdText(trackerApp.jdFullText)
+      }
+    }).catch(() => { /* ignore */ })
+  }, [])
+
+  // Resumes now persist server-side. On first load with no DB rows yet, migrate
+  // whatever was sitting in localStorage from the old client-only version once.
+  useEffect(() => {
+    (async () => {
       try {
-        const sm = JSON.parse(localStorage.getItem('profile-skillmap') ?? '{}') as Record<string, string[]>
+        const res = await fetch('/api/resumes')
+        if (!res.ok) return
+        const { resumes: dbResumes } = await res.json() as { resumes: ResumeEntry[] }
+        if (dbResumes.length > 0) { setResumes(dbResumes); return }
+
+        let legacy: ResumeEntry[] = []
+        const rawResumes = localStorage.getItem('career-resumes')
+        if (rawResumes) {
+          legacy = JSON.parse(rawResumes)
+        } else {
+          const rawResume = localStorage.getItem('career-resume')
+          if (rawResume) {
+            const r: ParsedResume = JSON.parse(rawResume)
+            legacy = [{
+              id: genId(), name: r.name || '我的履歷',
+              language: detectLang(r.rawText), score: null, atsScore: null, scoredAt: null,
+              isPrimary: true, source: 'manual',
+              createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+              data: r,
+            }]
+          }
+        }
+        if (legacy.length > 0) {
+          const putRes = await fetch('/api/resumes', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ resumes: legacy }),
+          })
+          if (putRes.ok) {
+            const { resumes: migrated } = await putRes.json()
+            setResumes(migrated)
+          }
+        }
+      } catch { /* ignore */ }
+    })()
+  }, [])
+
+  // Profile completeness + JD-panel summary — now sourced from the database (/api/profile)
+  // instead of localStorage, since 個人檔案庫 persists server-side.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/profile')
+        if (!res.ok) return
+        const data = await res.json()
+
+        const basic = data.basic as Record<string, string> | null
+        const hasAny = !!(basic && Object.values(basic).some((v) => v))
+        setHasProfileData(hasAny)
+
+        let f = 0; const t = 20
+        if (basic) ['nameZh', 'nameEn', 'email', 'phone', 'address', 'linkedinUrl', 'portfolioUrl', 'websiteUrl'].forEach((k) => { if (basic[k]) f++ })
+        ;[data.educations, data.experiences, data.internships, data.projects, data.certificates, data.activities, data.conferences].forEach((list: unknown[]) => {
+          if (Array.isArray(list) && list.length > 0) f++
+        })
+        const sm = (data.skillMap ?? {}) as Record<string, string[]>
+        if (Object.values(sm).some((a) => a.length > 0)) f++
+        if (Array.isArray(data.languages) && data.languages.length > 0) f++
+        if (data.summaryZh) f++
+        if (data.summaryEn) f++
+        setProfileCompleteness(Math.round((f / t) * 100))
+
         setProfileSkillsList(Object.values(sm).flat().slice(0, 20))
-        const exps = JSON.parse(localStorage.getItem('profile-experience') ?? '[]') as { company?: string; title?: string }[]
-        const interns = JSON.parse(localStorage.getItem('profile-internship') ?? '[]') as { company?: string; title?: string }[]
+        const exps = (data.experiences ?? []) as { company?: string; title?: string }[]
+        const interns = (data.internships ?? []) as { company?: string; title?: string }[]
         setProfileExpList(
           [...exps, ...interns].filter((e) => e.company || e.title).slice(0, 5)
             .map((e) => ({ company: e.company ?? '', title: e.title ?? '' }))
         )
       } catch { /* ignore */ }
-    }
-
-    // Profile completeness
-    try {
-      const basic = JSON.parse(localStorage.getItem('profile-basic') ?? 'null') as Record<string, string> | null
-      const hasAny = !!(basic && Object.values(basic).some((v) => v))
-      setHasProfileData(hasAny)
-      let f = 0; const t = 20
-      if (basic) ['nameZh', 'nameEn', 'email', 'phone', 'address', 'linkedinUrl', 'portfolioUrl', 'websiteUrl'].forEach((k) => { if (basic[k]) f++ })
-      ;['profile-education', 'profile-experience', 'profile-internship', 'profile-project', 'profile-certificate', 'profile-activity', 'profile-conference'].forEach((key) => {
-        try { if ((JSON.parse(localStorage.getItem(key) ?? '[]') as unknown[]).length > 0) f++ } catch { /* */ }
-      })
-      const sm = JSON.parse(localStorage.getItem('profile-skillmap') ?? '{}') as Record<string, string[]>
-      if (Object.values(sm).some((a) => a.length > 0)) f++
-      if ((JSON.parse(localStorage.getItem('profile-language') ?? '[]') as unknown[]).length > 0) f++
-      if (localStorage.getItem('profile-summary-zh')) f++
-      if (localStorage.getItem('profile-summary-en')) f++
-      setProfileCompleteness(Math.round((f / t) * 100))
-    } catch { /* ignore */ }
-    try { setTrackerApps(JSON.parse(localStorage.getItem('job-tracker-apps') ?? '[]')) } catch { /* ignore */ }
-
-    // Multi-resume format (new)
-    const rawResumes = localStorage.getItem('career-resumes')
-    if (rawResumes) {
-      setResumes(JSON.parse(rawResumes))
-    } else {
-      // Migrate from old single-resume key
-      const rawResume = localStorage.getItem('career-resume')
-      if (rawResume) {
-        const r: ParsedResume = JSON.parse(rawResume)
-        const migrated: ResumeEntry = {
-          id: genId(), name: r.name || '我的履歷',
-          language: detectLang(r.rawText), score: null, atsScore: null, scoredAt: null,
-          isPrimary: true, source: 'manual',
-          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-          data: r,
-        }
-        setResumes([migrated])
-        localStorage.setItem('career-resumes', JSON.stringify([migrated]))
-      }
-    }
+    })()
   }, [])
 
   // ── Resume handlers ──────────────────────────────────────────────────────────
 
-  function collectProfile(): Record<string, unknown> {
-    const keys = [
-      'profile-basic', 'profile-education', 'profile-experience', 'profile-internship',
-      'profile-project', 'profile-language', 'profile-skillmap', 'profile-certificate',
-      'profile-activity', 'profile-conference', 'profile-summary-zh', 'profile-summary-en',
-      'profile-custom',
-    ]
+  async function collectProfile(): Promise<Record<string, unknown>> {
     const profile: Record<string, unknown> = {}
-    keys.forEach((k) => {
-      try {
-        const raw = localStorage.getItem(k)
-        if (raw) profile[k] = JSON.parse(raw)
-      } catch { /* ignore */ }
-    })
+    try {
+      const res = await fetch('/api/profile')
+      if (!res.ok) return profile
+      const data = await res.json()
+      if (data.basic) profile['profile-basic'] = data.basic
+      if (data.educations?.length) profile['profile-education'] = data.educations
+      if (data.experiences?.length) profile['profile-experience'] = data.experiences
+      if (data.internships?.length) profile['profile-internship'] = data.internships
+      if (data.projects?.length) profile['profile-project'] = data.projects
+      if (data.languages?.length) profile['profile-language'] = data.languages
+      if (data.skillMap && Object.values(data.skillMap as Record<string, unknown[]>).some((a) => Array.isArray(a) && a.length)) profile['profile-skillmap'] = data.skillMap
+      if (data.certificates?.length) profile['profile-certificate'] = data.certificates
+      if (data.activities?.length) profile['profile-activity'] = data.activities
+      if (data.conferences?.length) profile['profile-conference'] = data.conferences
+      if (data.summaryZh) profile['profile-summary-zh'] = data.summaryZh
+      if (data.summaryEn) profile['profile-summary-en'] = data.summaryEn
+      if (data.customBlocks?.length) profile['profile-custom'] = data.customBlocks
+    } catch { /* ignore */ }
     return profile
   }
 
   function linkResumeToTrackerApp(jobId: string, resumeId: string) {
     if (!jobId) return
-    try {
-      const raw = localStorage.getItem('job-tracker-apps')
-      if (!raw) return
-      const apps = JSON.parse(raw) as Record<string, unknown>[]
+    fetch('/api/tracker').then((r) => (r.ok ? r.json() : null)).then((res) => {
+      if (!res) return
+      const apps = res.applications as Record<string, unknown>[]
       const updated = apps.map((a) => a.id === jobId ? { ...a, linked_resume_id: resumeId } : a)
-      localStorage.setItem('job-tracker-apps', JSON.stringify(updated))
-    } catch { /* ignore */ }
+      return fetch('/api/tracker', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ applications: updated }),
+      })
+    }).catch(() => { /* ignore */ })
   }
 
-  function checkCompletenessLocal(): string[] {
+  async function checkCompletenessLocal(): Promise<string[]> {
     const issues: string[] = []
     try {
-      const basic = JSON.parse(localStorage.getItem('profile-basic') ?? 'null') as Record<string, string> | null
-      if (!basic?.nameZh && !basic?.nameEn) issues.push('尚未填寫姓名（基本資料）')
-      const exp = JSON.parse(localStorage.getItem('profile-experience') ?? '[]') as unknown[]
-      const intern = JSON.parse(localStorage.getItem('profile-internship') ?? '[]') as unknown[]
-      const edu = JSON.parse(localStorage.getItem('profile-education') ?? '[]') as unknown[]
-      if (!exp.length && !intern.length && !edu.length) issues.push('尚未填寫工作經驗、實習或學歷')
-      const sm = JSON.parse(localStorage.getItem('profile-skillmap') ?? '{}') as Record<string, string[]>
-      const totalSkills = Object.values(sm).flat().length
-      if (totalSkills < 3) issues.push(`技能項目不足（目前 ${totalSkills} 項，建議至少 3 項）`)
+      const res = await fetch('/api/profile')
+      if (res.ok) {
+        const data = await res.json()
+        const basic = data.basic as Record<string, string> | null
+        if (!basic?.nameZh && !basic?.nameEn) issues.push('尚未填寫姓名（基本資料）')
+        const exp = (data.experiences ?? []) as unknown[]
+        const intern = (data.internships ?? []) as unknown[]
+        const edu = (data.educations ?? []) as unknown[]
+        if (!exp.length && !intern.length && !edu.length) issues.push('尚未填寫工作經驗、實習或學歷')
+        const sm = (data.skillMap ?? {}) as Record<string, string[]>
+        const totalSkills = Object.values(sm).flat().length
+        if (totalSkills < 3) issues.push(`技能項目不足（目前 ${totalSkills} 項，建議至少 3 項）`)
+      }
     } catch { /* ignore */ }
     return issues
   }
 
-  function handleStartProfileBuild() {
+  async function handleStartProfileBuild() {
     setResumeError('')
-    const issues = checkCompletenessLocal()
+    const issues = await checkCompletenessLocal()
     if (issues.length > 0) {
       setCompletenessIssues(issues)
       setShowCompletenessModal(true)
@@ -285,12 +321,15 @@ export default function CareerProfilePage() {
     }
   }
 
-  function loadProfileSummaryForJD() {
+  async function loadProfileSummaryForJD() {
     try {
-      const sm = JSON.parse(localStorage.getItem('profile-skillmap') ?? '{}') as Record<string, string[]>
+      const res = await fetch('/api/profile')
+      if (!res.ok) return
+      const data = await res.json()
+      const sm = (data.skillMap ?? {}) as Record<string, string[]>
       setProfileSkillsList(Object.values(sm).flat().slice(0, 20))
-      const exps = JSON.parse(localStorage.getItem('profile-experience') ?? '[]') as { company?: string; title?: string }[]
-      const interns = JSON.parse(localStorage.getItem('profile-internship') ?? '[]') as { company?: string; title?: string }[]
+      const exps = (data.experiences ?? []) as { company?: string; title?: string }[]
+      const interns = (data.internships ?? []) as { company?: string; title?: string }[]
       setProfileExpList(
         [...exps, ...interns]
           .filter((e) => e.company || e.title)
@@ -305,7 +344,7 @@ export default function CareerProfilePage() {
     setCreateMode('loading')
     setResumeError('')
     try {
-      const profile = collectProfile()
+      const profile = await collectProfile()
       if (lang === 'both') {
         const [zhRes, enRes] = await Promise.all([
           fetch('/api/resume/build-from-profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile, language: 'zh' }) }),
@@ -345,7 +384,7 @@ export default function CareerProfilePage() {
     setCreateMode('loading')
     setResumeError('')
     try {
-      const profile = collectProfile()
+      const profile = await collectProfile()
       const selectedApp = trackerApps.find((a) => a.id === selectedTrackerAppId)
       if (lang === 'both') {
         const [zhRes, enRes] = await Promise.all([
@@ -390,7 +429,15 @@ export default function CareerProfilePage() {
 
   function persistResumes(next: ResumeEntry[]) {
     setResumes(next)
-    localStorage.setItem('career-resumes', JSON.stringify(next))
+    fetch('/api/resumes', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resumes: next }),
+    }).then(async (res) => {
+      if (res.ok) {
+        const { resumes: fresh } = await res.json() as { resumes: ResumeEntry[] }
+        setResumes(fresh)
+      }
+    }).catch(() => { /* keep optimistic local state on network failure */ })
   }
 
   function goToEditor(
@@ -405,16 +452,21 @@ export default function CareerProfilePage() {
     setPendingLinkedJobCompany(linkedJobCompany ?? '')
     setPendingLinkedJobTitle(linkedJobTitle ?? '')
     setPendingJdHighlights(jdMatchHighlights ?? [])
-    // Merge parsed resume skills into the shared skill library in localStorage
-    try {
-      const raw = localStorage.getItem('career-skills')
-      const existing: { name: string; category: string }[] = raw ? JSON.parse(raw) : []
-      const existingNames = new Set(existing.map((t) => (typeof t === 'string' ? t : t.name)))
-      const toAdd = data.skills
-        .filter((s) => !existingNames.has(s))
-        .map((s) => ({ name: s, category: '專業技能' }))
-      if (toAdd.length) localStorage.setItem('career-skills', JSON.stringify([...existing, ...toAdd]))
-    } catch { /* quota or parse error */ }
+    // Merge parsed resume skills into the shared skill library (persisted server-side)
+    if (data.skills.length > 0) {
+      fetch('/api/skills').then((r) => (r.ok ? r.json() : null)).then((res) => {
+        if (!res) return
+        const existing = res.skills as { name: string; category: string }[]
+        const existingNames = new Set(existing.map((t) => t.name))
+        const toAdd = data.skills.filter((s) => !existingNames.has(s)).map((s) => ({ name: s, category: '專業技能' }))
+        if (toAdd.length) {
+          fetch('/api/skills', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ skills: [...existing, ...toAdd] }),
+          }).catch(() => { /* ignore */ })
+        }
+      }).catch(() => { /* ignore */ })
+    }
     void source
   }
 

@@ -520,8 +520,9 @@ export default function InterviewPrepPage() {
   }, [])
 
   useEffect(() => {
-    try {
-      const apps: { company?: string; title?: string }[] = JSON.parse(localStorage.getItem('job-tracker-apps') ?? '[]')
+    fetch('/api/tracker').then((r) => (r.ok ? r.json() : null)).then((res) => {
+      if (!res) return
+      const apps = res.applications as { company?: string; title?: string }[]
       const companies = [...new Set(apps.map(a => a.company).filter(Boolean) as string[])]
       const titleMap: Record<string, string[]> = {}
       apps.forEach(a => {
@@ -532,7 +533,7 @@ export default function InterviewPrepPage() {
       })
       setTrackerCompanies(companies)
       setTrackerTitles(titleMap)
-    } catch { /* ignore */ }
+    }).catch(() => { /* ignore */ })
   }, [])
 
   useEffect(() => {
@@ -572,12 +573,12 @@ export default function InterviewPrepPage() {
   useEffect(() => {
     if (!fromJobId) { setTrackerJd(''); return }
     setTrackerJdLoading(true)
-    try {
-      const apps: { id: string; jdFullText?: string }[] = JSON.parse(localStorage.getItem('job-tracker-apps') ?? '[]')
+    fetch('/api/tracker').then((r) => (r.ok ? r.json() : null)).then((res) => {
+      const apps = (res?.applications ?? []) as { id: string; jdFullText?: string }[]
       const app = apps.find((a) => a.id === fromJobId)
       setTrackerJd(app?.jdFullText ?? '')
-    } catch { setTrackerJd('') }
-    finally { setTrackerJdLoading(false) }
+    }).catch(() => setTrackerJd(''))
+      .finally(() => setTrackerJdLoading(false))
   }, [fromJobId])
 
   // Timer countdown
@@ -703,9 +704,12 @@ export default function InterviewPrepPage() {
       let jdContent: string | undefined
       if (fromJobId) {
         try {
-          const apps = JSON.parse(localStorage.getItem('job-tracker-apps') ?? '[]')
-          const app = apps.find((a: { id: string; jdFullText?: string }) => a.id === fromJobId)
-          if (app?.jdFullText) jdContent = app.jdFullText
+          const tRes = await fetch('/api/tracker')
+          if (tRes.ok) {
+            const { applications: apps } = await tRes.json() as { applications: { id: string; jdFullText?: string }[] }
+            const app = apps.find((a) => a.id === fromJobId)
+            if (app?.jdFullText) jdContent = app.jdFullText
+          }
         } catch { /* ignore */ }
       }
       const res  = await fetch('/api/interview/questions', {
@@ -762,12 +766,15 @@ export default function InterviewPrepPage() {
     setRole(''); setCompany('')
   }
 
-  function saveToTracker() {
+  async function saveToTracker() {
     if (!fromJobId || !report) return
     setSaveTrackerStatus('saving')
     try {
-      const apps: { id: string; interviewNotes?: { id: string; date: string; interviewer: string; notes: string }[] }[] =
-        JSON.parse(localStorage.getItem('job-tracker-apps') ?? '[]')
+      const res = await fetch('/api/tracker')
+      if (!res.ok) throw new Error('load failed')
+      const { applications: apps } = await res.json() as {
+        applications: { id: string; interviewNotes?: { id: string; date: string; interviewer: string; notes: string }[] }[]
+      }
       const note = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         date: new Date().toISOString().slice(0, 10),
@@ -777,7 +784,11 @@ export default function InterviewPrepPage() {
       const updated = apps.map((a) =>
         a.id === fromJobId ? { ...a, interviewNotes: [...(a.interviewNotes ?? []), note] } : a
       )
-      localStorage.setItem('job-tracker-apps', JSON.stringify(updated))
+      const putRes = await fetch('/api/tracker', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ applications: updated }),
+      })
+      if (!putRes.ok) throw new Error('save failed')
       setSaveTrackerStatus('saved')
     } catch {
       setSaveTrackerStatus('idle')

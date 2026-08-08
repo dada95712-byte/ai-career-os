@@ -56,49 +56,41 @@ export default function SkillMapPage() {
 
   useEffect(() => {
     // Load personal skills
-    try {
-      const raw = localStorage.getItem('career-skills')
-      if (raw) {
-        const p = JSON.parse(raw)
-        if (Array.isArray(p)) {
-          if (typeof p[0] === 'string') setSkills(p.map((s: string) => ({ name: s, category: '核心職能' as SkillCategory })))
-          else setSkills(p)
-        }
-      }
-    } catch { /* ignore */ }
+    fetch('/api/skills').then((r) => (r.ok ? r.json() : null)).then((res) => {
+      if (res) setSkills(res.skills)
+    }).catch(() => { /* ignore */ })
 
-    // Load journal skills
+    // Load journal skills (AI-suggestion cache stays local) + journal count
     try {
       const raw = localStorage.getItem('career-journal-skills')
       if (raw) setJournalSkills(JSON.parse(raw))
-      const journalRaw = localStorage.getItem('career-journal')
-      if (journalRaw) setTotalJournals(JSON.parse(journalRaw).length)
     } catch { /* ignore */ }
+    fetch('/api/work-journal').then((r) => (r.ok ? r.json() : null)).then((res) => {
+      if (res) setTotalJournals(res.entries.length)
+    }).catch(() => { /* ignore */ })
 
     // Aggregate missing skills from all job match analyses
-    try {
-      const raw = localStorage.getItem('career-applications')
-      if (raw) {
-        const apps: Application[] = JSON.parse(raw)
-        const freq: Record<string, number> = {}
-        let analyzed = 0
-        for (const app of apps) {
-          const missing: string[] = app.missingSkills ?? app.matchAnalysis?.missingSkills ?? []
-          if (missing.length > 0) {
-            analyzed++
-            for (const s of missing) {
-              freq[s] = (freq[s] ?? 0) + 1
-            }
+    fetch('/api/tracker').then((r) => (r.ok ? r.json() : null)).then((res) => {
+      if (!res) return
+      const apps: Application[] = res.applications
+      const freq: Record<string, number> = {}
+      let analyzed = 0
+      for (const app of apps) {
+        const missing: string[] = app.missingSkills ?? app.matchAnalysis?.missingSkills ?? []
+        if (missing.length > 0) {
+          analyzed++
+          for (const s of missing) {
+            freq[s] = (freq[s] ?? 0) + 1
           }
         }
-        setJobsWithAnalysis(analyzed)
-        const sorted = Object.entries(freq)
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 10)
-          .map(([skill, count]) => ({ skill, count }))
-        setMissingTop10(sorted)
       }
-    } catch { /* ignore */ }
+      setJobsWithAnalysis(analyzed)
+      const sorted = Object.entries(freq)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([skill, count]) => ({ skill, count }))
+      setMissingTop10(sorted)
+    }).catch(() => { /* ignore */ })
   }, [])
 
   const grouped = SKILL_CATEGORIES.reduce((acc, cat) => {

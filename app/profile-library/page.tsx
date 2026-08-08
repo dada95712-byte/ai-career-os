@@ -262,24 +262,9 @@ const labelCls = 'block text-xs font-medium text-ink-500 mb-1'
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function ProfileLibraryPage() {
-  // ── Save status (Feature 2: 1.5s debounce + failed state) ──
+  // ── Save status (1.5s debounce + failed state) ──
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
-  const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
-
-  const save = useCallback((key: string, data: unknown) => {
-    setSaveStatus('saving')
-    clearTimeout(timers.current[key])
-    timers.current[key] = setTimeout(() => {
-      try {
-        localStorage.setItem(key, JSON.stringify(data))
-        setSaveStatus('saved')
-        setTimeout(() => setSaveStatus('idle'), 2000)
-      } catch {
-        setSaveStatus('failed')
-        setTimeout(() => setSaveStatus('idle'), 3000)
-      }
-    }, 1500)
-  }, [])
+  const persistTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   // ── State ──
   const [basic,        setBasic]        = useState<BasicInfo>(EMPTY_BASIC)
@@ -298,6 +283,45 @@ export default function ProfileLibraryPage() {
   const [summaryEn,    setSummaryEn]    = useState('')
   const [attachments,  setAttachments]  = useState<AttachEntry[]>([])
   const [customBlocks, setCustomBlocks] = useState<CustomBlock[]>([])
+
+  // Always-fresh snapshot of the full profile, read by the debounced persist call
+  // so it never sends a stale closure over state.
+  const latestProfile = useRef<Record<string, unknown>>({})
+  useEffect(() => {
+    latestProfile.current = {
+      basic, summaryZh, summaryEn, educations, experiences, internships,
+      projects, languages, skillMap, certificates, activities, conferences,
+      attachments, customBlocks,
+    }
+  })
+
+  const persistNow = useCallback(async () => {
+    setSaveStatus('saving')
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(latestProfile.current),
+      })
+      if (!res.ok) throw new Error('save failed')
+      setSaveStatus('saved')
+    } catch {
+      setSaveStatus('failed')
+    }
+    setTimeout(() => setSaveStatus('idle'), saveStatus === 'failed' ? 3000 : 2000)
+  }, [saveStatus])
+
+  // `key` is kept for call-site compatibility but ignored — every save persists the whole profile.
+  const save = useCallback((_key: string, _data?: unknown) => {
+    setSaveStatus('saving')
+    clearTimeout(persistTimer.current)
+    persistTimer.current = setTimeout(persistNow, 1500)
+  }, [persistNow])
+
+  function saveAll() {
+    clearTimeout(persistTimer.current)
+    void persistNow()
+  }
 
   // ── Modal state ──
   const [modalSection, setModalSection] = useState<ModalSection | null>(null)
@@ -324,26 +348,38 @@ export default function ProfileLibraryPage() {
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({})
   function scrollTo(id: string) { sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
 
-  // ── Load from localStorage ──
+  // ── Load from the database ──
+  const [loading, setLoading] = useState(true)
+  const [authRequired, setAuthRequired] = useState(false)
+
   useEffect(() => {
-    const load = <T,>(key: string, fallback: T): T => {
-      try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : fallback } catch { return fallback }
-    }
-    setBasic(load('profile-basic', EMPTY_BASIC))
-    setEducations(load('profile-education', []))
-    setExperiences(load('profile-experience', []))
-    setInternships(load('profile-internship', []))
-    setProjects(load('profile-project', []))
-    setLanguages(load('profile-language', []))
-    const loaded = load('profile-skillmap', {}) as Record<string, string[]>
-    setSkillMap(Object.fromEntries(SKILL_CATS.map(c => [c, loaded[c] ?? []])))
-    setCertificates(load('profile-certificate', []))
-    setActivities(load('profile-activity', []))
-    setConferences(load('profile-conference', []))
-    setSummaryZh(load('profile-summary-zh', ''))
-    setSummaryEn(load('profile-summary-en', ''))
-    setAttachments(load('profile-attachment', []))
-    setCustomBlocks(load('profile-custom', []))
+    (async () => {
+      try {
+        const res = await fetch('/api/profile')
+        if (res.status === 401) { setAuthRequired(true); return }
+        if (!res.ok) throw new Error('load failed')
+        const data = await res.json()
+        setBasic({ ...EMPTY_BASIC, ...data.basic })
+        setEducations(data.educations ?? [])
+        setExperiences(data.experiences ?? [])
+        setInternships(data.internships ?? [])
+        setProjects(data.projects ?? [])
+        setLanguages(data.languages ?? [])
+        const loaded = (data.skillMap ?? {}) as Record<string, string[]>
+        setSkillMap(Object.fromEntries(SKILL_CATS.map(c => [c, loaded[c] ?? []])))
+        setCertificates(data.certificates ?? [])
+        setActivities(data.activities ?? [])
+        setConferences(data.conferences ?? [])
+        setSummaryZh(data.summaryZh ?? '')
+        setSummaryEn(data.summaryEn ?? '')
+        setAttachments(data.attachments ?? [])
+        setCustomBlocks(data.customBlocks ?? [])
+      } catch {
+        setSaveStatus('failed')
+      } finally {
+        setLoading(false)
+      }
+    })()
   }, [])
 
   // ── Completeness ──
@@ -598,29 +634,6 @@ export default function ProfileLibraryPage() {
 
     setImportParsed(null); setImportAccepted({})
     showToast(`✓ 成功匯入 ${count} 筆資料，請逐一確認內容正確性`)
-  }
-
-  // ── Save all ──
-  function saveAll() {
-    setSaveStatus('saving')
-    try {
-      localStorage.setItem('profile-basic',       JSON.stringify(basic))
-      localStorage.setItem('profile-education',   JSON.stringify(educations))
-      localStorage.setItem('profile-experience',  JSON.stringify(experiences))
-      localStorage.setItem('profile-internship',  JSON.stringify(internships))
-      localStorage.setItem('profile-project',     JSON.stringify(projects))
-      localStorage.setItem('profile-language',    JSON.stringify(languages))
-      localStorage.setItem('profile-skillmap',    JSON.stringify(skillMap))
-      localStorage.setItem('profile-certificate', JSON.stringify(certificates))
-      localStorage.setItem('profile-activity',    JSON.stringify(activities))
-      localStorage.setItem('profile-conference',  JSON.stringify(conferences))
-      localStorage.setItem('profile-summary-zh',  JSON.stringify(summaryZh))
-      localStorage.setItem('profile-summary-en',  JSON.stringify(summaryEn))
-      localStorage.setItem('profile-attachment',  JSON.stringify(attachments))
-      localStorage.setItem('profile-custom',      JSON.stringify(customBlocks))
-      setSaveStatus('saved')
-    } catch { setSaveStatus('failed') }
-    setTimeout(() => setSaveStatus('idle'), 2000)
   }
 
   // ── Modal content renderer (Features 3,4,5) ──
@@ -936,6 +949,28 @@ export default function ProfileLibraryPage() {
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="flex min-h-full items-center justify-center py-24">
+        <Spinner className="h-6 w-6 text-terra-500" />
+      </div>
+    )
+  }
+
+  if (authRequired) {
+    return (
+      <div className="flex min-h-full flex-col items-center justify-center gap-4 py-24 text-center px-4">
+        <p className="text-2xl">🔒</p>
+        <p className="font-semibold text-ink-700">請先登入才能使用個人檔案庫</p>
+        <p className="text-sm text-ink-400">你的資料會存進帳號，登入後即可跨裝置存取</p>
+        <a href="/auth/signin?callbackUrl=/profile-library"
+          className="rounded-xl bg-terra-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-terra-700 transition-colors shadow-[var(--shadow-warm-sm)]">
+          前往登入 →
+        </a>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-full">

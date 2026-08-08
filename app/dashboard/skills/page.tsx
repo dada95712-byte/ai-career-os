@@ -172,15 +172,30 @@ export default function SkillsPage() {
 
   // ── Init ────────────────────────────────────────────────────────────────────
 
+  // Skills now persist server-side. On first load with no DB rows yet, migrate
+  // whatever was sitting in localStorage from the old client-only version once.
   useEffect(() => {
-    const raw = localStorage.getItem('career-skills')
-    if (!raw) return
-    try {
-      const p = JSON.parse(raw)
-      if (!Array.isArray(p)) return
-      if (typeof p[0] === 'string') setSkills(p.map((s: string) => ({ name: s, category: '核心職能' as SkillCategory })))
-      else setSkills(p)
-    } catch { /* ignore */ }
+    (async () => {
+      try {
+        const res = await fetch('/api/skills')
+        if (!res.ok) return
+        const { skills: dbSkills } = await res.json() as { skills: TaggedSkill[] }
+        if (dbSkills.length > 0) { setSkills(dbSkills); return }
+
+        const raw = localStorage.getItem('career-skills')
+        if (!raw) return
+        const p = JSON.parse(raw)
+        if (!Array.isArray(p) || p.length === 0) return
+        const legacy: TaggedSkill[] = typeof p[0] === 'string'
+          ? p.map((s: string) => ({ name: s, category: '核心職能' as SkillCategory }))
+          : p
+        const putRes = await fetch('/api/skills', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ skills: legacy }),
+        })
+        if (putRes.ok) setSkills(legacy)
+      } catch { /* ignore */ }
+    })()
   }, [])
 
   useEffect(() => {
@@ -188,16 +203,14 @@ export default function SkillsPage() {
     if (raw) {
       try { setJournalSkills(JSON.parse(raw)); setJournalSkillsLoaded(true) } catch { /* ignore */ }
     }
-    const journalRaw = localStorage.getItem('career-journal')
-    if (journalRaw) {
-      try {
-        const es = JSON.parse(journalRaw)
-        setTotalJournals(es.length)
-        const map: Record<string, string> = {}
-        es.forEach((e: { id: string; title: string }) => { map[e.id] = e.title })
-        setJournalEntriesMap(map)
-      } catch { /* ignore */ }
-    }
+    fetch('/api/work-journal').then((r) => (r.ok ? r.json() : null)).then((res) => {
+      if (!res) return
+      const es = res.entries as { id: string; title: string }[]
+      setTotalJournals(es.length)
+      const map: Record<string, string> = {}
+      es.forEach((e) => { map[e.id] = e.title })
+      setJournalEntriesMap(map)
+    }).catch(() => { /* ignore */ })
   }, [])
 
   useEffect(() => {
@@ -206,7 +219,10 @@ export default function SkillsPage() {
 
   function persist(next: TaggedSkill[]) {
     setSkills(next)
-    try { localStorage.setItem('career-skills', JSON.stringify(next)) } catch { /* quota */ }
+    fetch('/api/skills', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ skills: next }),
+    }).catch(() => { /* keep optimistic local state on network failure */ })
   }
 
   // ── Handlers ────────────────────────────────────────────────────────────────
@@ -269,14 +285,14 @@ export default function SkillsPage() {
   }
 
   async function handleRecommendSkills() {
-    const raw = localStorage.getItem('career-journal')
     let text = ''
-    if (raw) {
-      try {
-        const entries = JSON.parse(raw)
-        text = entries.map((e: Record<string, string>) => [e.title, e.content, e.situation, e.task, e.action, e.result].filter(Boolean).join(' ')).join('\n')
-      } catch { /* ignore */ }
-    }
+    try {
+      const jRes = await fetch('/api/work-journal')
+      if (jRes.ok) {
+        const { entries } = await jRes.json() as { entries: Record<string, string>[] }
+        text = entries.map((e) => [e.title, e.content, e.situation, e.task, e.action, e.result].filter(Boolean).join(' ')).join('\n')
+      }
+    } catch { /* ignore */ }
     if (!text.trim()) { alert('請先在 Work Journal 新增一些日誌再進行分析'); return }
     setLoadingRecommend(true); setRecommendedSkills([]); setCheckedSkills(new Set()); setShowRecommend(true)
     try {
@@ -345,10 +361,11 @@ ${skills.map((s) => `${s.name}（${s.category}）`).join('、')}
   }
 
   async function analyzeJournals() {
-    const raw = localStorage.getItem('career-journal')
-    if (!raw) { alert('請先在 Work Journal 新增一些日誌再進行分析'); return }
     let journals: Array<{ id: string; title: string; content?: string; situation?: string; task?: string; action?: string; result?: string }> = []
-    try { journals = JSON.parse(raw) } catch { return }
+    try {
+      const jRes = await fetch('/api/work-journal')
+      if (jRes.ok) { const { entries } = await jRes.json(); journals = entries }
+    } catch { /* ignore */ }
     if (!journals.length) { alert('請先在 Work Journal 新增一些日誌再進行分析'); return }
     setAnalyzingJournals(true)
     try {
