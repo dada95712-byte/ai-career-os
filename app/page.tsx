@@ -78,7 +78,7 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-warm-200 px-6 py-8 text-center">
         <p className="text-xs text-ink-300">
-          © 2026 WorkLog · 求職工具・工作記錄・面試準備 · Powered by Google Gemini &amp; OpenAI
+          © 2026 WorkLog · 求職工具・工作記錄・面試準備
         </p>
       </footer>
     </div>
